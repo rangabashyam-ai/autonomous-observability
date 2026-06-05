@@ -1,0 +1,700 @@
+"""Core intelligence services for RCA, blast radius, early detection, copilot."""
+
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from datetime import datetime, timezone
+from typing import Any
+
+from app.data_store import read_json
+
+
+def _slug(text: str) -> str:
+    return text.lower().replace(" ", "-").replace("/", "-")
+
+
+def _load_incidents() -> list[dict]:
+    data = read_json("incidents/service_now_incidents.json")
+    return data.get("incidents", [])
+
+
+def _load_knowledge_graph() -> dict:
+    return read_json("rca/knowledge_graph.json") or {"nodes": [], "edges": [], "pattern_library": []}
+
+
+def _load_dependency_edges() -> list[dict]:
+    data = read_json("dependencies/dependency_graph.json")
+    return data.get("edges", [])
+
+
+def _load_changes() -> list[dict]:
+    data = read_json("changes/change_records.json")
+    return data.get("changes", [])
+
+
+def _load_deployments() -> list[dict]:
+    data = read_json("changes/deployments.json")
+    return data.get("deployments", [])
+
+
+def _load_alerts() -> list[dict]:
+    data = read_json("monitoring/alerts.json")
+    return data.get("alerts", [])
+
+
+class KnowledgeGraphService:
+    def get_graph(self) -> dict:
+        return _load_knowledge_graph()
+
+    def get_stats(self) -> dict:
+        kg = _load_knowledge_graph()
+        return kg.get("stats", {})
+
+
+def analyze_rca(
+    alerts: list[str],
+    symptoms: list[str],
+    service: str | None = None,
+    time_window_hours: int = 24,
+    environment: str | None = None,
+) -> dict:
+    incidents = _load_incidents()
+    kg = _load_knowledge_graph()
+    changes = _load_changes()
+    dep_edges = _load_dependency_edges()
+
+    scores: dict[str, dict] = defaultdict(lambda: {
+        "score": 0.0, "matching_incidents": [], "fixes": set(), "evidence": [],
+    })
+
+    alert_set = {a.lower() for a in alerts}
+    symptom_set = {s.lower() for s in symptoms}
+
+    for inc in incidents:
+        inc_alerts = {a.lower() for a in inc.get("alerts", [])}
+        inc_symptoms = {s.lower() for s in inc.get("symptoms", [])}
+        alert_match = len(alert_set & inc_alerts) / max(len(alert_set), 1)
+        symptom_match = len(symptom_set & inc_symptoms) / max(len(symptom_set), 1) if symptom_set else 0.5
+
+        if service:
+            svc_match = 1.0 if (
+                service.lower() in inc.get("service", "").lower()
+                or service.lower() in inc.get("service_id", "").lower()
+            ) else 0.3
+        else:
+            svc_match = 1.0
+
+        if environment and inc.get("environment") != environment:
+            svc_match *= 0.7
+
+        combined = (alert_match * 0.45 + symptom_match * 0.35 + svc_match * 0.2)
+        if combined < 0.25:
+            continue
+
+        rc = inc["root_cause"]
+        entry = scores[rc]
+        entry["score"] += combined * inc.get("confidence_training_value", 0.85)
+        entry["matching_incidents"].append(inc["incident_id"])
+        entry["fixes"].add(inc["fix"])
+        entry["evidence"].append({
+            "incident_id": inc["incident_id"],
+            "title": inc.get("title", ""),
+            "alert_overlap": list(alert_set & inc_alerts),
+            "symptom_overlap": list(symptom_set & inc_symptoms),
+        })
+
+    # Boost from knowledge graph edges
+    for edge in kg.get("edges", []):
+        if edge["relationship"] in ("TRIGGERS", "CAUSED_BY", "RECURS_WITH"):
+            src_label = edge["source"].split("-", 1)[-1].replace("-", " ")
+            tgt_label = edge["target"].split("-", 1)[-1].replace("-", " ")
+            if edge["relationship"] == "CAUSED_BY" and "incident-" in edge["source"]:
+                rc_label = tgt_label
+                for alert in alerts:
+                    if _slug(alert) in edge.get("incident_refs", []) or alert.lower() in src_label:
+                        if rc_label.title() in scores or any(rc_label in k.lower() for k in scores):
+                            pass
+            if edge["relationship"] == "TRIGGERS":
+                for alert in alerts:
+                    if _slug(alert) in edge["source"]:
+                        for symptom in symptoms:
+                            if _slug(symptom) in edge["target"]:
+                                for rc in scores:
+                                    scores[rc]["score"] += edge.get("confidence", 0.5) * 0.1
+
+    ranked = sorted(scores.items(), key=lambda x: x[1]["score"], reverse=True)
+    max_score = ranked[0][1]["score"] if ranked else 1
+
+    candidates = []
+    for rc, data in ranked[:8]:
+        confidence = min(99, round((data["score"] / max_score) * 95))
+        candidates.append({
+            "root_cause": rc,
+            "confidence": confidence,
+            "matching_incident_count": len(data["matching_incidents"]),
+            "similar_incidents": data["matching_incidents"][:5],
+            "suggested_fixes": list(data["fixes"])[:3],
+            "evidence": data["evidence"][:3],
+        })
+
+    # Related checks
+    related_alerts = list({a for inc in incidents for a in inc.get("alerts", [])
+                           if any(_slug(x) in {_slug(y) for y in alerts} for x in inc.get("alerts", []))})[:8]
+    related_symptoms = list({s for inc in incidents for s in inc.get("symptoms", [])
+                             if any(_slug(x) in {_slug(y) for y in symptoms} for x in inc.get("symptoms", []))})[:8]
+
+    recent_changes = [
+        {
+            "id": c["id"],
+            "title": c["title"],
+            "risk": c.get("risk", "medium"),
+            "status": c.get("status", ""),
+            "affected_services": c.get("affected_services", []),
+        }
+        for c in changes[:10]
+    ]
+
+    # Dependency path to suspected component
+    suspected_component = None
+    dep_path = []
+    if candidates and ranked:
+        top_incidents = [
+            inc for inc in incidents
+            if inc["incident_id"] in ranked[0][1]["matching_incidents"]
+        ]
+        if top_incidents:
+            suspected_component = top_incidents[0].get("impacted_components", [None])[0]
+            if suspected_component:
+                dep_path = _trace_dependency_path(suspected_component, dep_edges)
+
+    return {
+        "input": {
+            "alerts": alerts,
+            "symptoms": symptoms,
+            "service": service,
+            "time_window_hours": time_window_hours,
+            "environment": environment,
+        },
+        "root_cause_candidates": candidates,
+        "similar_historical_incidents": [
+            {
+                "incident_id": inc["incident_id"],
+                "title": inc.get("title", ""),
+                "root_cause": inc["root_cause"],
+                "fix": inc["fix"],
+                "severity": inc.get("severity", ""),
+                "resolved_at": inc.get("resolved_at", ""),
+            }
+            for inc in incidents
+            if any(c["root_cause"] == inc["root_cause"] for c in candidates[:3])
+        ][:8],
+        "suggested_fix_playbook": candidates[0]["suggested_fixes"] if candidates else [],
+        "related_alerts_to_check": related_alerts or alerts,
+        "related_symptoms_to_check": related_symptoms or symptoms,
+        "relevant_recent_changes": recent_changes,
+        "dependency_path": dep_path,
+        "suspected_component": suspected_component,
+        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _trace_dependency_path(component: str, edges: list[dict], max_depth: int = 6) -> list[str]:
+    path = [component]
+    current = component
+    visited = {component}
+    for _ in range(max_depth):
+        found = False
+        for e in edges:
+            if e["target"] == current and e["source"] not in visited:
+                path.insert(0, e["source"])
+                visited.add(e["source"])
+                current = e["source"]
+                found = True
+                break
+        if not found:
+            break
+    return path
+
+
+def analyze_blast_radius(
+    alerts: list[str],
+    symptoms: list[str],
+    source_component: str | None = None,
+    service: str | None = None,
+) -> dict:
+    incidents = _load_incidents()
+    dep_edges = _load_dependency_edges()
+
+    # Determine source from RCA-like matching if not provided
+    if not source_component:
+        rca = analyze_rca(alerts, symptoms, service)
+        source_component = rca.get("suspected_component") or "auth-service"
+
+    # BFS downstream on dependency graph
+    downstream = _bfs_downstream(source_component, dep_edges)
+    upstream = _bfs_upstream(source_component, dep_edges)
+
+    # Historical blast patterns
+    historical_impacted: set[str] = set()
+    for inc in incidents:
+        inc_alerts = {a.lower() for a in inc.get("alerts", [])}
+        if any(a.lower() in inc_alerts for a in alerts):
+            historical_impacted.update(inc.get("impacted_components", []))
+            historical_impacted.update(inc.get("impacted_services", []))
+
+    currently_impacted = list(set(downstream[:5] + [source_component]))
+    likely_downstream = downstream[1:8]
+    infra_components = [c for c in downstream + upstream if "cluster" in c or "lb" in c or "k8s" in c][:6]
+
+    # Determine localized vs systemic
+    is_systemic = len(downstream) > 4 or any("gateway" in c for c in downstream)
+
+    # Business impact score
+    service_impact_map = {
+        "payment-authorization": 95, "settlement-processing": 90,
+        "fraud-detection": 75, "merchant-services": 70,
+        "api-gateway-services": 85, "partner-integrations": 60,
+    }
+    biz_score = 50
+    for svc, score in service_impact_map.items():
+        if service and svc in service.lower().replace(" ", "-"):
+            biz_score = score
+            break
+    if is_systemic:
+        biz_score = min(100, biz_score + 20)
+
+    regions = list({inc.get("region", "us-east") for inc in incidents[:20]})[:3]
+    customer_estimate = biz_score * 50 if is_systemic else biz_score * 10
+
+    severity = "P1" if biz_score >= 85 else "P2" if biz_score >= 70 else "P3"
+
+    return {
+        "input": {"alerts": alerts, "symptoms": symptoms, "source_component": source_component, "service": service},
+        "currently_impacted_services": currently_impacted,
+        "likely_downstream_services": likely_downstream,
+        "impacted_infrastructure": infra_components,
+        "historically_impacted": list(historical_impacted)[:10],
+        "impacted_customers_estimate": int(customer_estimate),
+        "impacted_regions": regions,
+        "issue_scope": "systemic" if is_systemic else "localized",
+        "business_impact_score": biz_score,
+        "severity_recommendation": severity,
+        "blast_radius_nodes": list(set(downstream + upstream + [source_component])),
+        "highlight_edges": [
+            {"source": source_component, "target": t}
+            for t in downstream[:6]
+        ],
+        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _bfs_downstream(start: str, edges: list[dict], max_depth: int = 5) -> list[str]:
+    result, visited, queue = [], {start}, deque([(start, 0)])
+    while queue:
+        node, depth = queue.popleft()
+        if depth > 0:
+            result.append(node)
+        if depth >= max_depth:
+            continue
+        for e in edges:
+            if e["source"] == node and e["target"] not in visited:
+                visited.add(e["target"])
+                queue.append((e["target"], depth + 1))
+    return result
+
+
+def _bfs_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[str]:
+    result, visited, queue = [], {start}, deque([(start, 0)])
+    while queue:
+        node, depth = queue.popleft()
+        if depth > 0:
+            result.append(node)
+        if depth >= max_depth:
+            continue
+        for e in edges:
+            if e["target"] == node and e["source"] not in visited:
+                visited.add(e["source"])
+                queue.append((e["source"], depth + 1))
+    return result
+
+
+def detect_early_failures(current_alerts: list[str] | None = None) -> dict:
+    kg = _load_knowledge_graph()
+    open_alerts = _load_alerts()
+    patterns = kg.get("pattern_library", [])
+
+    if not current_alerts:
+        # Use open alerts from monitoring as "current conditions"
+        current_alerts = list({
+            a["title"] for a in open_alerts
+            if a.get("status") in ("open", "acknowledged")
+        })[:5]
+
+    detections = []
+    current_set = {_slug(a) for a in current_alerts}
+
+    for pattern in patterns:
+        pattern_alerts = {_slug(a) for a in pattern.get("alerts", [])}
+        overlap = current_set & pattern_alerts
+        if len(overlap) >= 1:
+            match_ratio = len(overlap) / max(len(pattern_alerts), 1)
+            confidence = round(min(95, pattern.get("confidence", 0.7) * 100 * match_ratio + 20), 0)
+            svc = pattern.get("expected_service", "payment-authorization")
+            svc_name = svc.replace("-", " ").title()
+            detections.append({
+                "pattern_id": pattern["id"],
+                "status": "probable_incident_forming",
+                "confidence": int(confidence),
+                "matched_alerts": [a.replace("-", " ").title() for a in overlap],
+                "matched_alert_raw": list(overlap),
+                "expected_symptoms": pattern.get("symptoms", []),
+                "expected_impacted_service": svc_name,
+                "expected_impacted_service_id": svc,
+                "estimated_time_to_incident_minutes": pattern.get("avg_time_to_incident_minutes", 8),
+                "occurrence_count_historical": pattern.get("occurrence_count", 0),
+                "recommended_actions": [
+                    "Start evidence collection on " + svc_name,
+                    "Open proactive investigation",
+                    "Notify SRE on-call",
+                    "Prepare remediation runbook",
+                    "Review recent deployments and changes",
+                ],
+                "evidence_collection_plan": [
+                    f"Collect CPU/memory metrics for {svc}",
+                    f"Check queue depth on kafka-cluster",
+                    f"Review auth-service latency trends",
+                    "Pull recent change records (last 4 hours)",
+                    "Snapshot dependency path to postgres-cluster",
+                ],
+            })
+
+    detections.sort(key=lambda x: x["confidence"], reverse=True)
+
+    return {
+        "current_conditions": current_alerts,
+        "detections": detections[:5],
+        "total_patterns_evaluated": len(patterns),
+        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+INVESTIGATION_STEPS = [
+    "issue_detected",
+    "ai_creates_investigation",
+    "collect_metrics",
+    "collect_alerts",
+    "review_logs",
+    "review_change_history",
+    "build_dependency_path",
+    "query_rca_graph",
+    "identify_root_cause_candidates",
+    "predict_blast_radius",
+    "recommend_fix",
+    "awaiting_human_approval",
+    "execute_remediation",
+    "completed",
+]
+
+STEP_LABELS = {
+    "issue_detected": "Issue Detected",
+    "ai_creates_investigation": "AI Creates Investigation",
+    "collect_metrics": "Collect Metrics",
+    "collect_alerts": "Collect Alerts",
+    "review_logs": "Review Logs",
+    "review_change_history": "Review Change History",
+    "build_dependency_path": "Build Dependency Path",
+    "query_rca_graph": "Query RCA Graph",
+    "identify_root_cause_candidates": "Identify Root Cause Candidates",
+    "predict_blast_radius": "Predict Blast Radius",
+    "recommend_fix": "Recommend Fix",
+    "awaiting_human_approval": "Human Approval",
+    "execute_remediation": "Execute Remediation (Simulated)",
+    "completed": "Investigation Complete",
+}
+
+_investigations: dict[str, dict] = {}
+
+
+def create_investigation(alerts: list[str], symptoms: list[str], service: str | None = None) -> dict:
+    import uuid
+    inv_id = f"INV-{uuid.uuid4().hex[:8]}"
+    rca = analyze_rca(alerts, symptoms, service)
+    blast = analyze_blast_radius(alerts, symptoms, service=service)
+
+    investigation = {
+        "id": inv_id,
+        "status": "in_progress",
+        "current_step": "issue_detected",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "input": {"alerts": alerts, "symptoms": symptoms, "service": service},
+        "steps": [
+            {"id": s, "label": STEP_LABELS[s], "status": "pending", "completed_at": None}
+            for s in INVESTIGATION_STEPS
+        ],
+        "rca_result": rca,
+        "blast_result": blast,
+        "recommended_fix": rca["suggested_fix_playbook"][0] if rca.get("suggested_fix_playbook") else "Restart service",
+        "remediation_status": "not_started",
+        "remediation_simulated": False,
+    }
+    investigation["steps"][0]["status"] = "completed"
+    investigation["steps"][0]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    _investigations[inv_id] = investigation
+    return investigation
+
+
+def advance_investigation(inv_id: str) -> dict:
+    inv = _investigations.get(inv_id)
+    if not inv:
+        return {"error": "Investigation not found"}
+
+    current_idx = INVESTIGATION_STEPS.index(inv["current_step"])
+    if current_idx < len(INVESTIGATION_STEPS) - 1:
+        inv["steps"][current_idx]["status"] = "completed"
+        inv["steps"][current_idx]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        next_step = INVESTIGATION_STEPS[current_idx + 1]
+        inv["current_step"] = next_step
+        inv["steps"][current_idx + 1]["status"] = "in_progress"
+
+        if next_step == "awaiting_human_approval":
+            inv["status"] = "awaiting_approval"
+        elif next_step == "completed":
+            inv["status"] = "completed"
+
+    return inv
+
+
+def approve_remediation(inv_id: str) -> dict:
+    inv = _investigations.get(inv_id)
+    if not inv:
+        return {"error": "Investigation not found"}
+
+    inv["remediation_status"] = "approved"
+    idx = INVESTIGATION_STEPS.index("awaiting_human_approval")
+    inv["steps"][idx]["status"] = "completed"
+    inv["steps"][idx]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    inv["current_step"] = "execute_remediation"
+    inv["steps"][idx + 1]["status"] = "in_progress"
+    return inv
+
+
+def execute_remediation(inv_id: str) -> dict:
+    inv = _investigations.get(inv_id)
+    if not inv:
+        return {"error": "Investigation not found"}
+
+    if inv["remediation_status"] != "approved":
+        return {"error": "Remediation not approved"}
+
+    inv["remediation_simulated"] = True
+    inv["remediation_status"] = "executed"
+    inv["remediation_result"] = {
+        "action": inv["recommended_fix"],
+        "status": "simulated_success",
+        "message": f"Simulated execution: {inv['recommended_fix']}. No real changes were made.",
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    idx = INVESTIGATION_STEPS.index("execute_remediation")
+    inv["steps"][idx]["status"] = "completed"
+    inv["steps"][idx]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    inv["current_step"] = "completed"
+    inv["steps"][-1]["status"] = "completed"
+    inv["steps"][-1]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    inv["status"] = "completed"
+    return inv
+
+
+def get_investigation(inv_id: str) -> dict | None:
+    return _investigations.get(inv_id)
+
+
+def list_investigations() -> list[dict]:
+    return list(_investigations.values())
+
+
+def copilot_query(question: str) -> dict:
+    q = question.lower()
+    incidents = _load_incidents()
+    alerts = _load_alerts()
+    changes = _load_changes()
+    deployments = _load_deployments()
+
+    answer_parts = []
+    sources = []
+    actions = []
+
+    if any(w in q for w in ["slow", "latency", "degrad", "performance"]):
+        svc = _extract_service(q)
+        svc_incidents = [
+            inc for inc in incidents
+            if svc and (svc in inc.get("service_id", "") or svc in inc.get("service", "").lower())
+        ] or incidents[:5]
+        top = svc_incidents[0] if svc_incidents else incidents[0]
+        answer_parts.append(
+            f"**{top.get('service', 'Payment Authorization')}** is showing degradation signals. "
+            f"Most recent similar incident: **{top['incident_id']}** — root cause was **{top['root_cause']}**, "
+            f"resolved via **{top['fix']}**."
+        )
+        open_al = [a for a in _load_alerts() if a.get("status") == "open"][:3]
+        if open_al:
+            answer_parts.append(f"Active alerts: {', '.join(a['title'] for a in open_al[:3])}.")
+        sources.extend(["incidents/service_now_incidents.json", "monitoring/alerts.json"])
+        actions.append("Check RCA Dashboard for ranked root causes")
+        actions.append("Review dependency path to postgres-cluster")
+
+    elif any(w in q for w in ["change", "deploy", "before", "recent"]):
+        recent = changes[:5]
+        deps = deployments[:3]
+        answer_parts.append("Recent changes near incident window:")
+        for c in recent[:3]:
+            answer_parts.append(f"- **{c['title']}** (risk: {c.get('risk', 'unknown')}, status: {c.get('status', '')})")
+        for d in deps[:2]:
+            answer_parts.append(f"- Deployment **{d['service']}** v{d['version']} — {d['status']}")
+        sources.extend(["changes/change_records.json", "changes/deployments.json"])
+
+    elif any(w in q for w in ["impact", "affected", "blast", "downstream"]):
+        blast = analyze_blast_radius(
+            ["CPU Saturation"], ["Latency Increase"], service=_extract_service(q)
+        )
+        answer_parts.append(
+            f"**Currently impacted:** {', '.join(blast['currently_impacted_services'][:4])}. "
+            f"**Likely downstream:** {', '.join(blast['likely_downstream_services'][:3])}. "
+            f"Scope: **{blast['issue_scope']}** (business impact score: {blast['business_impact_score']})."
+        )
+        sources.append("dependencies/dependency_graph.json")
+
+    elif any(w in q for w in ["root cause", "why", "cause", "rca"]):
+        rca = analyze_rca(
+            ["CPU Saturation", "API Error Spike"],
+            ["Latency Increase", "Retry Storm"],
+            service=_extract_service(q),
+        )
+        if rca["root_cause_candidates"]:
+            top3 = rca["root_cause_candidates"][:3]
+            answer_parts.append("Top root cause candidates:")
+            for i, c in enumerate(top3, 1):
+                answer_parts.append(f"{i}. **{c['root_cause']}** — {c['confidence']}% confidence")
+        sources.append("rca/knowledge_graph.json")
+
+    elif any(w in q for w in ["pattern", "seen", "before", "historical", "similar"]):
+        similar = incidents[:3]
+        answer_parts.append("Yes, we've seen this pattern before:")
+        for inc in similar:
+            answer_parts.append(
+                f"- **{inc['incident_id']}**: {inc['title']} → {inc['root_cause']} (fix: {inc['fix']})"
+            )
+        sources.append("rca/knowledge_graph.json")
+
+    elif any(w in q for w in ["fix", "remediation", "resolve", "worked"]):
+        svc = _extract_service(q)
+        matched = [inc for inc in incidents if svc and svc in inc.get("service_id", "")] or incidents
+        fixes: dict[str, int] = defaultdict(int)
+        for inc in matched:
+            fixes[inc["fix"]] += 1
+        top_fix = max(fixes, key=fixes.get)
+        answer_parts.append(
+            f"Most successful fix for this service pattern: **{top_fix}** "
+            f"(worked in {fixes[top_fix]} historical incidents)."
+        )
+        sources.append("incidents/service_now_incidents.json")
+
+    elif any(w in q for w in ["check", "next", "should i"]):
+        answer_parts.append("Recommended next checks:")
+        answer_parts.extend([
+            "1. Review active alerts on auth-service and postgres-cluster",
+            "2. Check recent deployments in the last 4 hours",
+            "3. Inspect queue depth on kafka-cluster",
+            "4. Run RCA analysis with current alert/symptom set",
+            "5. Evaluate blast radius if issue is spreading",
+        ])
+        actions.append("Open Early Failure Detection dashboard")
+
+    elif any(w in q for w in ["localized", "systemic", "spread"]):
+        blast = analyze_blast_radius(["CPU Saturation"], ["Latency Increase"])
+        answer_parts.append(
+            f"This appears to be a **{blast['issue_scope']}** issue. "
+            f"{len(blast['blast_radius_nodes'])} components in blast radius. "
+            f"Severity recommendation: **{blast['severity_recommendation']}**."
+        )
+
+    else:
+        answer_parts.append(
+            "I can help with root cause analysis, impact assessment, change correlation, "
+            "and historical pattern matching. Try asking:"
+        )
+        answer_parts.extend([
+            "- Why is Payment Authorization slow?",
+            "- What changed before this incident?",
+            "- What is the likely root cause?",
+            "- Is this issue localized or systemic?",
+        ])
+
+    return {
+        "question": question,
+        "answer": "\n\n".join(answer_parts),
+        "sources": list(set(sources)),
+        "suggested_actions": actions,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _extract_service(q: str) -> str | None:
+    services = {
+        "payment authorization": "payment-authorization",
+        "payment": "payment-authorization",
+        "settlement": "settlement-processing",
+        "fraud": "fraud-detection",
+        "merchant": "merchant-services",
+        "api gateway": "api-gateway-services",
+        "gateway": "api-gateway-services",
+        "partner": "partner-integrations",
+    }
+    for name, sid in services.items():
+        if name in q:
+            return sid
+    return None
+
+
+def get_overview() -> dict:
+    incidents = _load_incidents()
+    alerts = _load_alerts()
+    kg = _load_knowledge_graph()
+    open_alerts = [a for a in alerts if a.get("status") in ("open", "acknowledged")]
+    early = detect_early_failures()
+    p1_count = sum(1 for i in incidents if i.get("severity") == "P1")
+
+    return {
+        "summary": {
+            "total_incidents": len(incidents),
+            "open_alerts": len(open_alerts),
+            "knowledge_graph_nodes": kg.get("stats", {}).get("node_count", 0),
+            "knowledge_graph_edges": kg.get("stats", {}).get("edge_count", 0),
+            "early_warnings": len(early.get("detections", [])),
+            "active_investigations": len([i for i in _investigations.values() if i["status"] != "completed"]),
+            "p1_incidents_historical": p1_count,
+        },
+        "recent_incidents": [
+            {
+                "incident_id": i["incident_id"],
+                "title": i["title"],
+                "severity": i["severity"],
+                "service": i["service"],
+                "root_cause": i["root_cause"],
+                "resolved_at": i.get("resolved_at", ""),
+            }
+            for i in sorted(incidents, key=lambda x: x.get("start_time", ""), reverse=True)[:6]
+        ],
+        "top_root_causes": _top_root_causes(incidents),
+        "early_detections": early.get("detections", [])[:3],
+        "open_alerts_preview": open_alerts[:5],
+    }
+
+
+def _top_root_causes(incidents: list[dict], limit: int = 5) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for inc in incidents:
+        counts[inc["root_cause"]] += 1
+    return [
+        {"root_cause": rc, "count": c}
+        for rc, c in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+    ]
