@@ -1,0 +1,746 @@
+{
+  "services": [
+    {
+      "id": "payment-authorization",
+      "name": "Payment Authorization",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "auth-app",
+        "token-app"
+      ],
+      "metrics": {
+        "cpu": 29.4,
+        "memory": 23.7,
+        "storage": 42.7,
+        "io": 17.8,
+        "network": 40.5,
+        "latency": 2.1,
+        "error_rate": 0,
+        "incident_count": 6,
+        "risk_score": 23.0
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.772,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 149.4
+      }
+    },
+    {
+      "id": "settlement-processing",
+      "name": "Settlement Processing",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "settlement-app",
+        "reconciliation-app"
+      ],
+      "metrics": {
+        "cpu": 16.1,
+        "memory": 34.2,
+        "storage": 8.7,
+        "io": 23.9,
+        "network": 23.0,
+        "latency": 13.4,
+        "error_rate": 0,
+        "incident_count": 6,
+        "risk_score": 36.2
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.855,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 175.1
+      }
+    },
+    {
+      "id": "fraud-detection",
+      "name": "Fraud Detection",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "fraud-app",
+        "ml-scoring-app"
+      ],
+      "metrics": {
+        "cpu": 54.7,
+        "memory": 29.7,
+        "storage": 25.8,
+        "io": 27.4,
+        "network": 16.8,
+        "latency": 8.8,
+        "error_rate": 0,
+        "incident_count": 2,
+        "risk_score": 7.5
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.713,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 151.6
+      }
+    },
+    {
+      "id": "merchant-services",
+      "name": "Merchant Services",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "merchant-portal-app",
+        "merchant-api-app"
+      ],
+      "metrics": {
+        "cpu": 34.4,
+        "memory": 23.1,
+        "storage": 15.1,
+        "io": 9.9,
+        "network": 35.0,
+        "latency": 21.8,
+        "error_rate": 0,
+        "incident_count": 1,
+        "risk_score": 10.4
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.503,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 147.3
+      }
+    },
+    {
+      "id": "api-gateway-services",
+      "name": "Api Gateway Services",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "gateway-app",
+        "rate-limiter-app"
+      ],
+      "metrics": {
+        "cpu": 48.7,
+        "memory": 35.2,
+        "storage": 39.5,
+        "io": 17.6,
+        "network": 27.2,
+        "latency": 30.9,
+        "error_rate": 11.04,
+        "incident_count": 9,
+        "risk_score": 10.4
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.657,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 241.0
+      }
+    },
+    {
+      "id": "partner-integrations",
+      "name": "Partner Integrations",
+      "type": "business_service",
+      "layer": "business_service",
+      "applications": [
+        "partner-api-app",
+        "webhook-app"
+      ],
+      "metrics": {
+        "cpu": 23.0,
+        "memory": 32.6,
+        "storage": 43.6,
+        "io": 38.7,
+        "network": 21.7,
+        "latency": 25.8,
+        "error_rate": 4.64,
+        "incident_count": 9,
+        "risk_score": 36.3
+      },
+      "health": "healthy",
+      "sla": {
+        "availability_target": 99.95,
+        "current_availability": 99.66,
+        "latency_p99_target_ms": 200,
+        "current_latency_p99_ms": 127.7
+      }
+    },
+    {
+      "id": "auth-app",
+      "name": "Auth App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "payment-authorization",
+      "microservices": [
+        "audit-service",
+        "rate-limiter",
+        "fraud-service"
+      ],
+      "metrics": {
+        "cpu": 51.4,
+        "memory": 39.6,
+        "storage": 47.3,
+        "io": 13.0,
+        "network": 54.9,
+        "latency": 9.2,
+        "error_rate": 16.7,
+        "incident_count": 0,
+        "risk_score": 48.1
+      },
+      "health": "critical"
+    },
+    {
+      "id": "token-app",
+      "name": "Token App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "payment-authorization",
+      "microservices": [
+        "customer-service",
+        "webhook-handler",
+        "settlement-service"
+      ],
+      "metrics": {
+        "cpu": 37.5,
+        "memory": 36.7,
+        "storage": 37.7,
+        "io": 37.8,
+        "network": 46.8,
+        "latency": 18.4,
+        "error_rate": 5.97,
+        "incident_count": 5,
+        "risk_score": 22.1
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "settlement-app",
+      "name": "Settlement App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "settlement-processing",
+      "microservices": [
+        "merchant-api",
+        "api-gateway",
+        "token-service"
+      ],
+      "metrics": {
+        "cpu": 48.6,
+        "memory": 56.6,
+        "storage": 13.0,
+        "io": 44.6,
+        "network": 34.2,
+        "latency": 18.0,
+        "error_rate": 6.26,
+        "incident_count": 6,
+        "risk_score": 37.7
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "reconciliation-app",
+      "name": "Reconciliation App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "settlement-processing",
+      "microservices": [
+        "webhook-handler",
+        "partner-api",
+        "api-gateway"
+      ],
+      "metrics": {
+        "cpu": 58.7,
+        "memory": 53.1,
+        "storage": 42.5,
+        "io": 28.8,
+        "network": 51.6,
+        "latency": 6.4,
+        "error_rate": 0,
+        "incident_count": 5,
+        "risk_score": 24.2
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "fraud-app",
+      "name": "Fraud App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "fraud-detection",
+      "microservices": [
+        "merchant-api",
+        "rate-limiter",
+        "ml-scoring-service"
+      ],
+      "metrics": {
+        "cpu": 42.5,
+        "memory": 50.8,
+        "storage": 35.9,
+        "io": 43.7,
+        "network": 28.3,
+        "latency": 33.8,
+        "error_rate": 0,
+        "incident_count": 0,
+        "risk_score": 20.3
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "ml-scoring-app",
+      "name": "Ml Scoring App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "fraud-detection",
+      "microservices": [
+        "api-gateway",
+        "audit-service",
+        "auth-service"
+      ],
+      "metrics": {
+        "cpu": 42.3,
+        "memory": 52.5,
+        "storage": 18.8,
+        "io": 20.0,
+        "network": 33.5,
+        "latency": 29.2,
+        "error_rate": 13.62,
+        "incident_count": 1,
+        "risk_score": 23.8
+      },
+      "health": "warning"
+    },
+    {
+      "id": "merchant-portal-app",
+      "name": "Merchant Portal App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "merchant-services",
+      "microservices": [
+        "audit-service",
+        "identity-service",
+        "ml-scoring-service"
+      ],
+      "metrics": {
+        "cpu": 31.8,
+        "memory": 61.8,
+        "storage": 13.4,
+        "io": 38.3,
+        "network": 44.2,
+        "latency": 15.9,
+        "error_rate": 0,
+        "incident_count": 6,
+        "risk_score": 18.3
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "merchant-api-app",
+      "name": "Merchant Api App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "merchant-services",
+      "microservices": [
+        "webhook-handler",
+        "token-service",
+        "settlement-service"
+      ],
+      "metrics": {
+        "cpu": 23.9,
+        "memory": 53.9,
+        "storage": 28.1,
+        "io": 7.7,
+        "network": 16.8,
+        "latency": 30.4,
+        "error_rate": 0,
+        "incident_count": 2,
+        "risk_score": 35.9
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "gateway-app",
+      "name": "Gateway App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "api-gateway-services",
+      "microservices": [
+        "settlement-service",
+        "ml-scoring-service",
+        "webhook-handler"
+      ],
+      "metrics": {
+        "cpu": 57.2,
+        "memory": 54.6,
+        "storage": 30.6,
+        "io": 27.1,
+        "network": 28.2,
+        "latency": 19.1,
+        "error_rate": 4.48,
+        "incident_count": 6,
+        "risk_score": 26.2
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "rate-limiter-app",
+      "name": "Rate Limiter App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "api-gateway-services",
+      "microservices": [
+        "token-service",
+        "rate-limiter",
+        "ml-scoring-service"
+      ],
+      "metrics": {
+        "cpu": 46.3,
+        "memory": 40.8,
+        "storage": 39.5,
+        "io": 40.3,
+        "network": 33.0,
+        "latency": 19.2,
+        "error_rate": 0,
+        "incident_count": 1,
+        "risk_score": 18.2
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "partner-api-app",
+      "name": "Partner Api App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "partner-integrations",
+      "microservices": [
+        "merchant-api",
+        "webhook-handler",
+        "identity-service"
+      ],
+      "metrics": {
+        "cpu": 51.8,
+        "memory": 48.1,
+        "storage": 42.0,
+        "io": 26.5,
+        "network": 29.6,
+        "latency": 9.9,
+        "error_rate": 0,
+        "incident_count": 5,
+        "risk_score": 44.5
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "webhook-app",
+      "name": "Webhook App",
+      "type": "application",
+      "layer": "application",
+      "business_service_id": "partner-integrations",
+      "microservices": [
+        "ml-scoring-service",
+        "partner-api",
+        "reconciliation-service"
+      ],
+      "metrics": {
+        "cpu": 43.9,
+        "memory": 49.5,
+        "storage": 33.5,
+        "io": 18.9,
+        "network": 48.8,
+        "latency": 26.7,
+        "error_rate": 18.55,
+        "incident_count": 5,
+        "risk_score": 42.0
+      },
+      "health": "critical"
+    },
+    {
+      "id": "api-gateway",
+      "name": "Api Gateway",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 28.4,
+        "memory": 35.4,
+        "storage": 4.7,
+        "io": 22.2,
+        "network": 27.3,
+        "latency": 35.7,
+        "error_rate": 7.43,
+        "incident_count": 3,
+        "risk_score": 35.9
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "auth-service",
+      "name": "Auth Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 41.9,
+        "memory": 49.5,
+        "storage": 21.5,
+        "io": 46.8,
+        "network": 57.2,
+        "latency": 14.9,
+        "error_rate": 0,
+        "incident_count": 2,
+        "risk_score": 17.6
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "settlement-service",
+      "name": "Settlement Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 58.7,
+        "memory": 54.8,
+        "storage": 34.6,
+        "io": 48.1,
+        "network": 39.4,
+        "latency": 15.8,
+        "error_rate": 2.36,
+        "incident_count": 4,
+        "risk_score": 32.2
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "fraud-service",
+      "name": "Fraud Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 41.4,
+        "memory": 49.7,
+        "storage": 28.4,
+        "io": 27.8,
+        "network": 26.7,
+        "latency": 30.6,
+        "error_rate": 18.84,
+        "incident_count": 1,
+        "risk_score": 23.7
+      },
+      "health": "critical"
+    },
+    {
+      "id": "customer-service",
+      "name": "Customer Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 34.0,
+        "memory": 41.5,
+        "storage": 31.2,
+        "io": 32.6,
+        "network": 50.9,
+        "latency": 27.8,
+        "error_rate": 7.43,
+        "incident_count": 4,
+        "risk_score": 16.6
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "identity-service",
+      "name": "Identity Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 46.7,
+        "memory": 60.3,
+        "storage": 30.4,
+        "io": 27.7,
+        "network": 28.7,
+        "latency": 25.0,
+        "error_rate": 16.44,
+        "incident_count": 5,
+        "risk_score": 42.1
+      },
+      "health": "critical"
+    },
+    {
+      "id": "notification-service",
+      "name": "Notification Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 60.0,
+        "memory": 31.3,
+        "storage": 10.5,
+        "io": 44.5,
+        "network": 23.5,
+        "latency": 42.6,
+        "error_rate": 0,
+        "incident_count": 1,
+        "risk_score": 20.4
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "audit-service",
+      "name": "Audit Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 59.4,
+        "memory": 54.4,
+        "storage": 17.1,
+        "io": 34.6,
+        "network": 51.4,
+        "latency": 40.5,
+        "error_rate": 19.22,
+        "incident_count": 4,
+        "risk_score": 26.0
+      },
+      "health": "critical"
+    },
+    {
+      "id": "merchant-api",
+      "name": "Merchant Api",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-a",
+      "metrics": {
+        "cpu": 48.9,
+        "memory": 36.7,
+        "storage": 39.2,
+        "io": 21.7,
+        "network": 42.9,
+        "latency": 46.1,
+        "error_rate": 7.58,
+        "incident_count": 5,
+        "risk_score": 44.6
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "partner-api",
+      "name": "Partner Api",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 63.5,
+        "memory": 61.4,
+        "storage": 36.8,
+        "io": 49.7,
+        "network": 54.7,
+        "latency": 13.1,
+        "error_rate": 21.64,
+        "incident_count": 1,
+        "risk_score": 17.8
+      },
+      "health": "critical"
+    },
+    {
+      "id": "webhook-handler",
+      "name": "Webhook Handler",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-a",
+      "metrics": {
+        "cpu": 58.1,
+        "memory": 60.5,
+        "storage": 27.0,
+        "io": 29.6,
+        "network": 43.1,
+        "latency": 18.7,
+        "error_rate": 3.57,
+        "incident_count": 3,
+        "risk_score": 15.0
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "rate-limiter",
+      "name": "Rate Limiter",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 41.1,
+        "memory": 60.0,
+        "storage": 27.8,
+        "io": 45.1,
+        "network": 38.2,
+        "latency": 27.5,
+        "error_rate": 10.28,
+        "incident_count": 5,
+        "risk_score": 15.7
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "token-service",
+      "name": "Token Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 50.4,
+        "memory": 57.9,
+        "storage": 34.0,
+        "io": 41.8,
+        "network": 35.9,
+        "latency": 46.7,
+        "error_rate": 19.99,
+        "incident_count": 3,
+        "risk_score": 22.7
+      },
+      "health": "critical"
+    },
+    {
+      "id": "reconciliation-service",
+      "name": "Reconciliation Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 38.5,
+        "memory": 53.1,
+        "storage": 22.6,
+        "io": 29.4,
+        "network": 33.7,
+        "latency": 35.3,
+        "error_rate": 0,
+        "incident_count": 0,
+        "risk_score": 37.0
+      },
+      "health": "healthy"
+    },
+    {
+      "id": "ml-scoring-service",
+      "name": "Ml Scoring Service",
+      "type": "microservice",
+      "layer": "microservice",
+      "cluster_id": "k8s-cluster-b",
+      "metrics": {
+        "cpu": 25.7,
+        "memory": 67.2,
+        "storage": 6.3,
+        "io": 28.3,
+        "network": 59.7,
+        "latency": 25.1,
+        "error_rate": 26.83,
+        "incident_count": 1,
+        "risk_score": 47.3
+      },
+      "health": "critical"
+    }
+  ],
+  "generated_at": "2026-06-05T10:22:24.697028Z"
+}

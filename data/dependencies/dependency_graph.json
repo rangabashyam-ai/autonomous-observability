@@ -1,0 +1,239 @@
+{
+  "edges": [
+    {
+      "source": "api-gateway-services",
+      "target": "gateway-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "payment-authorization",
+      "target": "auth-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "settlement-processing",
+      "target": "settlement-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "fraud-detection",
+      "target": "fraud-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "merchant-services",
+      "target": "merchant-portal-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "partner-integrations",
+      "target": "partner-api-app",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "gateway-app",
+      "target": "api-gateway",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "auth-app",
+      "target": "auth-service",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "auth-app",
+      "target": "token-service",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "settlement-app",
+      "target": "settlement-service",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "fraud-app",
+      "target": "fraud-service",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "fraud-app",
+      "target": "ml-scoring-service",
+      "relationship": "contains",
+      "type": "hierarchy"
+    },
+    {
+      "source": "api-gateway",
+      "target": "auth-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "api-gateway",
+      "target": "settlement-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "api-gateway",
+      "target": "fraud-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "auth-service",
+      "target": "postgres-cluster",
+      "relationship": "queries",
+      "type": "dependency"
+    },
+    {
+      "source": "auth-service",
+      "target": "redis-cluster",
+      "relationship": "uses",
+      "type": "dependency"
+    },
+    {
+      "source": "auth-service",
+      "target": "identity-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "settlement-service",
+      "target": "postgres-cluster",
+      "relationship": "queries",
+      "type": "dependency"
+    },
+    {
+      "source": "settlement-service",
+      "target": "kafka-cluster",
+      "relationship": "publishes",
+      "type": "dependency"
+    },
+    {
+      "source": "fraud-service",
+      "target": "cassandra-cluster",
+      "relationship": "queries",
+      "type": "dependency"
+    },
+    {
+      "source": "fraud-service",
+      "target": "ml-scoring-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "merchant-api",
+      "target": "postgres-cluster",
+      "relationship": "queries",
+      "type": "dependency"
+    },
+    {
+      "source": "partner-api",
+      "target": "webhook-handler",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "external-lb",
+      "target": "api-gateway",
+      "relationship": "routes",
+      "type": "dependency"
+    },
+    {
+      "source": "internal-lb",
+      "target": "auth-service",
+      "relationship": "routes",
+      "type": "dependency"
+    },
+    {
+      "source": "k8s-cluster-a",
+      "target": "k8s-cluster-a-pod-01",
+      "relationship": "hosts",
+      "type": "hierarchy"
+    },
+    {
+      "source": "auth-service",
+      "target": "k8s-cluster-a-pod-01",
+      "relationship": "runs_on",
+      "type": "hierarchy"
+    },
+    {
+      "source": "k8s-cluster-a-pod-01",
+      "target": "server-r01-s01",
+      "relationship": "runs_on",
+      "type": "hierarchy"
+    },
+    {
+      "source": "server-r01-s01",
+      "target": "rack-01",
+      "relationship": "located_in",
+      "type": "hierarchy"
+    },
+    {
+      "source": "rack-01",
+      "target": "tor-switch-1",
+      "relationship": "connected_to",
+      "type": "hierarchy"
+    },
+    {
+      "source": "tor-switch-1",
+      "target": "network-spine-1",
+      "relationship": "connected_to",
+      "type": "hierarchy"
+    },
+    {
+      "source": "notification-service",
+      "target": "rabbitmq-cluster",
+      "relationship": "uses",
+      "type": "dependency"
+    },
+    {
+      "source": "audit-service",
+      "target": "cassandra-cluster",
+      "relationship": "writes",
+      "type": "dependency"
+    },
+    {
+      "source": "rate-limiter",
+      "target": "redis-cluster",
+      "relationship": "uses",
+      "type": "dependency"
+    },
+    {
+      "source": "settlement-service",
+      "target": "notification-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "fraud-service",
+      "target": "audit-service",
+      "relationship": "calls",
+      "type": "dependency"
+    },
+    {
+      "source": "postgres-cluster",
+      "target": "storage-cluster-1",
+      "relationship": "uses",
+      "type": "dependency"
+    },
+    {
+      "source": "cassandra-cluster",
+      "target": "storage-cluster-2",
+      "relationship": "uses",
+      "type": "dependency"
+    }
+  ],
+  "generated_at": "2026-06-05T10:22:24.697044Z"
+}

@@ -1,0 +1,433 @@
+{
+  "executive": {
+    "service_availability": 99.911,
+    "transaction_success_rate": 98.15,
+    "sla_compliance": 98.6,
+    "revenue_impact_usd": 14509.37,
+    "customer_impact_count": 82,
+    "services_at_risk": 2,
+    "active_incidents": 2
+  },
+  "service": {
+    "services": [
+      {
+        "id": "payment-authorization",
+        "name": "Payment Authorization",
+        "health": "warning",
+        "latency_p99_ms": 103.9,
+        "error_rate": 1.836,
+        "throughput_rps": 4706.0,
+        "transaction_volume": 28913,
+        "availability": 99.837
+      },
+      {
+        "id": "settlement-processing",
+        "name": "Settlement Processing",
+        "health": "critical",
+        "latency_p99_ms": 75.6,
+        "error_rate": 1.001,
+        "throughput_rps": 2476.0,
+        "transaction_volume": 92284,
+        "availability": 99.28
+      },
+      {
+        "id": "fraud-detection",
+        "name": "Fraud Detection",
+        "health": "healthy",
+        "latency_p99_ms": 107.5,
+        "error_rate": 1.933,
+        "throughput_rps": 1312.0,
+        "transaction_volume": 152846,
+        "availability": 99.742
+      },
+      {
+        "id": "merchant-services",
+        "name": "Merchant Services",
+        "health": "warning",
+        "latency_p99_ms": 213.8,
+        "error_rate": 0.337,
+        "throughput_rps": 3729.0,
+        "transaction_volume": 151557,
+        "availability": 99.853
+      },
+      {
+        "id": "api-gateway-services",
+        "name": "Api Gateway Services",
+        "health": "healthy",
+        "latency_p99_ms": 68.5,
+        "error_rate": 1.808,
+        "throughput_rps": 3836.0,
+        "transaction_volume": 227778,
+        "availability": 99.02
+      },
+      {
+        "id": "partner-integrations",
+        "name": "Partner Integrations",
+        "health": "critical",
+        "latency_p99_ms": 257.6,
+        "error_rate": 1.516,
+        "throughput_rps": 844.0,
+        "transaction_volume": 395809,
+        "availability": 99.582
+      }
+    ]
+  },
+  "technical": {
+    "containers": [
+      {
+        "id": "k8s-cluster-a-pod-01",
+        "status": "warning",
+        "cpu": 31.7,
+        "memory": 61.3
+      },
+      {
+        "id": "k8s-cluster-a-pod-02",
+        "status": "running",
+        "cpu": 67.1,
+        "memory": 50.5
+      },
+      {
+        "id": "k8s-cluster-a-pod-03",
+        "status": "running",
+        "cpu": 38.1,
+        "memory": 52.5
+      },
+      {
+        "id": "k8s-cluster-a-pod-04",
+        "status": "running",
+        "cpu": 35.9,
+        "memory": 64.4
+      },
+      {
+        "id": "k8s-cluster-a-pod-05",
+        "status": "warning",
+        "cpu": 42.6,
+        "memory": 50.8
+      },
+      {
+        "id": "k8s-cluster-a-pod-06",
+        "status": "running",
+        "cpu": 78.0,
+        "memory": 58.7
+      },
+      {
+        "id": "k8s-cluster-a-pod-07",
+        "status": "warning",
+        "cpu": 37.1,
+        "memory": 67.2
+      },
+      {
+        "id": "k8s-cluster-a-pod-08",
+        "status": "running",
+        "cpu": 42.9,
+        "memory": 84.6
+      },
+      {
+        "id": "k8s-cluster-a-pod-09",
+        "status": "warning",
+        "cpu": 77.1,
+        "memory": 70.8
+      },
+      {
+        "id": "k8s-cluster-a-pod-10",
+        "status": "running",
+        "cpu": 47.1,
+        "memory": 59.7
+      }
+    ],
+    "apis": [
+      {
+        "name": "/api/v1/api-gateway",
+        "latency_ms": 14.7,
+        "error_rate": 2.31,
+        "requests_per_sec": 922.0
+      },
+      {
+        "name": "/api/v1/auth",
+        "latency_ms": 100.6,
+        "error_rate": 0.33,
+        "requests_per_sec": 656.0
+      },
+      {
+        "name": "/api/v1/settlement",
+        "latency_ms": 37.3,
+        "error_rate": 1.89,
+        "requests_per_sec": 213.0
+      },
+      {
+        "name": "/api/v1/fraud",
+        "latency_ms": 116.6,
+        "error_rate": 0.62,
+        "requests_per_sec": 1887.0
+      },
+      {
+        "name": "/api/v1/customer",
+        "latency_ms": 122.7,
+        "error_rate": 0.25,
+        "requests_per_sec": 836.0
+      },
+      {
+        "name": "/api/v1/identity",
+        "latency_ms": 169.2,
+        "error_rate": 1.57,
+        "requests_per_sec": 1687.0
+      },
+      {
+        "name": "/api/v1/notification",
+        "latency_ms": 154.5,
+        "error_rate": 0.18,
+        "requests_per_sec": 1012.0
+      },
+      {
+        "name": "/api/v1/audit",
+        "latency_ms": 88.3,
+        "error_rate": 2.22,
+        "requests_per_sec": 1677.0
+      }
+    ],
+    "databases": [
+      {
+        "id": "postgres-cluster",
+        "connections": 68,
+        "query_latency_ms": 16.8,
+        "replication_lag_ms": 56.5
+      },
+      {
+        "id": "cassandra-cluster",
+        "connections": 258,
+        "query_latency_ms": 43.7,
+        "replication_lag_ms": 26.8
+      },
+      {
+        "id": "redis-cluster",
+        "connections": 157,
+        "query_latency_ms": 38.0,
+        "replication_lag_ms": 79.5
+      }
+    ],
+    "queues": [
+      {
+        "id": "kafka-cluster",
+        "depth": 8938,
+        "consumer_lag": 4094,
+        "throughput_msg_s": 1634.0
+      },
+      {
+        "id": "rabbitmq-cluster",
+        "depth": 3862,
+        "consumer_lag": 2636,
+        "throughput_msg_s": 2361.0
+      }
+    ],
+    "jvm": [
+      {
+        "service": "api-gateway",
+        "heap_used_pct": 64.1,
+        "thread_count": 334,
+        "gc_pause_ms": 172.4
+      },
+      {
+        "service": "auth-service",
+        "heap_used_pct": 89.6,
+        "thread_count": 91,
+        "gc_pause_ms": 184.6
+      },
+      {
+        "service": "settlement-service",
+        "heap_used_pct": 61.3,
+        "thread_count": 89,
+        "gc_pause_ms": 78.3
+      },
+      {
+        "service": "fraud-service",
+        "heap_used_pct": 77.8,
+        "thread_count": 132,
+        "gc_pause_ms": 106.4
+      },
+      {
+        "service": "customer-service",
+        "heap_used_pct": 46.1,
+        "thread_count": 151,
+        "gc_pause_ms": 90.3
+      },
+      {
+        "service": "identity-service",
+        "heap_used_pct": 88.6,
+        "thread_count": 69,
+        "gc_pause_ms": 177.7
+      }
+    ]
+  },
+  "infrastructure": {
+    "summary": {
+      "avg_cpu": 49.9,
+      "avg_memory": 58.8,
+      "avg_storage": 60.7,
+      "avg_network": 29.2,
+      "avg_io": 56.2
+    },
+    "servers": [
+      {
+        "id": "server-r01-s01",
+        "cpu": 46.4,
+        "memory": 20.6,
+        "storage": 35.9,
+        "network": 69.7,
+        "io": 56.8
+      },
+      {
+        "id": "server-r01-s02",
+        "cpu": 81.0,
+        "memory": 37.6,
+        "storage": 46.1,
+        "network": 63.4,
+        "io": 46.6
+      },
+      {
+        "id": "server-r01-s03",
+        "cpu": 27.4,
+        "memory": 38.9,
+        "storage": 64.3,
+        "network": 58.2,
+        "io": 71.9
+      },
+      {
+        "id": "server-r01-s04",
+        "cpu": 42.8,
+        "memory": 59.3,
+        "storage": 53.6,
+        "network": 22.6,
+        "io": 31.5
+      },
+      {
+        "id": "server-r01-s05",
+        "cpu": 71.0,
+        "memory": 84.8,
+        "storage": 76.4,
+        "network": 19.9,
+        "io": 56.5
+      },
+      {
+        "id": "server-r01-s06",
+        "cpu": 50.5,
+        "memory": 40.6,
+        "storage": 39.0,
+        "network": 38.2,
+        "io": 74.6
+      },
+      {
+        "id": "server-r01-s07",
+        "cpu": 15.4,
+        "memory": 65.6,
+        "storage": 40.0,
+        "network": 15.6,
+        "io": 39.8
+      },
+      {
+        "id": "server-r01-s08",
+        "cpu": 22.1,
+        "memory": 60.6,
+        "storage": 59.7,
+        "network": 14.0,
+        "io": 51.4
+      },
+      {
+        "id": "server-r01-s09",
+        "cpu": 81.3,
+        "memory": 42.4,
+        "storage": 30.7,
+        "network": 21.6,
+        "io": 28.5
+      },
+      {
+        "id": "server-r01-s10",
+        "cpu": 83.4,
+        "memory": 47.7,
+        "storage": 66.5,
+        "network": 32.0,
+        "io": 59.9
+      },
+      {
+        "id": "server-r02-s01",
+        "cpu": 85.1,
+        "memory": 56.5,
+        "storage": 62.1,
+        "network": 22.2,
+        "io": 48.5
+      },
+      {
+        "id": "server-r02-s02",
+        "cpu": 22.7,
+        "memory": 34.1,
+        "storage": 38.9,
+        "network": 43.8,
+        "io": 18.2
+      },
+      {
+        "id": "server-r02-s03",
+        "cpu": 54.2,
+        "memory": 61.9,
+        "storage": 49.1,
+        "network": 44.5,
+        "io": 65.5
+      },
+      {
+        "id": "server-r02-s04",
+        "cpu": 60.4,
+        "memory": 82.8,
+        "storage": 66.9,
+        "network": 47.0,
+        "io": 69.1
+      },
+      {
+        "id": "server-r02-s05",
+        "cpu": 30.7,
+        "memory": 20.2,
+        "storage": 41.6,
+        "network": 23.0,
+        "io": 70.4
+      },
+      {
+        "id": "server-r02-s06",
+        "cpu": 61.1,
+        "memory": 29.3,
+        "storage": 53.8,
+        "network": 10.0,
+        "io": 15.1
+      },
+      {
+        "id": "server-r02-s07",
+        "cpu": 87.7,
+        "memory": 28.9,
+        "storage": 70.4,
+        "network": 35.5,
+        "io": 40.7
+      },
+      {
+        "id": "server-r02-s08",
+        "cpu": 37.7,
+        "memory": 69.4,
+        "storage": 42.0,
+        "network": 33.6,
+        "io": 60.3
+      },
+      {
+        "id": "server-r02-s09",
+        "cpu": 68.0,
+        "memory": 43.1,
+        "storage": 71.9,
+        "network": 29.0,
+        "io": 15.1
+      },
+      {
+        "id": "server-r02-s10",
+        "cpu": 60.4,
+        "memory": 33.9,
+        "storage": 38.3,
+        "network": 48.0,
+        "io": 28.1
+      }
+    ]
+  },
+  "generated_at": "2026-06-05T10:22:25.544528Z"
+}
