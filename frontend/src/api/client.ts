@@ -1,0 +1,203 @@
+import type {
+  BlastRadiusResult,
+  EarlyDetection,
+  Incident,
+  Investigation,
+  KnowledgeGraph,
+  Overview,
+  RCAResult,
+} from '../types/intelligence';
+import type {
+  DependencyGraph,
+  DependencyPath,
+  HeatmapMetric,
+  MonitoringDashboard,
+  ViewType,
+} from '../types/api';
+
+const BASE = '/api';
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || `API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+// --- Dependencies ---
+export async function getDependencyGraph(
+  view: ViewType,
+  heatmap: HeatmapMetric,
+  focusNode?: string | null
+): Promise<DependencyGraph> {
+  const params = new URLSearchParams({ view, heatmap });
+  if (focusNode) params.set('focus_node', focusNode);
+  return fetchJson(`${BASE}/dependencies/graph?${params}`);
+}
+
+export async function getDependencyPaths(nodeId: string): Promise<DependencyPath> {
+  return fetchJson(`${BASE}/dependencies/nodes/${nodeId}/paths`);
+}
+
+export async function addDependency(source: string, target: string, relationship: string) {
+  await fetchJson(`${BASE}/dependencies/edges`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, target, relationship }),
+  });
+}
+
+export async function deleteDependency(source: string, target: string) {
+  const params = new URLSearchParams({ source, target });
+  await fetchJson(`${BASE}/dependencies/edges?${params}`, { method: 'DELETE' });
+}
+
+export async function uploadCsvDependencies(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/dependencies/upload/csv`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error('CSV upload failed');
+  return res.json();
+}
+
+export async function uploadJsonDependency(source: string, target: string, relationship: string) {
+  await fetchJson(`${BASE}/dependencies/upload/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, target, relationship }),
+  });
+}
+
+// --- Monitoring ---
+export async function getMonitoringDashboard(): Promise<MonitoringDashboard> {
+  return fetchJson(`${BASE}/monitoring/dashboard`);
+}
+
+export async function getAlerts(limit = 20) {
+  return fetchJson<{ alerts: unknown[] }>(`${BASE}/monitoring/alerts?limit=${limit}`);
+}
+
+// --- Intelligence ---
+export async function getOverview(): Promise<Overview> {
+  return fetchJson(`${BASE}/overview`);
+}
+
+export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
+  return fetchJson(`${BASE}/knowledge-graph`);
+}
+
+export async function getIncidents(params?: {
+  limit?: number;
+  offset?: number;
+  severity?: string;
+  service?: string;
+  search?: string;
+}): Promise<{ incidents: Incident[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  if (params?.severity) q.set('severity', params.severity);
+  if (params?.service) q.set('service', params.service);
+  if (params?.search) q.set('search', params.search);
+  return fetchJson(`${BASE}/incidents/?${q}`);
+}
+
+export async function getIncident(id: string): Promise<Incident> {
+  return fetchJson(`${BASE}/incidents/${id}`);
+}
+
+export async function analyzeRCA(body: {
+  alerts: string[];
+  symptoms: string[];
+  service?: string;
+  time_window_hours?: number;
+  environment?: string;
+}): Promise<RCAResult> {
+  return fetchJson(`${BASE}/rca/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function analyzeBlastRadius(body: {
+  alerts: string[];
+  symptoms: string[];
+  source_component?: string;
+  service?: string;
+}): Promise<BlastRadiusResult> {
+  return fetchJson(`${BASE}/blast-radius/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function analyzeEarlyDetection(alerts?: string[]): Promise<{
+  current_conditions: string[];
+  detections: EarlyDetection[];
+}> {
+  if (alerts) {
+    return fetchJson(`${BASE}/early-detection/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_alerts: alerts }),
+    });
+  }
+  return fetchJson(`${BASE}/early-detection/analyze`);
+}
+
+export async function startInvestigation(body: {
+  alerts: string[];
+  symptoms: string[];
+  service?: string;
+}): Promise<Investigation> {
+  return fetchJson(`${BASE}/investigations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getInvestigation(id: string): Promise<Investigation> {
+  return fetchJson(`${BASE}/investigations/${id}`);
+}
+
+export async function advanceInvestigation(id: string): Promise<Investigation> {
+  return fetchJson(`${BASE}/investigations/${id}/advance`, { method: 'POST' });
+}
+
+export async function approveInvestigation(id: string): Promise<Investigation> {
+  return fetchJson(`${BASE}/investigations/${id}/approve`, { method: 'POST' });
+}
+
+export async function executeInvestigation(id: string): Promise<Investigation> {
+  return fetchJson(`${BASE}/investigations/${id}/execute`, { method: 'POST' });
+}
+
+export async function askCopilot(question: string) {
+  return fetchJson<{ question: string; answer: string; sources: string[]; suggested_actions: string[] }>(
+    `${BASE}/copilot/ask`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) }
+  );
+}
+
+export async function getDataStatus() {
+  return fetchJson<{ files: { file: string; exists: boolean; size_bytes: number; records: number }[] }>(
+    `${BASE}/admin/data-status`
+  );
+}
+
+export async function regenerateData() {
+  return fetchJson(`${BASE}/admin/regenerate`, { method: 'POST' });
+}
+
+export async function uploadDataFile(category: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/admin/upload/${category}`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
