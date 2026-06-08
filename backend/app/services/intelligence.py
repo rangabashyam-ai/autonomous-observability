@@ -319,63 +319,9 @@ def _bfs_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[str
 
 
 def detect_early_failures(current_alerts: list[str] | None = None) -> dict:
-    kg = _load_knowledge_graph()
-    open_alerts = _load_alerts()
-    patterns = kg.get("pattern_library", [])
-
-    if not current_alerts:
-        # Use open alerts from monitoring as "current conditions"
-        current_alerts = list({
-            a["title"] for a in open_alerts
-            if a.get("status") in ("open", "acknowledged")
-        })[:5]
-
-    detections = []
-    current_set = {_slug(a) for a in current_alerts}
-
-    for pattern in patterns:
-        pattern_alerts = {_slug(a) for a in pattern.get("alerts", [])}
-        overlap = current_set & pattern_alerts
-        if len(overlap) >= 1:
-            match_ratio = len(overlap) / max(len(pattern_alerts), 1)
-            confidence = round(min(95, pattern.get("confidence", 0.7) * 100 * match_ratio + 20), 0)
-            svc = pattern.get("expected_service", "payment-authorization")
-            svc_name = svc.replace("-", " ").title()
-            detections.append({
-                "pattern_id": pattern["id"],
-                "status": "probable_incident_forming",
-                "confidence": int(confidence),
-                "matched_alerts": [a.replace("-", " ").title() for a in overlap],
-                "matched_alert_raw": list(overlap),
-                "expected_symptoms": pattern.get("symptoms", []),
-                "expected_impacted_service": svc_name,
-                "expected_impacted_service_id": svc,
-                "estimated_time_to_incident_minutes": pattern.get("avg_time_to_incident_minutes", 8),
-                "occurrence_count_historical": pattern.get("occurrence_count", 0),
-                "recommended_actions": [
-                    "Start evidence collection on " + svc_name,
-                    "Open proactive investigation",
-                    "Notify SRE on-call",
-                    "Prepare remediation runbook",
-                    "Review recent deployments and changes",
-                ],
-                "evidence_collection_plan": [
-                    f"Collect CPU/memory metrics for {svc}",
-                    f"Check queue depth on kafka-cluster",
-                    f"Review auth-service latency trends",
-                    "Pull recent change records (last 4 hours)",
-                    "Snapshot dependency path to postgres-cluster",
-                ],
-            })
-
-    detections.sort(key=lambda x: x["confidence"], reverse=True)
-
-    return {
-        "current_conditions": current_alerts,
-        "detections": detections[:5],
-        "total_patterns_evaluated": len(patterns),
-        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    """Delegate to the advanced dependency-aware detection engine."""
+    from app.services.early_detection import detect_early_failures_v2
+    return detect_early_failures_v2(current_alerts)
 
 
 INVESTIGATION_STEPS = [
@@ -698,3 +644,219 @@ def _top_root_causes(incidents: list[dict], limit: int = 5) -> list[dict]:
         {"root_cause": rc, "count": c}
         for rc, c in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
     ]
+
+
+def scoped_copilot_query(context_type: str, context_payload: dict, question: str, history: list[dict]) -> dict:
+    import os
+    import json
+    import urllib.request
+    import urllib.error
+
+    guardrails = ""
+    if context_type == 'DEPENDENCY_NODE':
+        guardrails = (
+            "You are an SRE specialist analyzing a specific infrastructure node. "
+            "Answer questions ONLY regarding this node's performance, metrics, and immediate structural dependencies. "
+            "Do not extrapolate into unlinked systemic incidents."
+        )
+    elif context_type == 'INCIDENT_DETAIL':
+        guardrails = (
+            "You are an incident manager reviewing a single historical ticket. "
+            "Focus entirely on explaining why this incident occurred, what its telemetry signature implies, "
+            "and how the fix addresses it. Refuse to discuss other non-related incidents."
+        )
+    elif context_type == 'BLAST_RADIUS':
+        guardrails = (
+            "You are a downstream cascading failure assessment engine. "
+            "Your job is to explain the propagation path, risk vector, and systemic blast radius shown in the graph payload. "
+            "Focus on network paths, microservice architectures, and customer impact optimization."
+        )
+    elif context_type == 'RCA_ANALYSIS':
+        guardrails = (
+            "You are an RCA Data Scientist. "
+            "Analyze the input alerts and matching telemetry symptoms against the historical correlation data provided. "
+            "Explain the mathematical logic behind the high confidence ranking for these specific anomalies."
+        )
+    else:
+        guardrails = "You are the Core AI Agent of the Autonomous IT Operations Platform."
+
+    system_prompt = (
+        f"You are the Core AI Agent of the Autonomous IT Operations Platform.\n"
+        f"Your task is to provide expert, clear, and actionable infrastructure diagnostics.\n"
+        f"CRITICAL RULE: You must maintain contextual strictness. You are being invoked inside "
+        f"the context of: {context_type}.\n\n"
+        f"GUARDRAILS FOR THIS SCOPE:\n{guardrails}\n\n"
+        f"HERE IS THE REAL-TIME SYSTEM CONTEXT PAYLOAD:\n"
+        f"{json.dumps(context_payload, indent=2)}\n\n"
+        "Do not invent information outside of this payload. Tailor all analysis specifically to "
+        "the architecture elements outlined above."
+    )
+
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    
+    if api_key:
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": question})
+        
+        req_body = {
+            "model": "anthropic/claude-3.5-sonnet",
+            "messages": messages,
+            "temperature": 0.2
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "Autonomous IT Operations Platform"
+        }
+        
+        try:
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/chat/completions",
+                data=json.dumps(req_body).encode("utf-8"),
+                headers=headers,
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                answer = res_data["choices"][0]["message"]["content"]
+                return {
+                    "answer": answer,
+                    "sources": ["openrouter.ai (anthropic/claude-3.5-sonnet)"],
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+        except Exception as e:
+            pass
+
+    mock_answer = generate_mock_sre_response(context_type, context_payload, question)
+    return {
+        "answer": mock_answer,
+        "sources": ["SRE Rule Engine (Mock Offline Fallback)"],
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+def generate_mock_sre_response(context_type: str, context_payload: dict, question: str) -> str:
+    q = question.lower()
+    
+    if context_type == 'DEPENDENCY_NODE':
+        node_name = context_payload.get("node_name", "Unknown Node")
+        health = context_payload.get("current_health", "Healthy")
+        metrics = context_payload.get("metrics", {})
+        downstream = context_payload.get("downstream_dependencies", [])
+        
+        if any(w in q for w in ["metric", "cpu", "memory", "latency", "error"]):
+            return (
+                f"### Node Telemetry Analysis: **{node_name}**\n\n"
+                f"The current metrics for **{node_name}** ({health} state) are:\n"
+                f"- **CPU Utilization**: {metrics.get('cpu', 'N/A')}%\n"
+                f"- **Memory Usage**: {metrics.get('memory', 'N/A')}%\n"
+                f"- **Network Load**: {metrics.get('network', 'N/A')}%\n"
+                f"- **P99 Latency**: {metrics.get('latency', 'N/A')}ms\n"
+                f"- **Error Rate**: {metrics.get('error_rate', 'N/A')}%\n\n"
+                f"These values indicate that the node is running within normal thresholds but is showing a minor elevation in network traffic."
+            )
+        elif any(w in q for w in ["downstream", "depend", "structure", "connect"]):
+            downstream_str = ", ".join(downstream) if downstream else "No downstream nodes found"
+            return (
+                f"### Dependency Structural Analysis: **{node_name}**\n\n"
+                f"**{node_name}** is a critical hub component. It has downstream dependencies on:\n"
+                f"**{downstream_str}**.\n\n"
+                f"If **{node_name}** undergoes failure, the cascading blast radius will propagate immediately to these services."
+            )
+        else:
+            return (
+                f"### Scoped Diagnosis for Node **{node_name}**\n\n"
+                f"The node is currently reported as **{health}**. Key parameters:\n"
+                f"- CPU: {metrics.get('cpu')}% | Memory: {metrics.get('memory')}%\n"
+                f"- Downstream target count: {len(downstream)}\n\n"
+                f"As an SRE specialist, I recommend reviewing connection pool saturation on postgres-cluster if latency increases."
+            )
+            
+    elif context_type == 'INCIDENT_DETAIL':
+        inc_id = context_payload.get("incident_id", "Unknown INC")
+        title = context_payload.get("title", "Unknown incident")
+        svc = context_payload.get("service", "Unknown Service")
+        severity = context_payload.get("severity", "P3")
+        fix = context_payload.get("historical_fix", "Restart")
+        ttr = context_payload.get("time_to_resolution", "30 minutes")
+        conf = context_payload.get("historical_confidence", "85%")
+        
+        if any(w in q for w in ["fix", "resolve", "work", "remediat"]):
+            return (
+                f"### Resolution Diagnosis: **{inc_id}**\n\n"
+                f"The historical resolution for ticket **{inc_id}** was: \n"
+                f"> **{fix}**\n\n"
+                f"This resolution restored system operations in **{ttr}** with a pattern correlation confidence of **{conf}**."
+            )
+        else:
+            return (
+                f"### Post-Incident Review: **{inc_id}**\n\n"
+                f"**Ticket summary**:\n"
+                f"- **Title**: {title}\n"
+                f"- **Service Affected**: {svc}\n"
+                f"- **Severity**: {severity}\n"
+                f"- **Time to Resolution (TTR)**: {ttr}\n\n"
+                f"The incident occurred due to an anomalous pattern match. The applied remediation was: *{fix}*."
+            )
+            
+    elif context_type == 'BLAST_RADIUS':
+        rc_svc = context_payload.get("root_cause_service", "Unknown pod")
+        biz_score = context_payload.get("business_impact_score", 50)
+        scope = context_payload.get("scope", "localized")
+        cust = context_payload.get("estimated_affected_customers", 100)
+        impacted = context_payload.get("currently_impacted", [])
+        downstream = context_payload.get("likely_downstream", [])
+        
+        if any(w in q for w in ["propagat", "cascade", "path", "downstream"]):
+            return (
+                f"### Cascading Propagation Path Analysis\n\n"
+                f"The failure originates at **{rc_svc}** and cascades along the following topological path:\n"
+                f"1. **{rc_svc}** (Source)\n"
+                f"2. {', '.join(impacted[:3])} (Currently impacted tier)\n"
+                f"3. {', '.join(downstream[:3])} (Downstream blast horizon)\n\n"
+                f"The network path is highly critical because {rc_svc} acts as the primary data ingestion point."
+            )
+        else:
+            return (
+                f"### Blast Radius Impact Diagnosis\n\n"
+                f"**Failure Scope Summary**:\n"
+                f"- **Originating node**: {rc_svc}\n"
+                f"- **Impact Score**: {biz_score}/100 ({scope} scope)\n"
+                f"- **Estimated Customer Exposure**: {cust} customers\n\n"
+                f"We recommend immediately isolating {rc_svc} or routing traffic around the currently impacted services: {', '.join(impacted)}."
+            )
+            
+    elif context_type == 'RCA_ANALYSIS':
+        signals = context_payload.get("input_signals", {})
+        alerts = signals.get("alerts", [])
+        symptoms = signals.get("symptoms", [])
+        svc = signals.get("service", "Unknown Service")
+        out = context_payload.get("generated_output_analysis", {})
+        top = out.get("top_candidate", "Unknown")
+        sec = out.get("secondary_candidate", "Unknown")
+        
+        if any(w in q for w in ["confidence", "score", "math", "why"]):
+            return (
+                f"### Mathematical RCA Correlation Breakdown\n\n"
+                f"The confidence score for **{top}** is computed based on:\n"
+                f"1. **Alert overlap**: Match ratio of active alerts ({', '.join(alerts)}) against historical index regressions.\n"
+                f"2. **Symptom overlap**: Match ratio of ({', '.join(symptoms)}) which matches the query pattern by over 85%.\n"
+                f"3. **Service match**: Weight boost from target service: **{svc}**.\n\n"
+                f"This telemetry signature strongly aligns with past index regressions, yielding high confidence."
+            )
+        else:
+            return (
+                f"### Root Cause Analysis Summary\n\n"
+                f"For the service **{svc}**, the following RCA findings were generated:\n"
+                f"- **Primary Suspected Cause**: {top}\n"
+                f"- **Alternative Hypothesis**: {sec}\n\n"
+                f"This analysis correlates {len(alerts)} alerts and {len(symptoms)} symptoms against the historical incident knowledge graph."
+            )
+            
+    else:
+        return f"Scoped assistant: Received context type {context_type}. Please let me know how I can assist you with this payload."
+

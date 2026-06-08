@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import { ArrowLeft, Activity, TrendingUp, AlertTriangle, Clock, Users, Zap } from 'lucide-react';
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
@@ -24,6 +25,42 @@ export default function ServiceDetailPage() {
       transaction_volume: 28913,
     });
   }, [serviceId]);
+
+  const copilotContext = useMemo(() => {
+    if (!service) return null;
+    return {
+      pageType: 'service' as const,
+      selectedEntity: service.id,
+      entityData: {
+        service: service.id,
+        status: service.health,
+        sla: service.availability,
+        metrics: {
+          latency_p99_ms: service.latency_p99_ms,
+          error_rate: service.error_rate,
+          throughput_rps: service.throughput_rps,
+        },
+        upstream: ['auth-service'],
+        downstream: ['postgres-cluster', 'kafka-cluster'],
+        recent_deployments: [
+          { version: 'v2.4.1 → v2.4.2', time: '2 hours ago', status: 'SUCCESS' },
+        ],
+      },
+      relatedAlerts: [
+        { title: 'CPU utilization above 75%', severity: 'P3' },
+        { title: 'Error rate spike detected', severity: 'P2' },
+      ],
+      relatedIncidents: [
+        { id: 'INC-1234', title: 'High latency on payment authorization', severity: 'P2' },
+      ],
+      dependencyData: {
+        upstream: ['auth-service'],
+        downstream: ['postgres-cluster', 'kafka-cluster'],
+      },
+    };
+  }, [service]);
+
+  useRegisterCopilotContext(copilotContext);
 
   if (!service) {
     return <div className="p-6">Loading...</div>;

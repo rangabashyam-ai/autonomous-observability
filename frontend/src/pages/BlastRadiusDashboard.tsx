@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MarkerType, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { analyzeBlastRadius, getDependencyGraph } from '../api/client';
@@ -83,6 +84,31 @@ export default function BlastRadiusDashboard() {
       buildGraph(result, theme);
     }
   }, [theme, result, buildGraph]);
+
+  const copilotContext = useMemo(() => {
+    if (!result) return null;
+    return {
+      pageType: 'blast' as const,
+      selectedEntity: `blast-${service}`,
+      entityData: {
+        failure_source: service,
+        affected_nodes: result.blast_radius_nodes,
+        revenue_impact: result.business_impact_score,
+        affected_users: result.impacted_customers_estimate,
+        issue_scope: result.issue_scope,
+        critical_paths: result.currently_impacted_services,
+      },
+      dependencyData: {
+        currently_impacted: result.currently_impacted_services,
+        likely_downstream: result.likely_downstream_services,
+        impacted_infrastructure: result.impacted_infrastructure,
+        impacted_regions: result.impacted_regions,
+      },
+      analysisResults: { ...result } as Record<string, unknown>,
+    };
+  }, [result, service]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>

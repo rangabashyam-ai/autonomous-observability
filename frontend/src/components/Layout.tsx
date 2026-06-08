@@ -20,6 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
 import { cn } from '../lib/cn';
 import { useState } from 'react';
+import CopilotPanel from './copilot/CopilotPanel';
 
 const primaryNav = [
   { to: '/', label: 'Executive', icon: LayoutDashboard, end: true },
@@ -171,6 +172,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <CopilotPanel />
     </div>
   );
 }
