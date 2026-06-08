@@ -1,102 +1,207 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import ReactFlow, { Background, Controls, MarkerType, type Node, type Edge } from 'reactflow';
+import ReactFlow, { Background, Controls, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { analyzeBlastRadius, getDependencyGraph } from '../api/client';
 import type { BlastRadiusResult } from '../types/intelligence';
-import { PageHeader, StatCard, ConfidenceBar, TagList, btnPrimary, mutedText } from '../components/ui';
+import type { DependencyGraph } from '../types/api';
+import { PageHeader, StatCard, ConfidenceBar, btnPrimary, mutedText } from '../components/ui';
 import { useTheme } from '../context/ThemeContext';
-import { getGraphNodeStyle, getGraphBackgroundColor, getGraphEdgeColor } from '../utils/graphTheme';
+import { getGraphBackgroundColor } from '../utils/graphTheme';
+import {
+  buildBlastFlowEdges,
+  buildBlastFlowNodes,
+  resolveEdgeKind,
+  filterGraphForBlast,
+  mergeDependencyGraphs,
+} from '../utils/blastGraphLayout';
+import { buildEdgeDetail, buildNodeDetail } from '../utils/blastGraphDetails';
+import BlastRadiusNode from '../components/BlastRadiusNode';
+import BlastRadiusDetailPanel, {
+  IncidentPropagationSummary,
+} from '../components/BlastRadiusDetailPanel';
+import BlastRadiusClickableTags from '../components/BlastRadiusClickableTags';
+import BlastRadiusPathChat from '../components/BlastRadiusPathChat';
+
+const nodeTypes = { blastRadius: BlastRadiusNode };
+
+type GraphSelection =
+  | { type: 'node'; id: string }
+  | { type: 'edge'; id: string }
+  | null;
 
 export default function BlastRadiusDashboard() {
   const { theme } = useTheme();
   const [alerts] = useState(['CPU Saturation', 'API Error Spike']);
   const [symptoms] = useState(['Latency Increase', 'Retry Storm']);
-  const [service] = useState('payment-authorization');
+  const [service, setService] = useState('payment-authorization');
   const [result, setResult] = useState<BlastRadiusResult | null>(null);
+  const [graph, setGraph] = useState<DependencyGraph | null>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selection, setSelection] = useState<GraphSelection>(null);
 
-  const buildGraph = useCallback(async (blast: BlastRadiusResult, currentTheme: 'light' | 'dark') => {
-    const graph = await getDependencyGraph('microservice', 'risk_score');
-    const highlightSet = new Set(blast.blast_radius_nodes);
-    const edgeColor = getGraphEdgeColor(currentTheme, true);
+  const applyGraphVisuals = useCallback(
+    (
+      graphData: DependencyGraph,
+      blast: BlastRadiusResult,
+      rootId: string,
+      currentTheme: 'light' | 'dark',
+      currentSelection: GraphSelection,
+    ) => {
+      const focusedNodeId = currentSelection?.type === 'node' ? currentSelection.id : null;
+      const selectedEdgeId = currentSelection?.type === 'edge' ? currentSelection.id : null;
+      setNodes(buildBlastFlowNodes(graphData, blast, rootId, focusedNodeId));
+      setEdges(buildBlastFlowEdges(graphData.edges, blast, rootId, currentTheme, selectedEdgeId));
+    },
+    [],
+  );
 
-    const flowNodes: Node[] = graph.nodes.map((n, i) => {
-      const isHighlighted = highlightSet.has(n.id);
-      const isSource = blast.currently_impacted_services.includes(n.id);
-      const role = isSource ? 'source' : isHighlighted ? 'highlighted' : 'default';
-      const nodeStyle = getGraphNodeStyle(role, currentTheme);
+  const buildGraph = useCallback(
+    async (blast: BlastRadiusResult, currentTheme: 'light' | 'dark', currentSelection: GraphSelection) => {
+      const [serviceGraph, infraGraph] = await Promise.all([
+        getDependencyGraph('microservice', 'risk_score', service),
+        getDependencyGraph('infrastructure', 'risk_score'),
+      ]);
 
-      return {
-        id: n.id,
-        position: { x: (i % 6) * 160, y: Math.floor(i / 6) * 100 },
-        data: { label: n.label },
-        style: {
-          background: nodeStyle.background,
-          border: `${isSource || isHighlighted ? '2px' : '1px'} solid ${nodeStyle.border}`,
-          color: nodeStyle.color,
-          fontSize: 11,
-          fontWeight: isSource || isHighlighted ? 600 : 400,
-          padding: '8px 10px',
-          borderRadius: 8,
-          minWidth: 120,
-          boxShadow: currentTheme === 'light' ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
-        },
-      };
-    });
+      const infraRelevant = infraGraph.nodes.filter(
+        (n) =>
+          blast.blast_radius_nodes.includes(n.id) ||
+          blast.impacted_infrastructure.includes(n.id),
+      );
+      const infraIds = new Set(infraRelevant.map((n) => n.id));
+      const infraEdges = infraGraph.edges.filter(
+        (e) => infraIds.has(e.source) || infraIds.has(e.target),
+      );
 
-    const flowEdges: Edge[] = graph.edges
-      .filter((e) => highlightSet.has(e.source) && highlightSet.has(e.target))
-      .map((e, i) => ({
-        id: `be-${i}`,
-        source: e.source,
-        target: e.target,
-        animated: true,
-        style: { stroke: edgeColor, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
-      }));
+      const merged = mergeDependencyGraphs(serviceGraph, {
+        ...infraGraph,
+        nodes: infraRelevant,
+        edges: infraEdges,
+      });
+      const graphData = filterGraphForBlast(merged, blast);
+      setGraph(graphData);
+      applyGraphVisuals(graphData, blast, service, currentTheme, currentSelection);
+    },
+    [service, applyGraphVisuals],
+  );
 
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  }, []);
-
-  const runAnalysis = async () => {
+  const runAnalysis = useCallback(async () => {
     setLoading(true);
     try {
       const r = await analyzeBlastRadius({ alerts, symptoms, service });
       setResult(r);
-      await buildGraph(r, theme);
+      const initialSelection: GraphSelection = { type: 'node', id: service };
+      setSelection(initialSelection);
+      await buildGraph(r, theme, initialSelection);
     } finally {
       setLoading(false);
     }
-  };
+  }, [alerts, symptoms, service, theme, buildGraph]);
 
   useEffect(() => {
     runAnalysis();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service]);
+
+  useEffect(() => {
+    if (result && graph) {
+      applyGraphVisuals(graph, result, service, theme, selection);
+    }
+  }, [theme, result, graph, service, selection, applyGraphVisuals]);
+
+  const selectNode = useCallback((nodeId: string) => {
+    setSelection({ type: 'node', id: nodeId });
   }, []);
 
-  // Re-render graph when theme toggles so node text/backgrounds update
-  useEffect(() => {
-    if (result) {
-      buildGraph(result, theme);
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    selectNode(node.id);
+  }, [selectNode]);
+
+  const handleEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setSelection({ type: 'edge', id: edge.id });
+  }, []);
+
+  const handlePaneClick = useCallback(() => {
+    setSelection(null);
+  }, []);
+
+  const handleSetRootCause = useCallback((nodeId: string) => {
+    setService(nodeId);
+  }, []);
+
+  const rootLabel = graph?.nodes.find((n) => n.id === service)?.label ?? service;
+
+  const labelForId = useCallback(
+    (id: string) => graph?.nodes.find((n) => n.id === id)?.label ?? id.replace(/-/g, ' '),
+    [graph],
+  );
+
+  const selectionDetail = useMemo(() => {
+    if (!selection || !graph || !result) return null;
+
+    if (selection.type === 'node') {
+      const node = graph.nodes.find((n) => n.id === selection.id);
+      if (!node) return null;
+      return { type: 'node' as const, detail: buildNodeDetail(node, graph, result, service) };
     }
-  }, [theme, result, buildGraph]);
+
+    const flowEdge = edges.find((e) => e.id === selection.id);
+    if (!flowEdge) return null;
+    const graphEdge = graph.edges.find(
+      (e) => e.source === flowEdge.source && e.target === flowEdge.target,
+    );
+    if (!graphEdge) return null;
+
+    const kind = resolveEdgeKind(graphEdge, result, service, graph.edges);
+    return {
+      type: 'edge' as const,
+      detail: buildEdgeDetail(graphEdge, kind, graph, result, service, selection.id),
+    };
+  }, [selection, graph, result, service, edges]);
+
+  const selectedNodeId = selection?.type === 'node' ? selection.id : null;
 
   const copilotContext = useMemo(() => {
     if (!result) return null;
+
+    const selectedPayload = selectionDetail
+      ? selectionDetail.type === 'node'
+        ? {
+            type: 'node',
+            id: selectionDetail.detail.id,
+            label: selectionDetail.detail.label,
+            impact_role: selectionDetail.detail.impactRoleLabel,
+            health: selectionDetail.detail.health,
+            status: selectionDetail.detail.currentImpact,
+          }
+        : {
+            type: 'edge',
+            source: selectionDetail.detail.sourceLabel,
+            target: selectionDetail.detail.targetLabel,
+            relationship: selectionDetail.detail.relationship,
+            kind: selectionDetail.detail.kindLabel,
+          }
+      : null;
+
+    const entitySuffix = selection
+      ? selection.type === 'node'
+        ? `:node-${selection.id}`
+        : `:edge-${selection.id}`
+      : '';
+
     return {
       pageType: 'blast' as const,
-      selectedEntity: `blast-${service}`,
+      selectedEntity: `blast-${service}${entitySuffix}`,
       entityData: {
         failure_source: service,
+        failure_source_label: rootLabel,
         affected_nodes: result.blast_radius_nodes,
         revenue_impact: result.business_impact_score,
         affected_users: result.impacted_customers_estimate,
         issue_scope: result.issue_scope,
         critical_paths: result.currently_impacted_services,
+        selected_component: selectedPayload,
       },
       dependencyData: {
         currently_impacted: result.currently_impacted_services,
@@ -106,7 +211,7 @@ export default function BlastRadiusDashboard() {
       },
       analysisResults: { ...result } as Record<string, unknown>,
     };
-  }, [result, service]);
+  }, [result, service, rootLabel, selection, selectionDetail]);
 
   useRegisterCopilotContext(copilotContext);
 
@@ -132,40 +237,108 @@ export default function BlastRadiusDashboard() {
             <StatCard label="Customers Est." value={result.impacted_customers_estimate} />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 xl:gap-5">
+            {/* Left sidebar: Context & Impact */}
+            <div className="xl:col-span-3 space-y-4 max-h-[600px] overflow-y-auto pr-1">
               <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Currently Impacted</h3>
-                <TagList items={result.currently_impacted_services} color="red" />
+                <BlastRadiusClickableTags
+                  items={result.currently_impacted_services}
+                  color="red"
+                  selectedId={selectedNodeId}
+                  labelFor={labelForId}
+                  onSelect={selectNode}
+                />
               </div>
               <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Likely Downstream</h3>
-                <TagList items={result.likely_downstream_services} color="yellow" />
+                <BlastRadiusClickableTags
+                  items={result.likely_downstream_services}
+                  color="yellow"
+                  selectedId={selectedNodeId}
+                  labelFor={labelForId}
+                  onSelect={selectNode}
+                />
               </div>
               <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Infrastructure</h3>
-                <TagList items={result.impacted_infrastructure} />
+                <BlastRadiusClickableTags
+                  items={result.impacted_infrastructure}
+                  color="blue"
+                  selectedId={selectedNodeId}
+                  labelFor={labelForId}
+                  onSelect={selectNode}
+                />
               </div>
               <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Regions</h3>
-                <TagList items={result.impacted_regions} />
+                <div className="flex flex-wrap gap-1.5">
+                  {result.impacted_regions.map((r) => (
+                    <span key={r} className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      {r}
+                    </span>
+                  ))}
+                </div>
               </div>
               <ConfidenceBar value={result.business_impact_score} label="Business Impact Score" />
             </div>
 
-            <div className="xl:col-span-2 h-[500px] bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col">
-              <div className="flex-1 min-h-0">
-                <ReactFlow nodes={nodes} edges={edges} fitView minZoom={0.3}>
+            {/* Graph */}
+            <div className="xl:col-span-5 h-[600px] bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-inner">
+              <div className="flex-1 min-h-0 w-full relative">
+                <ReactFlow
+                  className="w-full h-full"
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={nodeTypes}
+                  fitView
+                  fitViewOptions={{ padding: 0.15 }}
+                  minZoom={0.25}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  elementsSelectable
+                  edgesFocusable
+                  onNodeClick={handleNodeClick}
+                  onEdgeClick={handleEdgeClick}
+                  onPaneClick={handlePaneClick}
+                >
                   <Background color={getGraphBackgroundColor(theme)} gap={16} />
                   <Controls />
                 </ReactFlow>
               </div>
-              <p className={`text-[10px] ${mutedText} px-4 py-2 border-t border-slate-200 dark:border-slate-700 shrink-0`}>
-                <span className="inline-block w-2 h-2 rounded-sm bg-red-200 border border-red-600 mr-1 align-middle" />
-                Red = source ·
-                <span className="inline-block w-2 h-2 rounded-sm bg-yellow-200 border border-yellow-600 mx-1 align-middle" />
-                Yellow = blast radius · Animated edges = impact path
-              </p>
+              <div className={`text-[10px] ${mutedText} px-4 py-2 border-t border-slate-200 dark:border-slate-700 shrink-0 flex flex-wrap gap-x-3 gap-y-1`}>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-red-200 border border-red-600 mr-1 align-middle" />Root cause</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-orange-200 border border-orange-600 mr-1 align-middle" />Impacted</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-200 border border-amber-600 mr-1 align-middle" />Downstream</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-indigo-200 border border-indigo-600 mr-1 align-middle" />Upstream dep</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-violet-200 border border-violet-600 mr-1 align-middle" />Infrastructure</span>
+                <span className="text-slate-400">· Click nodes, arrows, or tags →</span>
+              </div>
+            </div>
+
+            {/* Right side Investigation Workflow Panel */}
+            <div className="xl:col-span-4 h-[600px] flex flex-col gap-3 overflow-y-auto pr-1">
+              <div className="shrink-0">
+                <IncidentPropagationSummary
+                  result={result}
+                  rootLabel={rootLabel}
+                  selection={selectionDetail}
+                />
+              </div>
+              
+              <div className="h-[320px] shrink-0">
+                <BlastRadiusDetailPanel
+                  rootId={service}
+                  rootLabel={rootLabel}
+                  selection={selectionDetail}
+                  onSelectNode={selectNode}
+                  onSetRootCause={handleSetRootCause}
+                />
+              </div>
+
+              <div className="shrink-0">
+                <BlastRadiusPathChat service={service} />
+              </div>
             </div>
           </div>
         </>
