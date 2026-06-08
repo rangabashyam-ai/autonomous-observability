@@ -41,6 +41,7 @@ def chat_completion(
     temperature: float = 0.2,
     response_format: dict | None = None,
     max_tokens: int = 2048,
+    timeout: int = 20,
 ) -> dict[str, Any]:
     """Call OpenRouter chat completions API. Raises on failure."""
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -71,7 +72,7 @@ def chat_completion(
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=60) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -83,6 +84,7 @@ def chat_with_fallback(
     model: str,
     temperature: float = 0.2,
     max_tokens: int = 2048,
+    timeout: int = 20,
 ) -> tuple[str, str]:
     """Try primary model, then fallback. Returns (content, model_used)."""
     models = [model]
@@ -92,7 +94,7 @@ def chat_with_fallback(
     last_error: Exception | None = None
     for m in models:
         try:
-            result = chat_completion(messages, m, temperature, max_tokens=max_tokens)
+            result = chat_completion(messages, m, temperature, max_tokens=max_tokens, timeout=timeout)
             content = result["choices"][0]["message"]["content"]
             return content, m
         except Exception as exc:

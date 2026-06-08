@@ -12,21 +12,35 @@ export interface DependencyNodeData {
   heatmapMetric: string;
   isSelected: boolean;
   isHighlighted: boolean;
+  isSearchMatch?: boolean;
+  dimmed?: boolean;
 }
 
 function DependencyNode({ data }: NodeProps<DependencyNodeData>) {
   const { theme } = useTheme();
   const color = heatmapColor(data.heatmapValue, data.heatmapMetric as never);
-  const borderColor = data.isSelected ? '#3b82f6' : data.isHighlighted ? '#a855f7' : color;
+  const borderColor = data.isSelected
+    ? '#3b82f6'
+    : data.isSearchMatch
+    ? '#f59e0b'
+    : data.isHighlighted
+    ? '#a855f7'
+    : color;
   const bgEnd = theme === 'dark' ? '#1e293b' : '#f8fafc';
 
   return (
     <div
-      className="rounded-lg shadow-lg min-w-[140px] max-w-[180px] transition-all"
+      className="rounded-lg shadow-lg min-w-[140px] max-w-[180px]"
       style={{
         border: `2px solid ${borderColor}`,
         background: `linear-gradient(135deg, ${color}22 0%, ${bgEnd} 100%)`,
-        boxShadow: data.isSelected ? `0 0 12px ${borderColor}66` : undefined,
+        boxShadow: data.isSelected
+          ? `0 0 14px ${borderColor}88`
+          : data.isSearchMatch
+          ? `0 0 10px ${borderColor}99`
+          : undefined,
+        opacity: data.dimmed ? 0.25 : 1,
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
       }}
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-400 !w-2 !h-2" />

@@ -2,6 +2,7 @@ export interface Incident {
   incident_id: string;
   title: string;
   severity: string;
+  state?: string;
   service: string;
   service_id?: string;
   alerts: string[];
@@ -20,6 +21,18 @@ export interface Incident {
   similar_incidents?: string[];
   change_records?: { id: string; title: string; hours_before_incident: number; risk: string }[];
   confidence_training_value?: number;
+}
+
+export interface ComponentMetrics {
+  cpu?: number;
+  memory?: number;
+  storage?: number;
+  io?: number;
+  network?: number;
+  latency?: number;
+  error_rate?: number;
+  incident_count?: number;
+  risk_score?: number;
 }
 
 export interface RCACandidate {
@@ -102,6 +115,41 @@ export interface Overview {
   top_root_causes: { root_cause: string; count: number }[];
   early_detections: EarlyDetection[];
   open_alerts_preview: { title: string; severity: string; entity_id: string }[];
+}
+
+export interface IncidentClickAnalysis {
+  type: 'fix_summary' | 'incident_rca' | 'cautionary_rca' | 'error';
+  incident_id: string;
+  analysis_timestamp?: string;
+  // fix_summary (Closed)
+  root_cause?: string;
+  applied_fix?: string;
+  resolution_notes?: string;
+  resolved_at?: string;
+  duration_minutes?: number;
+  impacted_components?: string[];
+  change_records?: { id: string; title: string; hours_before_incident: number; risk: string }[];
+  // incident_rca + cautionary_rca shared
+  agent?: string;
+  primary_component?: string;
+  dependency_path?: string[];
+  component_metrics?: Record<string, ComponentMetrics>;
+  anomalous_components?: Record<string, string[]>;
+  reasoning?: string;
+  // incident_rca only
+  root_cause_candidates?: { root_cause: string; confidence: number; matching_incident_count: number; suggested_fixes: string[] }[];
+  suggested_fix?: string;
+  // cautionary_rca only
+  caution_level?: 'low' | 'medium' | 'high';
+  post_fix_incidents?: { incident_id: string; title: string; root_cause: string; service: string; start_time: string }[];
+  path_alerts?: { title: string; severity: string; entity_id: string; metric: string; value?: number }[];
+  recommendations?: string[];
+  // LLM deep analysis (present when OPENROUTER_API_KEY is configured)
+  llm_analysis?: string | null;
+  llm_model?: string;
+  llm_error?: string;
+  // Pre-built chat context from backend agents (compact, optimised for chat)
+  chat_context?: string;
 }
 
 export interface KnowledgeGraph {
