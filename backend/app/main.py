@@ -1,7 +1,13 @@
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 app = FastAPI(
     title="Autonomous IT Operations Intelligence Platform",
@@ -22,6 +28,7 @@ app.include_router(monitoring.router)
 app.include_router(incidents.router)
 app.include_router(intelligence.router)
 app.include_router(admin.router)
+app.include_router(copilot.router)
 
 
 @app.get("/api/health")

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getMonitoringDashboard, getOverview } from '../api/client';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Overview } from '../types/intelligence';
 import type { MonitoringDashboard } from '../types/api';
 import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-primitives';
@@ -59,6 +60,32 @@ export default function ExecutiveCommandCenter() {
     () => generateDualTrend(exec?.service_availability ?? 99, exec?.transaction_success_rate ?? 98),
     [exec?.service_availability, exec?.transaction_success_rate]
   );
+
+  const copilotContext = useMemo(() => {
+    if (!monitoring || !overview) return null;
+    const execData = monitoring.executive;
+    return {
+      pageType: 'executive' as const,
+      selectedEntity: 'Executive Command Center',
+      entityData: {
+        sla: `${execData?.sla_compliance?.toFixed(2)}%`,
+        revenue_risk: `$${execData?.revenue_impact_usd?.toLocaleString()}`,
+        services_at_risk: execData?.services_at_risk,
+        active_incidents: execData?.active_incidents,
+        customer_impact: execData?.customer_impact_count,
+        service_health: services.map((s) => ({ id: s.id, name: s.name, health: s.health, availability: s.availability })),
+      },
+      relatedAlerts: overview.open_alerts_preview ?? [],
+      relatedIncidents: overview.recent_incidents ?? [],
+      relatedMetrics: {
+        business_health: businessHealth,
+        transaction_success_rate: execData?.transaction_success_rate,
+        service_availability: execData?.service_availability,
+      },
+    };
+  }, [monitoring, overview, services, businessHealth]);
+
+  useRegisterCopilotContext(copilotContext);
 
   if (!monitoring || !overview) {
     return <p className="text-text-secondary text-sm">Loading executive command center...</p>;

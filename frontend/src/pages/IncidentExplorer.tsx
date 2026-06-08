@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getIncidents, getIncident } from '../api/client';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Incident } from '../types/intelligence';
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary } from '../components/ui';
 
@@ -26,6 +27,31 @@ export default function IncidentExplorer() {
     const id = searchParams.get('id');
     if (id) getIncident(id).then(setSelected).catch(console.error);
   }, [searchParams]);
+
+  const copilotContext = useMemo(() => {
+    if (!selected) return null;
+    return {
+      pageType: 'incident' as const,
+      selectedEntity: selected.incident_id,
+      entityData: {
+        incident_id: selected.incident_id,
+        title: selected.title,
+        severity: selected.severity,
+        service: selected.service,
+        root_cause: selected.root_cause,
+        fix: selected.fix,
+        alerts: selected.alerts,
+        symptoms: selected.symptoms,
+        resolution: selected.resolution_notes,
+        duration_minutes: selected.duration_minutes,
+        impacted_components: selected.impacted_components,
+      },
+      relatedAlerts: selected.alerts,
+      relatedIncidents: [selected],
+    };
+  }, [selected]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>

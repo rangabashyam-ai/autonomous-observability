@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import { Search, RefreshCw, ChevronDown, History, GitCompare, Brain, AlertCircle, CheckCircle, Clock, TrendingUp, Zap, Activity } from 'lucide-react';
 import { analyzeRCA } from '../api/client';
 import type { RCAResult } from '../types/intelligence';
@@ -181,6 +182,24 @@ export default function RCADashboard() {
     'Suggest alternative hypotheses',
     'What is the confidence breakdown?',
   ];
+
+  const copilotContext = useMemo(() => {
+    if (!result) return null;
+    return {
+      pageType: 'rca' as const,
+      selectedEntity: `RCA-${service}-${timeWindow}h`,
+      entityData: { alerts, symptoms, service, time_window: `${timeWindow}h` },
+      analysisResults: {
+        ranked_root_causes: result.root_cause_candidates,
+        analysis_result: result,
+        related_alerts: result.related_alerts_to_check,
+        related_symptoms: result.related_symptoms_to_check,
+        recent_changes: result.relevant_recent_changes,
+      },
+    };
+  }, [result, alerts, symptoms, service, timeWindow]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>

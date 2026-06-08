@@ -50,7 +50,14 @@ class CopilotRequest(BaseModel):
     question: str
 
 
-@router.get("/overview")
+class ScopedCopilotRequest(BaseModel):
+    context_type: str
+    context_payload: dict
+    question: str
+    history: Optional[list[dict]] = None
+
+
+@router.post("/overview")
 def overview():
     return get_overview()
 
@@ -125,3 +132,12 @@ def execute_inv(inv_id: str):
 @router.post("/copilot/ask")
 def ask_copilot(req: CopilotRequest):
     return copilot_query(req.question)
+
+
+@router.post("/copilot/scoped")
+def ask_scoped_copilot(req: ScopedCopilotRequest):
+    from app.services.intelligence import scoped_copilot_query
+    return scoped_copilot_query(
+        req.context_type, req.context_payload, req.question, req.history or []
+    )
+

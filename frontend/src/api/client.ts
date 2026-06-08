@@ -15,7 +15,9 @@ import type {
   ViewType,
 } from '../types/api';
 
-const BASE = '/api';
+import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
+
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
@@ -81,7 +83,7 @@ export async function getAlerts(limit = 20) {
 
 // --- Intelligence ---
 export async function getOverview(): Promise<Overview> {
-  return fetchJson(`${BASE}/overview`);
+  return fetchJson(`${BASE}/overview`, { method: 'POST' });
 }
 
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
@@ -201,3 +203,36 @@ export async function uploadDataFile(category: string, file: File) {
   if (!res.ok) throw new Error('Upload failed');
   return res.json();
 }
+
+export async function askScopedCopilot(
+  contextType: string,
+  contextPayload: any,
+  question: string,
+  history: { role: 'user' | 'assistant'; content: string }[] = []
+) {
+  return fetchJson<{ answer: string; sources: string[]; timestamp: string }>(
+    `${BASE}/copilot/scoped`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context_type: contextType,
+        context_payload: contextPayload,
+        question,
+        history,
+      }),
+    }
+  );
+}
+
+export async function copilotChat(
+  context: CopilotContextPayload,
+  messages: { role: string; content: string }[] = []
+): Promise<CopilotResponse> {
+  return fetchJson<CopilotResponse>(`${BASE}/copilot/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context, messages }),
+  });
+}
+
