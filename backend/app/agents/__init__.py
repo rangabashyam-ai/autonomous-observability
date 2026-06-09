@@ -7,6 +7,7 @@ from app.agents.blast_agent import BlastRadiusAgent
 from app.agents.prediction_agent import PredictionAgent
 from app.agents.workflow_agent import WorkflowAgent
 from app.agents.executive_agent import ExecutiveAgent
+from app.agents.early_detection_agent import EarlyDetectionAgent
 
 __all__ = [
     "ServiceAgent",
@@ -16,4 +17,5 @@ __all__ = [
     "PredictionAgent",
     "WorkflowAgent",
     "ExecutiveAgent",
+    "EarlyDetectionAgent",
 ]

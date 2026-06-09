@@ -100,10 +100,10 @@ Recent Incidents:
 """
 
     gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
     
     is_gemini_valid = gemini_key and not gemini_key.startswith("your_")
-    is_openrouter_valid = openrouter_key and not openrouter_key.startswith("your_")
+    is_groq_valid = groq_key and not groq_key.startswith("your_")
     
     answer = ""
     if is_gemini_valid:
@@ -126,19 +126,18 @@ Recent Incidents:
             answer = f"Gemini API execution error: {str(e)} - details: {err_body}"
         except Exception as e:
             answer = f"Gemini API execution error: {str(e)}"
-    elif is_openrouter_valid:
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        model = os.environ.get("FAST_MODEL", "google/gemini-2.5-flash")
+    elif is_groq_valid:
+        url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1") + "/chat/completions"
+        model = os.environ.get("FAST_MODEL", "llama-3.3-70b-versatile")
         body = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2
         }
         headers = {
-            "Authorization": f"Bearer {openrouter_key}",
+            "Authorization": f"Bearer {groq_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "Autonomous IT Operations Platform"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         }
         req = urllib.request.Request(
             url,
@@ -151,7 +150,7 @@ Recent Incidents:
                 res = json.loads(response.read().decode("utf-8"))
                 answer = res["choices"][0]["message"]["content"]
         except Exception as e:
-            answer = f"OpenRouter API execution error: {str(e)}"
+            answer = f"GROQ API execution error: {str(e)}"
     else:
         # Local SRE heuristic diagnostics engine fallback
         q = question.lower()

@@ -187,7 +187,7 @@ export default function InlineCopilot({
                   Ask anything about <span className="font-medium text-text-primary">{selectedEntity}</span>
                 </p>
                 <p className="text-[10px] text-text-secondary/60">
-                  Powered by OpenRouter · Context-scoped AI analysis
+                  Powered by GROQ · Context-scoped AI analysis
                 </p>
               </div>
             )}
