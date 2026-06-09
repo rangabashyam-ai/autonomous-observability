@@ -298,15 +298,13 @@ export async function copilotChat(
   });
 }
 
-<<<<<<< HEAD
-=======
-export async function chatDependencyPath(
+export async function chatBlastRadius(
   service: string,
   question: string,
   history: { role: string; content: string }[] = []
 ) {
-  return fetchJson<{ service: string; dependency_path: string[]; answer: string }>(
-    `${BASE}/blast-radius/chat-path`,
+  return fetchJson<{ service: string; currently_impacted: string[]; likely_downstream: string[]; answer: string }>(
+    `${BASE}/blast-radius/chat-investigate`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -315,4 +313,3 @@ export async function chatDependencyPath(
   );
 }
 
->>>>>>> origin/main

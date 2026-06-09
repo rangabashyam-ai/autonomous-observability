@@ -49,13 +49,33 @@ export function ConfidenceBar({ value, label }: { value: number; label?: string 
   );
 }
 
-export function StatCard({ label, value, sub, alert }: { label: string; value: string | number; sub?: string; alert?: boolean }) {
+export function StatCard({
+  label,
+  value,
+  sub,
+  alert,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  alert?: boolean;
+  onClick?: () => void;
+}) {
+  const isClickable = !!onClick;
   return (
-    <div className={`p-4 rounded-xl border ${
-      alert
-        ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-500/30'
-        : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
-    }`}>
+    <div
+      onClick={onClick}
+      className={`p-4 rounded-xl border transition-all ${
+        alert
+          ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-500/30'
+          : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+      } ${
+        isClickable
+          ? 'cursor-pointer hover:scale-[1.02] hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 active:scale-[0.98]'
+          : ''
+      }`}
+    >
       <p className={`text-xs ${textMuted} mb-1`}>{label}</p>
       <p className={`text-2xl font-bold ${alert ? 'text-red-700 dark:text-red-400' : textPrimary}`}>{value}</p>
       {sub && <p className={`text-xs ${textMuted} mt-1`}>{sub}</p>}

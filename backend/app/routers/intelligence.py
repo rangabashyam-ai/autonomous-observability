@@ -177,15 +177,15 @@ def ask_scoped_copilot(req: ScopedCopilotRequest):
 <<<<<<< HEAD
 =======
 
-class ChatPathRequest(BaseModel):
+class ChatBlastRadiusRequest(BaseModel):
     service: str
     question: str
     history: Optional[list[dict]] = None
 
 
-@router.post("/blast-radius/chat-path")
-def blast_radius_chat_path(req: ChatPathRequest):
-    from app.services.intelligence import chat_path_query
-    return chat_path_query(req.service, req.question, req.history or [])
+@router.post("/blast-radius/chat-investigate")
+def blast_radius_chat_investigate(req: ChatBlastRadiusRequest):
+    from app.services.chat_blast_radius import chat_blast_radius_query
+    return chat_blast_radius_query(req.service, req.question, req.history or [])
 
 >>>>>>> origin/main
