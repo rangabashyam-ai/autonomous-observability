@@ -75,12 +75,27 @@ body {
   background: var(--color-text-secondary);
 }
 
+.react-flow {
+  width: 100%;
+  height: 100%;
+}
+
 .react-flow__node {
   font-size: 11px;
+  cursor: pointer;
+  pointer-events: all;
 }
 
 .react-flow__edge-path {
   stroke-width: 1.5;
+}
+
+.react-flow__edge {
+  cursor: pointer;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6));
 }
 
 .dark .react-flow__background pattern circle {
@@ -110,3 +125,34 @@ body {
 .react-flow__minimap {
   background: #f1f5f9;
 }
+
+/* Blast Radius Animations */
+@keyframes pulse-root-light {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+  70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+@keyframes pulse-root-dark {
+  0% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.5); }
+  70% { box-shadow: 0 0 0 15px rgba(248, 113, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+}
+
+.animate-pulse-root {
+  animation: pulse-root-light 2s infinite;
+}
+
+.dark .animate-pulse-root {
+  animation: pulse-root-dark 2s infinite;
+}
+
+@keyframes flow-animation {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.react-flow__edge-path.animated {
+  animation: flow-animation 1s linear infinite;
+}
+

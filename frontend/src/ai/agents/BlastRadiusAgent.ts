@@ -5,10 +5,11 @@ export const BlastRadiusAgent: AgentConfig = {
   title: 'Impact Analyst',
   role: 'Impact Analysis Specialist',
   suggestedQuestions: [
-    'Explain the cascade chain',
+    'How is the incident propagating?',
+    'Explain the blast radius from the root cause',
     'Why are downstream services affected?',
-    'Explain business impact',
+    'What is the business impact?',
     'Recommend containment strategy',
-    'Recommend recovery order',
+    'What is the recovery order?',
   ],
 };
