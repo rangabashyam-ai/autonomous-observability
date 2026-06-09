@@ -2,6 +2,7 @@ import type {
   BlastRadiusResult,
   EarlyDetection,
   Incident,
+  IncidentClickAnalysis,
   Investigation,
   KnowledgeGraph,
   Overview,
@@ -15,7 +16,9 @@ import type {
   ViewType,
 } from '../types/api';
 
-const BASE = '/api';
+import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
+
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
@@ -81,7 +84,7 @@ export async function getAlerts(limit = 20) {
 
 // --- Intelligence ---
 export async function getOverview(): Promise<Overview> {
-  return fetchJson(`${BASE}/overview`);
+  return fetchJson(`${BASE}/overview`, { method: 'POST' });
 }
 
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
@@ -94,6 +97,7 @@ export async function getIncidents(params?: {
   severity?: string;
   service?: string;
   search?: string;
+  state?: string;
 }): Promise<{ incidents: Incident[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit', String(params.limit));
@@ -101,11 +105,25 @@ export async function getIncidents(params?: {
   if (params?.severity) q.set('severity', params.severity);
   if (params?.service) q.set('service', params.service);
   if (params?.search) q.set('search', params.search);
+  if (params?.state) q.set('state', params.state);
   return fetchJson(`${BASE}/incidents/?${q}`);
 }
 
 export async function getIncident(id: string): Promise<Incident> {
   return fetchJson(`${BASE}/incidents/${id}`);
+}
+
+export async function getIncidentClickAnalysis(id: string): Promise<IncidentClickAnalysis> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/analysis`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeRCA(body: {
@@ -120,6 +138,52 @@ export async function analyzeRCA(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export async function analyzeRCAWithAgent(body: {
+  alerts: string[];
+  symptoms: string[];
+  service?: string;
+  time_window_hours?: number;
+}): Promise<IncidentClickAnalysis> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18000);
+  try {
+    return await fetchJson(`${BASE}/rca/agent-analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Agent analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function askReportChat(body: {
+  question: string;
+  report_context: string;
+  report_type: string;
+  history: { role: string; content: string }[];
+}): Promise<{ answer: string | null; error: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 32000);
+  try {
+    return await fetchJson(`${BASE}/agents/report-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Response timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeBlastRadius(body: {
@@ -201,3 +265,36 @@ export async function uploadDataFile(category: string, file: File) {
   if (!res.ok) throw new Error('Upload failed');
   return res.json();
 }
+
+export async function askScopedCopilot(
+  contextType: string,
+  contextPayload: any,
+  question: string,
+  history: { role: 'user' | 'assistant'; content: string }[] = []
+) {
+  return fetchJson<{ answer: string; sources: string[]; timestamp: string }>(
+    `${BASE}/copilot/scoped`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context_type: contextType,
+        context_payload: contextPayload,
+        question,
+        history,
+      }),
+    }
+  );
+}
+
+export async function copilotChat(
+  context: CopilotContextPayload,
+  messages: { role: string; content: string }[] = []
+): Promise<CopilotResponse> {
+  return fetchJson<CopilotResponse>(`${BASE}/copilot/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context, messages }),
+  });
+}
+

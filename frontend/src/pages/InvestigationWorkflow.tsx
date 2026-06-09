@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import {
   startInvestigation,
   advanceInvestigation,
@@ -49,6 +50,30 @@ export default function InvestigationWorkflow() {
     if (status === 'in_progress') return '●';
     return '○';
   };
+
+  const copilotContext = useMemo(() => {
+    if (!inv) return null;
+    const completed = inv.steps.filter((s) => s.status === 'completed').map((s) => s.label);
+    const pending = inv.steps.filter((s) => s.status === 'pending').map((s) => s.label);
+    return {
+      pageType: 'workflow' as const,
+      selectedEntity: inv.id,
+      investigationResults: {
+        workflow_state: inv.status,
+        completed_steps: completed,
+        pending_steps: pending,
+        recommended_action: inv.recommended_fix,
+        approval_required: inv.status === 'awaiting_approval',
+        current_step: inv.current_step,
+      },
+      analysisResults: {
+        rca: inv.rca_result,
+        blast: inv.blast_result,
+      },
+    };
+  }, [inv]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>

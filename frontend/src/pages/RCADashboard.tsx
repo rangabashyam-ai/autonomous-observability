@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ReportChat } from '../components/ReportChat';
 import { Link } from 'react-router-dom';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import { Search, RefreshCw, ChevronDown, History, GitCompare, Brain, AlertCircle, CheckCircle, Clock, TrendingUp, Zap, Activity } from 'lucide-react';
-import { analyzeRCA } from '../api/client';
-import type { RCAResult } from '../types/intelligence';
+import { analyzeRCA, analyzeRCAWithAgent } from '../api/client';
+import type { RCAResult, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
 import { PageHeader, ConfidenceBar, TagList, inputClass, selectClass, btnPrimary, emptyState, textMuted, textLink, textDanger, textAccent } from '../components/ui';
 
 const ALERT_OPTIONS = [
@@ -37,6 +39,260 @@ interface SearchResult {
   relevance: number;
 }
 
+// ---------------------------------------------------------------------------
+// Build compact context string from agent result for the chat
+// ---------------------------------------------------------------------------
+
+function buildAgentContext(
+  result: IncidentClickAnalysis,
+  service: string,
+  alerts: string[],
+  symptoms: string[],
+): string {
+  // Prefer the pre-built context from the backend agent (includes origin/endpoint labels)
+  if (result.chat_context) return result.chat_context;
+
+  const depPath   = result.dependency_path ?? [];
+  const anomalous = result.anomalous_components ?? {};
+  const metrics   = result.component_metrics ?? {};
+
+  const lines: string[] = [
+    `SERVICE: ${service}`,
+    `ALERTS: ${alerts.join(', ') || '(none)'}`,
+    `SYMPTOMS: ${symptoms.join(', ') || '(none)'}`,
+  ];
+
+  if (result.primary_component) lines.push(`PRIMARY_COMPONENT: ${result.primary_component}`);
+
+  if (depPath.length > 0) {
+    lines.push(`DEPENDENCY_PATH: ${depPath.join(' → ')}`);
+    lines.push(`ORIGIN_COMPONENT: ${depPath[0]}`);
+    lines.push(`ENDPOINT_COMPONENT: ${depPath[depPath.length - 1]}`);
+  }
+
+  // Only anomalous components to keep context compact
+  const anomEntries = Object.entries(anomalous);
+  if (anomEntries.length > 0) {
+    lines.push('ANOMALOUS_COMPONENTS:');
+    anomEntries.forEach(([comp, issues]) => {
+      const m = metrics[comp];
+      const mStr = m ? ` (cpu=${(m.cpu ?? 0).toFixed(1)}, err%=${(m.error_rate ?? 0).toFixed(1)})` : '';
+      lines.push(`  ${comp}${mStr}: ${(issues as string[]).join(', ')}`);
+    });
+  } else {
+    lines.push('ANOMALOUS_COMPONENTS: none');
+  }
+
+  if (result.root_cause_candidates?.length) {
+    const top = result.root_cause_candidates[0];
+    lines.push(`TOP_ROOT_CAUSE: ${top.root_cause} (${top.confidence}%) → ${top.suggested_fixes?.[0] ?? '—'}`);
+    result.root_cause_candidates.slice(1).forEach((c, i) =>
+      lines.push(`ALT_ROOT_CAUSE_${i + 2}: ${c.root_cause} (${c.confidence}%)`)
+    );
+  }
+  if (result.suggested_fix) lines.push(`SUGGESTED_FIX: ${result.suggested_fix}`);
+  if (result.reasoning)     lines.push(`REASONING: ${result.reasoning}`);
+  if (result.llm_analysis)  lines.push(`AI_ANALYSIS: ${result.llm_analysis}`);
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// RCA Agent Popup
+// ---------------------------------------------------------------------------
+
+const THRESHOLDS: Record<string, number> = {
+  cpu: 80, memory: 85, error_rate: 5, latency: 500, storage: 90,
+};
+
+function AgentMetricPill({ label, value, warn }: { label: string; value?: number; warn?: boolean }) {
+  if (value == null) return null;
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
+      warn
+        ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+    }`}>
+      {label}&nbsp;{value.toFixed(1)}
+    </span>
+  );
+}
+
+function AgentMetricRow({ name, metrics, anomalies }: { name: string; metrics: ComponentMetrics; anomalies?: string[] }) {
+  const hasAnomaly = anomalies && anomalies.length > 0;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 py-1.5 border-b border-slate-100 dark:border-slate-700/50 last:border-0">
+      <span className={`text-[10px] font-medium w-40 truncate ${hasAnomaly ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
+        {hasAnomaly ? '⚠ ' : ''}{name}
+      </span>
+      <AgentMetricPill label="CPU"  value={metrics.cpu}        warn={(metrics.cpu        ?? 0) > THRESHOLDS.cpu} />
+      <AgentMetricPill label="MEM"  value={metrics.memory}     warn={(metrics.memory     ?? 0) > THRESHOLDS.memory} />
+      <AgentMetricPill label="LAT"  value={metrics.latency}    warn={(metrics.latency    ?? 0) > THRESHOLDS.latency} />
+      <AgentMetricPill label="ERR%" value={metrics.error_rate} warn={(metrics.error_rate ?? 0) > THRESHOLDS.error_rate} />
+    </div>
+  );
+}
+
+function AgentLLMBlock({ content, model, error }: { content?: string | null; model?: string; error?: string }) {
+  if (error && !content) {
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+        AI analysis unavailable: {error}
+      </div>
+    );
+  }
+  if (!content) return null;
+  return (
+    <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-semibold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase">AI Deep Analysis</span>
+        {model && <span className="ml-auto text-[10px] text-slate-400 font-mono">{model}</span>}
+      </div>
+      <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed space-y-1">
+        {content.split('\n').map((line, i) => (
+          line.trim() === '' ? <div key={i} className="h-1" /> : <p key={i}>{line}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
+  result: IncidentClickAnalysis;
+  service: string;
+  alerts: string[];
+  symptoms: string[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const depPath   = result.dependency_path ?? [];
+  const metrics   = result.component_metrics ?? {};
+  const anomalous = result.anomalous_components ?? {};
+  const candidates = result.root_cause_candidates ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
+          <div className="flex-1 min-w-0 pr-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded font-semibold tracking-wide uppercase">Agent RCA</span>
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{service}</span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Alerts: <span className="text-slate-700 dark:text-slate-300">{alerts.join(', ')}</span>
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Symptoms: <span className="text-slate-700 dark:text-slate-300">{symptoms.join(', ')}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs">
+
+          {/* LLM output at the top */}
+          <AgentLLMBlock content={result.llm_analysis} model={result.llm_model} error={result.llm_error} />
+
+          {/* Dependency path */}
+          {depPath.length > 0 && (
+            <div>
+              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Dependency Path</p>
+              <div className="flex flex-wrap items-center gap-1">
+                {depPath.map((node, i) => (
+                  <span key={node} className="flex items-center gap-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
+                      anomalous[node]
+                        ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    }`}>{node}</span>
+                    {i < depPath.length - 1 && <span className="text-slate-400 text-[10px]">→</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Component metrics */}
+          {Object.keys(metrics).length > 0 && (
+            <div>
+              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Component Metrics</p>
+              <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+                {Object.entries(metrics).map(([comp, m]) => (
+                  <AgentMetricRow key={comp} name={comp} metrics={m} anomalies={anomalous[comp]} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Root cause candidates */}
+          {candidates.length > 0 && (
+            <div>
+              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Root Cause Candidates</p>
+              <div className="space-y-2">
+                {candidates.map((c, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-slate-800 dark:text-white">{c.root_cause}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        c.confidence >= 75 ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                          : c.confidence >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      }`}>{c.confidence}%</span>
+                    </div>
+                    {c.suggested_fixes?.[0] && (
+                      <p className="text-emerald-700 dark:text-emerald-400">→ {c.suggested_fixes[0]}</p>
+                    )}
+                    <p className="text-slate-400 dark:text-slate-500 text-[10px] mt-0.5">{c.matching_incident_count} historical match(es)</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Suggested fix */}
+          {result.suggested_fix && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg">
+              <p className="text-slate-500 dark:text-slate-400 mb-0.5">Suggested Fix</p>
+              <p className="font-semibold text-emerald-700 dark:text-emerald-400">{result.suggested_fix}</p>
+            </div>
+          )}
+
+          {/* Reasoning */}
+          {result.reasoning && (
+            <div className="p-3 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+              <p className="text-slate-500 dark:text-slate-400 mb-1">Reasoning</p>
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{result.reasoning}</p>
+            </div>
+          )}
+
+          {/* Chat */}
+          <ReportChat
+            reportContext={buildAgentContext(result, service, alerts, symptoms)}
+            reportType="incident_rca"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RCADashboard() {
   const [alerts, setAlerts] = useState<string[]>(['CPU Saturation', 'API Error Spike']);
   const [symptoms, setSymptoms] = useState<string[]>(['Latency Increase', 'Retry Storm']);
@@ -45,6 +301,9 @@ export default function RCADashboard() {
   const [result, setResult] = useState<RCAResult | null>(null);
   const [previousResult, setPreviousResult] = useState<RCAResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agentResult, setAgentResult] = useState<IncidentClickAnalysis | null>(null);
+  const [agentPopupOpen, setAgentPopupOpen] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const [showRerunMenu, setShowRerunMenu] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [showCopilot, setShowCopilot] = useState(false);
@@ -61,6 +320,8 @@ export default function RCADashboard() {
   const runAnalysis = async (analysisType: string = 'full') => {
     setLoading(true);
     setAnalysisProgress([]);
+    setAgentResult(null);
+    setAgentError(null);
     
     // Simulate progress
     const steps = [
@@ -86,7 +347,12 @@ export default function RCADashboard() {
       }
       
       setResult(r);
-      
+
+      // Run agent analysis in parallel — opens popup when done
+      analyzeRCAWithAgent({ alerts, symptoms, service, time_window_hours: timeWindow })
+        .then((ar) => { setAgentResult(ar); setAgentPopupOpen(true); })
+        .catch((err) => setAgentError(err?.message ?? 'Agent analysis failed'));
+
       // Add to history
       const newHistory: RCAHistory = {
         timestamp: new Date().toLocaleTimeString(),
@@ -181,6 +447,24 @@ export default function RCADashboard() {
     'Suggest alternative hypotheses',
     'What is the confidence breakdown?',
   ];
+
+  const copilotContext = useMemo(() => {
+    if (!result) return null;
+    return {
+      pageType: 'rca' as const,
+      selectedEntity: `RCA-${service}-${timeWindow}h`,
+      entityData: { alerts, symptoms, service, time_window: `${timeWindow}h` },
+      analysisResults: {
+        ranked_root_causes: result.root_cause_candidates,
+        analysis_result: result,
+        related_alerts: result.related_alerts_to_check,
+        related_symptoms: result.related_symptoms_to_check,
+        recent_changes: result.relevant_recent_changes,
+      },
+    };
+  }, [result, alerts, symptoms, service, timeWindow]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>
@@ -549,6 +833,25 @@ export default function RCADashboard() {
           )}
         </div>
       </div>
+
+      {/* Agent error banner */}
+      {agentError && (
+        <div className="fixed bottom-4 right-4 z-40 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400 shadow-lg max-w-xs">
+          Agent analysis failed: {agentError}
+          <button onClick={() => setAgentError(null)} className="ml-2 font-bold">×</button>
+        </div>
+      )}
+
+      {/* RCA Agent popup */}
+      {agentPopupOpen && agentResult && (
+        <RCAAgentPopup
+          result={agentResult}
+          service={service}
+          alerts={alerts}
+          symptoms={symptoms}
+          onClose={() => setAgentPopupOpen(false)}
+        />
+      )}
     </div>
   );
 }

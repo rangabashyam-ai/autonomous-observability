@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { analyzeEarlyDetection } from '../api/client';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { EarlyDetection } from '../types/intelligence';
 import { PageHeader, ConfidenceBar, TagList } from '../components/ui';
 
@@ -16,6 +17,29 @@ export default function EarlyDetectionDashboard() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selectedDetection = detections[selectedIdx] ?? detections[0];
+
+  const copilotContext = useMemo(() => {
+    if (!selectedDetection) return null;
+    return {
+      pageType: 'prediction' as const,
+      selectedEntity: selectedDetection.pattern_id,
+      entityData: {
+        prediction: selectedDetection.expected_impacted_service,
+        confidence: selectedDetection.confidence,
+        estimated_time_to_outage: `${selectedDetection.estimated_time_to_incident_minutes} minutes`,
+        evidence: selectedDetection.matched_alerts,
+        related_patterns: selectedDetection.expected_symptoms,
+        occurrence_count: selectedDetection.occurrence_count_historical,
+      },
+      relatedAlerts: selectedDetection.matched_alerts,
+      analysisResults: { ...selectedDetection } as Record<string, unknown>,
+    };
+  }, [selectedDetection]);
+
+  useRegisterCopilotContext(copilotContext);
 
   return (
     <div>
@@ -45,8 +69,16 @@ export default function EarlyDetectionDashboard() {
         </div>
       ) : (
         <div className="space-y-4">
-          {detections.map((d) => (
-            <div key={d.pattern_id} className="p-5 bg-red-50 dark:bg-red-950/20 border border-red-500/30 rounded-xl">
+          {detections.map((d, idx) => (
+            <div
+              key={d.pattern_id}
+              onClick={() => setSelectedIdx(idx)}
+              className={`p-5 rounded-xl cursor-pointer transition-colors ${
+                selectedIdx === idx
+                  ? 'bg-red-100 dark:bg-red-950/40 border-2 border-red-500/50'
+                  : 'bg-red-50 dark:bg-red-950/20 border border-red-500/30 hover:border-red-500/50'
+              }`}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 rounded font-medium">PROBABLE INCIDENT FORMING</span>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { getMonitoringDashboard, getOverview, getDependencyGraph } from '../api/client';
@@ -82,6 +83,34 @@ export default function ServiceOperationsCenter() {
       })
       .slice(0, 4);
   }, [services]);
+
+  const copilotContext = useMemo(() => {
+    if (!monitoring || !overview) return null;
+    return {
+      pageType: 'service' as const,
+      selectedEntity: 'service-operations',
+      entityData: {
+        services: services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          health: s.health,
+          latency: s.latency_p99_ms,
+          error_rate: s.error_rate,
+          availability: s.availability,
+        })),
+        top_risks: topRisks.map((s) => s.id),
+      },
+      relatedAlerts: overview.open_alerts_preview ?? [],
+      relatedIncidents: overview.recent_incidents ?? [],
+      relatedMetrics: {
+        avg_latency: avgLatency,
+        avg_error_rate: avgError,
+        active_incidents: exec?.active_incidents,
+      },
+    };
+  }, [monitoring, overview, services, topRisks, avgLatency, avgError, exec]);
+
+  useRegisterCopilotContext(copilotContext);
 
   if (!monitoring || !overview) {
     return <p className="text-text-secondary text-sm">Loading service operations center...</p>;
