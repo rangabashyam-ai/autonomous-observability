@@ -298,3 +298,18 @@ export async function copilotChat(
   });
 }
 
+export async function chatDependencyPath(
+  service: string,
+  question: string,
+  history: { role: string; content: string }[] = []
+) {
+  return fetchJson<{ service: string; dependency_path: string[]; answer: string }>(
+    `${BASE}/blast-radius/chat-path`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service, question, history }),
+    }
+  );
+}
+

@@ -1,405 +1,405 @@
 {
   "deployments": [
     {
-      "id": "deploy-f50bedaa",
+      "id": "deploy-2b6ed029",
       "service": "token-service",
       "version": "v5.6.96",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-11T23:43:27.492715Z",
-      "commit": "59b7194d"
+      "deployed_at": "2026-05-12T21:00:31.095523Z",
+      "commit": "b0d75db1"
     },
     {
-      "id": "deploy-cedd08ec",
+      "id": "deploy-ca4bde9c",
       "service": "notification-service",
       "version": "v4.1.13",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-26T05:43:27.492715Z",
-      "commit": "657e3374"
+      "deployed_at": "2026-05-27T03:00:31.095523Z",
+      "commit": "87646823"
     },
     {
-      "id": "deploy-375594b6",
+      "id": "deploy-cb58259c",
       "service": "reconciliation-service",
       "version": "v5.14.54",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-18T13:43:27.492715Z",
-      "commit": "ea71063b"
+      "deployed_at": "2026-05-19T11:00:31.095523Z",
+      "commit": "04b1e90e"
     },
     {
-      "id": "deploy-0b05b00b",
+      "id": "deploy-bb5dc989",
       "service": "rate-limiter",
       "version": "v2.4.1",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-06-03T20:43:27.492715Z",
-      "commit": "255dca2f"
+      "deployed_at": "2026-06-04T18:00:31.095523Z",
+      "commit": "17f4887c"
     },
     {
-      "id": "deploy-80910afd",
+      "id": "deploy-d8b3a6bf",
       "service": "fraud-service",
       "version": "v5.9.43",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-26T19:43:27.492715Z",
-      "commit": "28332046"
+      "deployed_at": "2026-05-27T17:00:31.095523Z",
+      "commit": "f9ecd52c"
     },
     {
-      "id": "deploy-ed761056",
+      "id": "deploy-17bdba67",
       "service": "identity-service",
       "version": "v3.8.83",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-14T05:43:27.492715Z",
-      "commit": "78e46082"
+      "deployed_at": "2026-05-15T03:00:31.095523Z",
+      "commit": "b3ac823e"
     },
     {
-      "id": "deploy-3171f15c",
+      "id": "deploy-7f249aa5",
       "service": "webhook-handler",
       "version": "v3.8.22",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-19T17:43:27.492715Z",
-      "commit": "1c684879"
+      "deployed_at": "2026-05-20T15:00:31.095523Z",
+      "commit": "082d8b76"
     },
     {
-      "id": "deploy-961a0452",
+      "id": "deploy-7e5eb270",
       "service": "api-gateway",
       "version": "v4.1.45",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-29T04:43:27.492715Z",
-      "commit": "0d306b0e"
+      "deployed_at": "2026-05-30T02:00:31.095523Z",
+      "commit": "1f832a8c"
     },
     {
-      "id": "deploy-ef98a9fd",
+      "id": "deploy-d6e58eb1",
       "service": "notification-service",
       "version": "v1.18.10",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-25T02:43:27.492715Z",
-      "commit": "a7e424f2"
+      "deployed_at": "2026-05-26T00:00:31.095523Z",
+      "commit": "e6f29882"
     },
     {
-      "id": "deploy-81c0af88",
+      "id": "deploy-324b4d5e",
       "service": "auth-service",
       "version": "v4.5.33",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-06-02T01:43:27.492715Z",
-      "commit": "8e442afe"
+      "deployed_at": "2026-06-02T23:00:31.095523Z",
+      "commit": "7c2b24fd"
     },
     {
-      "id": "deploy-4cca427e",
+      "id": "deploy-fe6c67f9",
       "service": "fraud-service",
       "version": "v2.4.79",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-10T13:43:27.492715Z",
-      "commit": "eb20d5c7"
+      "deployed_at": "2026-05-11T11:00:31.095523Z",
+      "commit": "c878d55b"
     },
     {
-      "id": "deploy-83089497",
+      "id": "deploy-440130eb",
       "service": "api-gateway",
       "version": "v2.16.56",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-28T18:43:27.492715Z",
-      "commit": "9b12a7e3"
+      "deployed_at": "2026-05-29T16:00:31.095523Z",
+      "commit": "199efa30"
     },
     {
-      "id": "deploy-a2385e4b",
+      "id": "deploy-48b2a8a4",
       "service": "api-gateway",
       "version": "v3.8.2",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-06-05T14:43:27.492715Z",
-      "commit": "71a7d46a"
+      "deployed_at": "2026-06-06T12:00:31.095523Z",
+      "commit": "8f277ab9"
     },
     {
-      "id": "deploy-33788dd4",
+      "id": "deploy-52cbed39",
       "service": "partner-api",
       "version": "v2.11.13",
       "environment": "production",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-06-02T16:43:27.492715Z",
-      "commit": "151b995e"
+      "deployed_at": "2026-06-03T14:00:31.095523Z",
+      "commit": "33f416d0"
     },
     {
-      "id": "deploy-cfa12eb2",
+      "id": "deploy-8c127099",
       "service": "merchant-api",
       "version": "v1.7.26",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-09T10:43:27.492715Z",
-      "commit": "b14e4fb2"
+      "deployed_at": "2026-05-10T08:00:31.095523Z",
+      "commit": "1d593daf"
     },
     {
-      "id": "deploy-2b32700d",
+      "id": "deploy-0dac63be",
       "service": "notification-service",
       "version": "v1.20.54",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-24T13:43:27.492715Z",
-      "commit": "25e2f695"
+      "deployed_at": "2026-05-25T11:00:31.095523Z",
+      "commit": "6931c98f"
     },
     {
-      "id": "deploy-125401be",
+      "id": "deploy-8034f814",
       "service": "partner-api",
       "version": "v3.10.52",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-11T23:43:27.492715Z",
-      "commit": "273a8d35"
+      "deployed_at": "2026-05-12T21:00:31.095523Z",
+      "commit": "762e2eba"
     },
     {
-      "id": "deploy-a44caf4c",
+      "id": "deploy-1510daab",
       "service": "api-gateway",
       "version": "v2.11.5",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-06-06T09:43:27.492715Z",
-      "commit": "3e206b74"
+      "deployed_at": "2026-06-07T07:00:31.095523Z",
+      "commit": "c8f216cd"
     },
     {
-      "id": "deploy-22117aaf",
+      "id": "deploy-dca7385f",
       "service": "auth-service",
       "version": "v5.6.40",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-13T15:43:27.492715Z",
-      "commit": "960a9cd5"
+      "deployed_at": "2026-05-14T13:00:31.095523Z",
+      "commit": "cef2bfdc"
     },
     {
-      "id": "deploy-9d521495",
+      "id": "deploy-6b8fd209",
       "service": "api-gateway",
       "version": "v2.12.97",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-14T09:43:27.492715Z",
-      "commit": "e9fe187c"
+      "deployed_at": "2026-05-15T07:00:31.095523Z",
+      "commit": "a4e2515e"
     },
     {
-      "id": "deploy-898d493d",
+      "id": "deploy-bef7672f",
       "service": "merchant-api",
       "version": "v5.20.70",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-06-02T07:43:27.492715Z",
-      "commit": "11cf9bb8"
+      "deployed_at": "2026-06-03T05:00:31.095523Z",
+      "commit": "281e4ef5"
     },
     {
-      "id": "deploy-92331a36",
+      "id": "deploy-a1522c80",
       "service": "reconciliation-service",
       "version": "v5.1.77",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-16T07:43:27.492715Z",
-      "commit": "1e80e4c6"
+      "deployed_at": "2026-05-17T05:00:31.095523Z",
+      "commit": "8e1676bb"
     },
     {
-      "id": "deploy-c1744327",
+      "id": "deploy-3d4ae3b8",
       "service": "audit-service",
       "version": "v3.8.24",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-28T03:43:27.492715Z",
-      "commit": "7eb3f2e5"
+      "deployed_at": "2026-05-29T01:00:31.095523Z",
+      "commit": "d02902ab"
     },
     {
-      "id": "deploy-a72c2bc6",
+      "id": "deploy-2bc3b355",
       "service": "token-service",
       "version": "v3.7.58",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-08T22:43:27.492715Z",
-      "commit": "6fbf670f"
+      "deployed_at": "2026-05-09T20:00:31.095523Z",
+      "commit": "f00e78ed"
     },
     {
-      "id": "deploy-a8c54f3f",
+      "id": "deploy-ff08d764",
       "service": "fraud-service",
       "version": "v4.13.46",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-16T22:43:27.492715Z",
-      "commit": "5f455874"
+      "deployed_at": "2026-05-17T20:00:31.095523Z",
+      "commit": "299f76dc"
     },
     {
-      "id": "deploy-a307847a",
+      "id": "deploy-19a590eb",
       "service": "auth-service",
       "version": "v3.20.61",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-28T16:43:27.492715Z",
-      "commit": "577f719c"
+      "deployed_at": "2026-05-29T14:00:31.095523Z",
+      "commit": "75388c9f"
     },
     {
-      "id": "deploy-a7d7edc1",
+      "id": "deploy-66257113",
       "service": "partner-api",
       "version": "v2.17.31",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-10T02:43:27.492715Z",
-      "commit": "e86762c5"
+      "deployed_at": "2026-05-11T00:00:31.095523Z",
+      "commit": "7a17c667"
     },
     {
-      "id": "deploy-5cba3344",
+      "id": "deploy-b880ba5a",
       "service": "settlement-service",
       "version": "v5.8.36",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-06-04T00:43:27.492715Z",
-      "commit": "3471f8fe"
+      "deployed_at": "2026-06-04T22:00:31.095523Z",
+      "commit": "960c30f0"
     },
     {
-      "id": "deploy-1205a9a7",
+      "id": "deploy-0c1ef541",
       "service": "notification-service",
       "version": "v4.16.18",
       "environment": "staging",
       "status": "rolled_back",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-30T19:43:27.492715Z",
-      "commit": "a5efe4a4"
+      "deployed_at": "2026-05-31T17:00:31.095523Z",
+      "commit": "9699b01e"
     },
     {
-      "id": "deploy-e6c059cb",
+      "id": "deploy-d145e7aa",
       "service": "ml-scoring-service",
       "version": "v4.0.21",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-14T20:43:27.492715Z",
-      "commit": "dcb392ea"
+      "deployed_at": "2026-05-15T18:00:31.095523Z",
+      "commit": "3f956202"
     },
     {
-      "id": "deploy-d6621c1f",
+      "id": "deploy-656d78d7",
       "service": "rate-limiter",
       "version": "v4.3.16",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-09T01:43:27.492715Z",
-      "commit": "bfd97be5"
+      "deployed_at": "2026-05-09T23:00:31.095523Z",
+      "commit": "2080ffd9"
     },
     {
-      "id": "deploy-e5ee3e28",
+      "id": "deploy-b49a04ea",
       "service": "settlement-service",
       "version": "v1.4.65",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-06-02T01:43:27.492715Z",
-      "commit": "ef47c840"
+      "deployed_at": "2026-06-02T23:00:31.095523Z",
+      "commit": "37047bf4"
     },
     {
-      "id": "deploy-37f7b14f",
+      "id": "deploy-012fbbfc",
       "service": "notification-service",
       "version": "v5.7.91",
       "environment": "staging",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-24T03:43:27.492715Z",
-      "commit": "d2f4634a"
+      "deployed_at": "2026-05-25T01:00:31.095523Z",
+      "commit": "6254b94f"
     },
     {
-      "id": "deploy-c7410017",
+      "id": "deploy-511b7f6f",
       "service": "partner-api",
       "version": "v5.19.13",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-23T08:43:27.492715Z",
-      "commit": "f231dbb5"
+      "deployed_at": "2026-05-24T06:00:31.095523Z",
+      "commit": "e6fda186"
     },
     {
-      "id": "deploy-0dbe7bba",
+      "id": "deploy-57f50654",
       "service": "audit-service",
       "version": "v4.20.57",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-08T15:43:27.492715Z",
-      "commit": "fbff8b43"
+      "deployed_at": "2026-05-09T13:00:31.095523Z",
+      "commit": "b19990a5"
     },
     {
-      "id": "deploy-01723699",
+      "id": "deploy-6330af45",
       "service": "settlement-service",
       "version": "v2.18.65",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-1",
-      "deployed_at": "2026-05-13T04:43:27.492715Z",
-      "commit": "1acb6a99"
+      "deployed_at": "2026-05-14T02:00:31.095523Z",
+      "commit": "743f2d6f"
     },
     {
-      "id": "deploy-6c593c34",
+      "id": "deploy-5d00a575",
       "service": "partner-api",
       "version": "v3.20.58",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-30T23:43:27.492715Z",
-      "commit": "5b520ec1"
+      "deployed_at": "2026-05-31T21:00:31.095523Z",
+      "commit": "20ac60fa"
     },
     {
-      "id": "deploy-657161d0",
+      "id": "deploy-2312ccce",
       "service": "merchant-api",
       "version": "v5.8.98",
       "environment": "production",
       "status": "success",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-17T10:43:27.492715Z",
-      "commit": "5ecd5b80"
+      "deployed_at": "2026-05-18T08:00:31.095523Z",
+      "commit": "111253ce"
     },
     {
-      "id": "deploy-8add64b9",
+      "id": "deploy-56276138",
       "service": "identity-service",
       "version": "v1.18.66",
       "environment": "staging",
       "status": "failed",
       "deployed_by": "ci-pipeline-2",
-      "deployed_at": "2026-05-22T02:43:27.492715Z",
-      "commit": "34c184d3"
+      "deployed_at": "2026-05-23T00:00:31.095523Z",
+      "commit": "6519a64f"
     },
     {
-      "id": "deploy-eab70216",
+      "id": "deploy-430e5e27",
       "service": "identity-service",
       "version": "v2.4.5",
       "environment": "production",
       "status": "failed",
       "deployed_by": "ci-pipeline-3",
-      "deployed_at": "2026-05-26T15:43:27.492715Z",
-      "commit": "cf78fd01"
+      "deployed_at": "2026-05-27T13:00:31.095523Z",
+      "commit": "2ea97a2e"
     }
   ],
-  "generated_at": "2026-06-07T12:43:33.472180Z"
+  "generated_at": "2026-06-08T10:00:32.369922Z"
 }
