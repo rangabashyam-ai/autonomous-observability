@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.agents import (
     BlastRadiusAgent,
+    EarlyDetectionAgent,
     ExecutiveAgent,
     IncidentAgent,
     PredictionAgent,
@@ -18,6 +19,7 @@ _AGENTS: dict[str, BaseAgent] = {
     "incident": IncidentAgent(),
     "rca": RCAAgent(),
     "blast": BlastRadiusAgent(),
+    "early_detection": EarlyDetectionAgent(),
     "prediction": PredictionAgent(),
     "workflow": WorkflowAgent(),
     "executive": ExecutiveAgent(),
