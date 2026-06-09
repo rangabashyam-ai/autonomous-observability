@@ -13,6 +13,7 @@ export interface BlastRadiusNodeData {
   impactRole: BlastImpactRole;
   isSelected: boolean;
   riskScore: number;
+  isRegionHighlighted?: boolean;
 }
 
 const BADGE_COLORS: Record<BlastImpactRole, string> = {
@@ -28,7 +29,7 @@ const BADGE_COLORS: Record<BlastImpactRole, string> = {
 function BlastRadiusNode({ data }: NodeProps<BlastRadiusNodeData>) {
   const { theme } = useTheme();
   const baseStyle = getBlastImpactStyle(data.impactRole, theme);
-  const dimmed = data.impactRole === 'context';
+  const dimmed = data.impactRole === 'context' || data.isRegionHighlighted === false;
   const badge = IMPACT_ROLE_LABELS[data.impactRole];
 
   let nodeStyle = baseStyle;

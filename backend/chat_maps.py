@@ -101,82 +101,38 @@ def trace_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[st
                 queue.append((e["source"], depth + 1))
     return result
 
+def call_gemini(prompt: str) -> str:
+    groq_key = os.environ.get("GROQ_API_KEY")
 
-def _call_gemini_api(prompt: str, api_key: str) -> str:
-    """Call Google Gemini API directly."""
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta"
-        f"/models/gemini-1.5-flash:generateContent?key={api_key}"
-    )
-    body = {"contents": [{"parts": [{"text": prompt}]}]}
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            res = json.loads(response.read().decode("utf-8"))
-            return res["candidates"][0]["content"]["parts"][0]["text"]
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        print(f"Gemini API Error: {detail}", file=sys.stderr)
-        raise RuntimeError(f"Gemini API returned code {e.code}") from e
-
-
-def _call_groq_api(prompt: str, api_key: str) -> str:
-    """Call GROQ API as fallback.
-
-    BUG FIX: The old code used 'https://groq.ai/api/v1' which does not exist.
-    The correct base URL is 'https://api.groq.com/openai/v1'.
-    Also removed HTTP-Referer and X-Title headers that triggered Cloudflare 403.
-    """
-    base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-    url = f"{base_url}/chat/completions"
-    model = os.environ.get("FAST_MODEL", "llama-3.3-70b-versatile")
-
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-    }
-    # Only the two headers GROQ requires — extra headers trigger Cloudflare 403.
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            res = json.loads(response.read().decode("utf-8"))
-            return res["choices"][0]["message"]["content"]
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        print(f"GROQ API Error: {detail}", file=sys.stderr)
-        raise RuntimeError(f"GROQ API returned code {e.code}") from e
-
-
-def call_llm(prompt: str) -> str:
-    """Call Gemini if key available, otherwise fall back to GROQ."""
-    gemini_key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")).strip()
-    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-
-    if gemini_key:
-        return _call_gemini_api(prompt, gemini_key)
-    elif groq_key:
-        return _call_groq_api(prompt, groq_key)
-    else:
-        print(
-            "Error: Neither GEMINI_API_KEY nor GROQ_API_KEY found in environment.\n"
-            "Add one of them to your .env file and restart.",
-            file=sys.stderr,
+    if groq_key:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        model = os.environ.get("FAST_MODEL", "llama-3.1-8b-instant")
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2
+        }
+        headers = {
+            "Authorization": f"Bearer {groq_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers=headers,
+            method="POST"
         )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res = json.loads(response.read().decode("utf-8"))
+                return res["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            print(f"Groq API Error: {detail}", file=sys.stderr)
+            raise RuntimeError(f"Groq API returned code {e.code}") from e
+    else:
+        print("Error: GROQ_API_KEY not found in environment.", file=sys.stderr)
         sys.exit(1)
 
 

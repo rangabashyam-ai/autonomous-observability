@@ -692,42 +692,24 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         "the architecture elements outlined above."
     )
 
-    api_key = os.environ.get("GROQ_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
     
-    if api_key:
+    if groq_key:
+        from app.services.groq_client import chat_with_fallback, select_model
+        
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": question})
         
-        req_body = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "messages": messages,
-            "temperature": 0.2
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }
-        
         try:
-            base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-            req = urllib.request.Request(
-                f"{base_url}/chat/completions",
-                data=json.dumps(req_body).encode("utf-8"),
-                headers=headers,
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=15) as response:
-                res_data = json.loads(response.read().decode("utf-8"))
-                answer = res_data["choices"][0]["message"]["content"]
-                return {
-                    "answer": answer,
-                    "sources": ["groq.ai (anthropic/claude-3.5-sonnet)"],
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
+            model = select_model(context_type.lower(), len(history))
+            answer, model_used = chat_with_fallback(messages, model, temperature=0.2)
+            return {
+                "answer": answer,
+                "sources": [f"Groq ({model_used})"],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
         except Exception as e:
             pass
 

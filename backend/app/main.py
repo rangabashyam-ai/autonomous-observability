@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 app = FastAPI(
     title="Autonomous IT Operations Intelligence Platform",

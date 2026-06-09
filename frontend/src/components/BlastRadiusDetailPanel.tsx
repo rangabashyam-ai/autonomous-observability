@@ -40,8 +40,8 @@ const ROLE_BORDER: Record<BlastImpactRole, string> = {
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="py-2 border-b border-slate-100 dark:border-slate-700/60 last:border-0">
-      <p className={`text-[10px] uppercase tracking-wider font-semibold ${mutedText} mb-1`}>{label}</p>
-      <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">{children}</div>
+      <p className={`text-xs uppercase tracking-wider font-semibold ${mutedText} mb-1`}>{label}</p>
+      <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{children}</div>
     </div>
   );
 }
@@ -56,7 +56,7 @@ function DepList({
   onSelect: (id: string) => void;
 }) {
   if (items.length === 0) {
-    return <p className={`text-xs ${mutedText}`}>None identified</p>;
+    return <p className={`text-sm ${mutedText}`}>None identified</p>;
   }
   return (
     <ul className="space-y-1.5 mt-1">
@@ -65,7 +65,7 @@ function DepList({
           <button
             type="button"
             onClick={() => onSelect(item.id)}
-            className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+            className={`w-full text-left text-sm px-2.5 py-1.5 rounded-lg border transition-colors ${
               direction === 'upstream'
                 ? 'border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-800 dark:text-indigo-200'
                 : 'border-amber-200 dark:border-amber-800/80 hover:bg-amber-50 dark:hover:bg-amber-950/50 text-amber-900 dark:text-amber-200'
@@ -91,13 +91,13 @@ export function SelectedComponentPreview({
     const d = selection.detail;
     return (
       <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
-        <p className={`text-[10px] uppercase font-semibold ${mutedText} mb-1`}>Selected in graph</p>
-        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{d.label}</p>
+        <p className={`text-xs uppercase font-semibold ${mutedText} mb-1`}>Selected in graph</p>
+        <p className="text-base font-semibold text-slate-900 dark:text-white truncate">{d.label}</p>
         <div className="flex flex-wrap gap-1 mt-1.5">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded ${ROLE_BADGE[d.impactRole]}`}>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${ROLE_BADGE[d.impactRole]}`}>
             {d.impactRoleLabel}
           </span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${healthBadgeClass(d.health)}`}>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${healthBadgeClass(d.health)}`}>
             {d.health}
           </span>
         </div>
@@ -108,11 +108,11 @@ export function SelectedComponentPreview({
   const e = selection.detail;
   return (
     <div className="p-3 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-xl">
-      <p className={`text-[10px] uppercase font-semibold ${mutedText} mb-1`}>Selected connection</p>
-      <p className="text-xs font-medium text-slate-900 dark:text-white truncate">
+      <p className={`text-xs uppercase font-semibold ${mutedText} mb-1`}>Selected connection</p>
+      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
         {e.sourceLabel} → {e.targetLabel}
       </p>
-      <p className={`text-[10px] ${mutedText} mt-1`}>{e.kindLabel}</p>
+      <p className={`text-xs ${mutedText} mt-1`}>{e.kindLabel}</p>
     </div>
   );
 }
@@ -133,12 +133,12 @@ export function IncidentPropagationSummary({
   const selectedEdge = selection?.type === 'edge' ? selection.detail : null;
 
   return (
-    <div className="p-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm text-xs">
+    <div className="p-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm text-sm">
       <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700/60">
         <svg className="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
-        <span className="font-semibold text-slate-900 dark:text-white">Dynamic Impact Analysis</span>
+        <span className="font-bold text-slate-900 dark:text-white">Dynamic Impact Analysis</span>
       </div>
 
       <div className="space-y-2 text-slate-600 dark:text-slate-300">
@@ -179,7 +179,7 @@ export function IncidentPropagationSummary({
         </div>
 
         {selectedNode && (
-          <div className="mt-2 p-2 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[11px]">
+          <div className="mt-2 p-2 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-lg text-xs">
             <p className="font-semibold text-blue-800 dark:text-blue-300">Selected Node: {selectedNode.label}</p>
             <p className="text-slate-500 dark:text-slate-400 mt-0.5">
               Role: <span className="font-medium text-slate-700 dark:text-slate-200">{selectedNode.impactRoleLabel}</span> | 
@@ -190,7 +190,7 @@ export function IncidentPropagationSummary({
         )}
 
         {selectedEdge && (
-          <div className="mt-2 p-2 bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 rounded-lg text-[11px]">
+          <div className="mt-2 p-2 bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 rounded-lg text-xs">
             <p className="font-semibold text-violet-800 dark:text-violet-300">Selected Connection: {selectedEdge.sourceLabel} → {selectedEdge.targetLabel}</p>
             <p className="text-slate-500 dark:text-slate-400 mt-0.5">Type: {selectedEdge.kindLabel} ({selectedEdge.relationship})</p>
             <p className="mt-1 text-slate-600 dark:text-slate-300 leading-normal">{selectedEdge.propagationDirection} {selectedEdge.whyItMatters}</p>
@@ -211,9 +211,9 @@ export default function BlastRadiusDetailPanel({
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
       <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 shrink-0">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Component Inspector</h3>
-        <p className={`text-[10px] ${mutedText} mt-0.5`}>
-          Root: <span className="text-red-600 dark:text-red-400 font-medium">{rootLabel}</span>
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">Component Inspector</h3>
+        <p className={`text-xs ${mutedText} mt-0.5`}>
+          Root: <span className="text-red-600 dark:text-red-400 font-semibold">{rootLabel}</span>
         </p>
       </div>
 
@@ -263,11 +263,11 @@ function MiniPipeline({
 
   return (
     <div className="py-2.5 border-b border-slate-100 dark:border-slate-800/80">
-      <p className={`text-[10px] uppercase tracking-wider font-semibold ${mutedText} mb-2`}>
+      <p className={`text-xs uppercase tracking-wider font-semibold ${mutedText} mb-2`}>
         Dependency Flow (Impact Path)
       </p>
       
-      <div className="flex flex-wrap items-center gap-1 text-[10px]">
+      <div className="flex flex-wrap items-center gap-1 text-[11px]">
         {/* Root Cause Component */}
         <button
           type="button"
@@ -344,22 +344,22 @@ function NodeDetail({
       <div className="px-3 py-3 bg-slate-50 dark:bg-slate-900/40">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">{d.label}</h4>
-            <p className={`text-[10px] font-mono ${mutedText} truncate`}>{d.id}</p>
+            <h4 className="text-base font-bold text-slate-900 dark:text-white truncate">{d.label}</h4>
+            <p className={`text-xs font-mono ${mutedText} truncate`}>{d.id}</p>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 ${healthBadgeClass(d.health)}`}>
+          <span className={`text-xs px-2 py-0.5 rounded border shrink-0 ${healthBadgeClass(d.health)}`}>
             {d.health}
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
-          <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${ROLE_BADGE[d.impactRole]}`}>
+          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${ROLE_BADGE[d.impactRole]}`}>
             {d.impactRoleLabel}
           </span>
-          <span className="text-[9px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
             {layerLabel(d.layer)}
           </span>
           <span
-            className="text-[9px] px-2 py-0.5 rounded font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-help"
+            className="text-[10px] px-2 py-0.5 rounded font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-help"
             title="Failure Propagation Risk: Probability of this component degrading or propagating failure in the current incident topology"
           >
             Risk: {d.riskScore.toFixed(0)}%
@@ -373,7 +373,7 @@ function NodeDetail({
         <DetailRow label="Failure Risk Score">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-900 dark:text-white font-mono">{d.riskScore.toFixed(0)}%</span>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               Probability of operational degradation or cascading failure propagation within the current topology
             </span>
           </div>
@@ -422,15 +422,15 @@ function EdgeDetail({
 
   return (
     <div className="rounded-xl border-2 border-violet-300 dark:border-violet-700 overflow-hidden">
-      <div className="px-3 py-3 bg-violet-50 dark:bg-violet-950/30">
-        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Dependency Connection</h4>
-        <span className={`inline-block mt-1.5 text-[9px] font-bold uppercase px-2 py-0.5 rounded ${kindColors[e.kind] ?? ''}`}>
+      <div className="px-3 py-3 bg-violet-50 dark:bg-violet-955/30">
+        <h4 className="text-base font-bold text-slate-900 dark:text-white">Dependency Connection</h4>
+        <span className={`inline-block mt-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded ${kindColors[e.kind] ?? ''}`}>
           {e.kindLabel}
         </span>
       </div>
 
       <div className="px-3 py-2 bg-white dark:bg-slate-800/30">
-        <div className="flex items-center gap-1 text-xs font-medium p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 mb-1">
+        <div className="flex items-center gap-1 text-sm font-medium p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 mb-1">
           <button type="button" onClick={() => onSelectNode(e.sourceId)} className="text-blue-600 dark:text-blue-400 hover:underline truncate">
             {e.sourceLabel}
           </button>
