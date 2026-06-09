@@ -1,4 +1,4 @@
-"""OpenRouter LLM client with model routing and fallback."""
+"""Groq LLM client with model routing and fallback."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
-OPENROUTER_BASE_URL = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-PRIMARY_MODEL = _env("PRIMARY_MODEL", "anthropic/claude-opus-4.1")
-SECONDARY_MODEL = _env("SECONDARY_MODEL", "anthropic/claude-sonnet-4")
-FAST_MODEL = _env("FAST_MODEL", "google/gemini-2.5-flash")
-FALLBACK_MODEL = _env("FALLBACK_MODEL", "google/gemini-2.5-pro")
+GROQ_BASE_URL = _env("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+PRIMARY_MODEL = _env("PRIMARY_MODEL", "llama-3.3-70b-versatile")
+SECONDARY_MODEL = _env("SECONDARY_MODEL", "llama-3.3-70b-versatile")
+FAST_MODEL = _env("FAST_MODEL", "llama-3.3-70b-versatile")
+FALLBACK_MODEL = _env("FALLBACK_MODEL", "llama-3.3-70b-versatile")
 
 
 def select_model(page_type: str, message_count: int) -> str:
@@ -42,10 +42,10 @@ def chat_completion(
     response_format: dict | None = None,
     max_tokens: int = 2048,
 ) -> dict[str, Any]:
-    """Call OpenRouter chat completions API. Raises on failure."""
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    """Call Groq chat completions API. Raises on failure."""
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY not configured")
+        raise RuntimeError("GROQ_API_KEY not configured")
 
     body: dict[str, Any] = {
         "model": model,
@@ -59,12 +59,11 @@ def chat_completion(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5173",
-        "X-Title": "Autonomous IT Operations Platform",
+        "User-Agent": "AutonomousObservability/1.0",
     }
 
     req = urllib.request.Request(
-        f"{OPENROUTER_BASE_URL}/chat/completions",
+        f"{GROQ_BASE_URL}/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers=headers,
         method="POST",
@@ -75,7 +74,7 @@ def chat_completion(
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Groq HTTP {exc.code}: {detail}") from exc
 
 
 def chat_with_fallback(

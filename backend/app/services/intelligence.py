@@ -746,7 +746,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         "the architecture elements outlined above."
     )
 
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("GROQ_API_KEY")
     
     if api_key:
         messages = [{"role": "system", "content": system_prompt}]
@@ -755,7 +755,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         messages.append({"role": "user", "content": question})
         
         req_body = {
-            "model": "anthropic/claude-3.5-sonnet",
+            "model": "llama-3.3-70b-versatile",
             "messages": messages,
             "temperature": 0.2
         }
@@ -763,13 +763,12 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "Autonomous IT Operations Platform"
+            "User-Agent": "AutonomousObservability/1.0",
         }
         
         try:
             req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
+                "https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(req_body).encode("utf-8"),
                 headers=headers,
                 method="POST"
@@ -779,7 +778,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
                 answer = res_data["choices"][0]["message"]["content"]
                 return {
                     "answer": answer,
-                    "sources": ["openrouter.ai (anthropic/claude-3.5-sonnet)"],
+                    "sources": ["groq.com (llama-3.3-70b-versatile)"],
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
         except Exception as e:

@@ -221,7 +221,7 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
     model = select_model(page_type, len(messages))
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    if os.environ.get("OPENROUTER_API_KEY"):
+    if os.environ.get("GROQ_API_KEY"):
         try:
             raw, model_used = chat_with_fallback(llm_messages, model)
             result = _parse_structured_response(raw)
@@ -232,7 +232,7 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
         except Exception as exc:
             logger.exception("OpenRouter call failed")
             err_msg = str(exc)
-            friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your OpenRouter API key (HTTP Error 402: Payment Required). Please top up your account or configure a new key."
+            friendly_err = "The AI assistant is temporarily unavailable. Please check your Groq API key and account status."
             if "402" not in err_msg and "Payment Required" not in err_msg:
                 friendly_err = f"AI assistant call failed: {err_msg}"
             
@@ -241,8 +241,8 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
                 "findings": [],
                 "evidence": [],
                 "recommended_actions": [
-                  "Add credits to your OpenRouter account",
-                  "Configure a valid key in backend/.env"
+                  "Check your Groq API key and account",
+                  "Configure a valid GROQ_API_KEY in backend/.env"
                 ],
                 "confidence": "0%",
                 "model": "error-unresolved",
@@ -251,11 +251,11 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
             }
 
     return {
-        "summary": "OPENROUTER_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
+        "summary": "GROQ_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
         "findings": [],
         "evidence": [],
         "recommended_actions": [
-          "Set a valid OPENROUTER_API_KEY in backend/.env"
+          "Set a valid GROQ_API_KEY in backend/.env"
         ],
         "confidence": "0%",
         "model": "error-unconfigured",

@@ -21,6 +21,18 @@ export default function IncidentExplorer() {
 
   const isActiveFilter = searchParams.get('active') === 'true';
 
+  const handleSearchClick = () => {
+    if (search.trim()) {
+      if (search.trim().toUpperCase().startsWith('INC-')) {
+        navigate(`/incidents?id=${encodeURIComponent(search.trim().toUpperCase())}`);
+      } else {
+        navigate(`/incidents?search=${encodeURIComponent(search.trim())}`);
+      }
+    } else {
+      navigate('/incidents');
+    }
+  };
+
   const load = (resetOffset = true) => {
     const newOffset = resetOffset ? 0 : offset;
     if (resetOffset) {
@@ -29,10 +41,14 @@ export default function IncidentExplorer() {
       setLoadingMore(true);
     }
 
+    const idParam = searchParams.get('id');
+    const searchParamVal = searchParams.get('search');
+    const activeSearch = idParam || searchParamVal || search;
+
     getIncidents({
       limit: PAGE_SIZE,
       offset: newOffset,
-      search: search || undefined,
+      search: activeSearch || undefined,
       severity: severity || undefined,
     })
       .then((r) => {
@@ -63,7 +79,17 @@ export default function IncidentExplorer() {
 
   useEffect(() => {
     const id = searchParams.get('id');
-    if (id) getIncident(id).then(setSelected).catch(console.error);
+    const q = searchParams.get('search');
+    if (id) {
+      setSearch(id);
+      getIncident(id).then(setSelected).catch(console.error);
+    } else if (q) {
+      setSearch(q);
+      setSelected(null);
+    } else {
+      setSearch('');
+      setSelected(null);
+    }
   }, [searchParams]);
 
   const hasMore = isActiveFilter ? false : incidents.length < total;
@@ -104,7 +130,7 @@ export default function IncidentExplorer() {
           placeholder="Search incidents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && load(true)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearchClick()}
           className={`flex-1 ${inputClass}`}
         />
         <select
@@ -115,7 +141,7 @@ export default function IncidentExplorer() {
           <option value="">All severities</option>
           {['P1', 'P2', 'P3', 'P4'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button onClick={() => load(true)} className={btnPrimary}>Search</button>
+        <button onClick={handleSearchClick} className={btnPrimary}>Search</button>
       </div>
 
       {/* Results summary with pagination info */}
