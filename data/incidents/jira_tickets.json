@@ -9,11 +9,7 @@
       "issue_type": "Task",
       "assignee": "engineer-10",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-05-21T10:01:38.326098Z",
-=======
       "created_at": "2026-05-21T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1002",
       "labels": [
         "sre",
@@ -29,11 +25,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-15",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-03-17T10:01:38.326098Z",
-=======
       "created_at": "2026-03-17T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1048",
       "labels": [
         "production",
@@ -49,11 +41,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-15",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-05-23T10:01:38.326098Z",
-=======
       "created_at": "2026-05-23T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1039",
       "labels": [
         "payment",
@@ -69,11 +57,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-10",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-04-24T10:01:38.326098Z",
-=======
       "created_at": "2026-04-24T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1020",
       "labels": [
         "sre",
@@ -89,11 +73,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-5",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-02-15T10:01:38.326098Z",
-=======
       "created_at": "2026-02-15T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1043",
       "labels": [
         "payment",
@@ -109,11 +89,7 @@
       "issue_type": "Task",
       "assignee": "engineer-13",
       "reporter": "oncall-2",
-<<<<<<< HEAD
-      "created_at": "2026-05-16T10:01:38.326098Z",
-=======
       "created_at": "2026-05-16T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1037",
       "labels": [
         "sre",
@@ -129,11 +105,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-6",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-01-13T10:01:38.326098Z",
-=======
       "created_at": "2026-01-13T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1034",
       "labels": [
         "sre",
@@ -149,11 +121,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-10",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-01-30T10:01:38.326098Z",
-=======
       "created_at": "2026-01-30T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1022",
       "labels": [
         "payment",
@@ -169,11 +137,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-11",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-05-20T10:01:38.326098Z",
-=======
       "created_at": "2026-05-20T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1036",
       "labels": [
         "sre",
@@ -189,11 +153,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-8",
       "reporter": "oncall-2",
-<<<<<<< HEAD
-      "created_at": "2026-05-25T10:01:38.326098Z",
-=======
       "created_at": "2026-05-25T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1038",
       "labels": [
         "postmortem",
@@ -209,11 +169,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-7",
       "reporter": "oncall-3",
-<<<<<<< HEAD
-      "created_at": "2026-05-21T10:01:38.326098Z",
-=======
       "created_at": "2026-05-21T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1010",
       "labels": [
         "payment",
@@ -229,11 +185,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-10",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-01-19T10:01:38.326098Z",
-=======
       "created_at": "2026-01-19T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1044",
       "labels": [
         "sre",
@@ -249,11 +201,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-6",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-04-02T10:01:38.326098Z",
-=======
       "created_at": "2026-04-02T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1012",
       "labels": [
         "payment",
@@ -269,11 +217,7 @@
       "issue_type": "Task",
       "assignee": "engineer-15",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-04-08T10:01:38.326098Z",
-=======
       "created_at": "2026-04-08T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1031",
       "labels": [
         "sre",
@@ -289,11 +233,7 @@
       "issue_type": "Task",
       "assignee": "engineer-12",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-05-18T10:01:38.326098Z",
-=======
       "created_at": "2026-05-18T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1035",
       "labels": [
         "urgent",
@@ -309,11 +249,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-8",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-04-11T10:01:38.326098Z",
-=======
       "created_at": "2026-04-11T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1041",
       "labels": [
         "payment",
@@ -329,11 +265,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-15",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-06-01T10:01:38.326098Z",
-=======
       "created_at": "2026-06-01T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1049",
       "labels": [
         "production",
@@ -349,11 +281,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-7",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2025-12-11T10:01:38.326098Z",
-=======
       "created_at": "2025-12-11T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1008",
       "labels": [
         "urgent",
@@ -369,11 +297,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-2",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-03-05T10:01:38.326098Z",
-=======
       "created_at": "2026-03-05T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1022",
       "labels": [
         "production",
@@ -389,11 +313,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-2",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-06-05T10:01:38.326098Z",
-=======
       "created_at": "2026-06-05T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1014",
       "labels": [
         "urgent",
@@ -409,11 +329,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-2",
       "reporter": "oncall-1",
-<<<<<<< HEAD
-      "created_at": "2026-05-06T10:01:38.326098Z",
-=======
       "created_at": "2026-05-06T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1028",
       "labels": [
         "production",
@@ -429,11 +345,7 @@
       "issue_type": "Task",
       "assignee": "engineer-11",
       "reporter": "oncall-2",
-<<<<<<< HEAD
-      "created_at": "2026-03-25T10:01:38.326098Z",
-=======
       "created_at": "2026-03-25T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1008",
       "labels": [
         "postmortem",
@@ -449,11 +361,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-5",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-04-16T10:01:38.326098Z",
-=======
       "created_at": "2026-04-16T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1031",
       "labels": [
         "payment",
@@ -469,11 +377,7 @@
       "issue_type": "Task",
       "assignee": "engineer-5",
       "reporter": "oncall-2",
-<<<<<<< HEAD
-      "created_at": "2026-01-24T10:01:38.326098Z",
-=======
       "created_at": "2026-01-24T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1017",
       "labels": [
         "payment",
@@ -489,11 +393,7 @@
       "issue_type": "Task",
       "assignee": "engineer-10",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-03-28T10:01:38.326098Z",
-=======
       "created_at": "2026-03-28T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1005",
       "labels": [
         "production",
@@ -509,11 +409,7 @@
       "issue_type": "Task",
       "assignee": "engineer-9",
       "reporter": "oncall-2",
-<<<<<<< HEAD
-      "created_at": "2026-05-07T10:01:38.326098Z",
-=======
       "created_at": "2026-05-07T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1023",
       "labels": [
         "production",
@@ -529,11 +425,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-1",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-05-30T10:01:38.326098Z",
-=======
       "created_at": "2026-05-30T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1017",
       "labels": [
         "payment",
@@ -549,11 +441,7 @@
       "issue_type": "Incident",
       "assignee": "engineer-14",
       "reporter": "oncall-5",
-<<<<<<< HEAD
-      "created_at": "2026-03-01T10:01:38.326098Z",
-=======
       "created_at": "2026-03-01T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1031",
       "labels": [
         "sre",
@@ -569,11 +457,7 @@
       "issue_type": "Bug",
       "assignee": "engineer-4",
       "reporter": "oncall-4",
-<<<<<<< HEAD
-      "created_at": "2026-04-21T10:01:38.326098Z",
-=======
       "created_at": "2026-04-21T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1042",
       "labels": [
         "urgent",
@@ -589,11 +473,7 @@
       "issue_type": "Task",
       "assignee": "engineer-13",
       "reporter": "oncall-3",
-<<<<<<< HEAD
-      "created_at": "2026-06-01T10:01:38.326098Z",
-=======
       "created_at": "2026-06-01T10:00:31.094988Z",
->>>>>>> origin/main
       "linked_incident": "INC-1038",
       "labels": [
         "payment",
@@ -601,9 +481,5 @@
       ]
     }
   ],
-<<<<<<< HEAD
-  "generated_at": "2026-06-08T10:01:38.327059Z"
-=======
   "generated_at": "2026-06-08T10:00:31.095417Z"
->>>>>>> origin/main
 }

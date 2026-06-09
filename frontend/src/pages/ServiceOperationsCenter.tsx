@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-=======
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
->>>>>>> origin/main
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -111,8 +106,6 @@ export default function ServiceOperationsCenter() {
       .slice(0, 4);
   }, [services]);
 
-<<<<<<< HEAD
-=======
   const handleServiceClick = useCallback((serviceId: string, label: string) => {
     let graphNode = rawGraphNodes.find((n) => n.id === serviceId);
     if (!graphNode) {
@@ -159,7 +152,6 @@ export default function ServiceOperationsCenter() {
     [handleServiceClick]
   );
 
->>>>>>> origin/main
   const copilotContext = useMemo(() => {
     if (!monitoring || !overview) return null;
     return {
