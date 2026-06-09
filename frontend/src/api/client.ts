@@ -101,7 +101,7 @@ export async function getIncidents(params?: {
 }): Promise<{ incidents: Incident[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit', String(params.limit));
-  if (params?.offset) q.set('offset', String(params.offset));
+  if (params?.offset !== undefined) q.set('offset', String(params.offset));
   if (params?.severity) q.set('severity', params.severity);
   if (params?.service) q.set('service', params.service);
   if (params?.search) q.set('search', params.search);
