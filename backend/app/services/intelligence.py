@@ -701,7 +701,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         messages.append({"role": "user", "content": question})
         
         req_body = {
-            "model": "anthropic/claude-3.5-sonnet",
+            "model": "llama-3.3-70b-versatile",
             "messages": messages,
             "temperature": 0.2
         }
@@ -709,13 +709,13 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "User-Agent": "AutonomousObservability/1.0",
         }
         
         try:
             base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
             req = urllib.request.Request(
-                f"{base_url}/chat/completions",
+                "https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(req_body).encode("utf-8"),
                 headers=headers,
                 method="POST"
@@ -725,7 +725,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
                 answer = res_data["choices"][0]["message"]["content"]
                 return {
                     "answer": answer,
-                    "sources": ["groq.ai (anthropic/claude-3.5-sonnet)"],
+                    "sources": ["groq.com (llama-3.3-70b-versatile)"],
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
         except Exception as e:

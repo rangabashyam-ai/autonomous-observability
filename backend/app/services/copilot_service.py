@@ -272,8 +272,8 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
                 "findings": [],
                 "evidence": [],
                 "recommended_actions": [
-                  "Add credits to your GROQ account",
-                  "Configure a valid key in backend/.env"
+                  "Check your Groq API key and account",
+                  "Configure a valid GROQ_API_KEY in backend/.env"
                 ],
                 "confidence": "0%",
                 "model": "error-unresolved",

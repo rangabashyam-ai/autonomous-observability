@@ -57,9 +57,12 @@ export default function InlineCopilot({
   const [isExpanded, setIsExpanded] = useState(true);
   const [lastResponse, setLastResponse] = useState<CopilotResponse | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   }, [messages, isLoading]);
 
   const buildPayload = (question: string): CopilotContextPayload => ({
@@ -179,7 +182,7 @@ export default function InlineCopilot({
       {isExpanded && (
         <div className="border-t border-primary/10">
           {/* Messages area */}
-          <div className="max-h-[360px] overflow-y-auto p-4 space-y-3">
+          <div ref={scrollContainerRef} className="max-h-[360px] overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="text-center py-4 space-y-3">
                 <Sparkles className="h-8 w-8 text-primary/40 mx-auto" />
@@ -187,7 +190,7 @@ export default function InlineCopilot({
                   Ask anything about <span className="font-medium text-text-primary">{selectedEntity}</span>
                 </p>
                 <p className="text-[10px] text-text-secondary/60">
-                  Powered by GROQ · Context-scoped AI analysis
+                  Powered by Groq · Context-scoped AI analysis
                 </p>
               </div>
             )}
