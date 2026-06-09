@@ -1,1355 +1,2409 @@
 {
   "events": [
     {
+<<<<<<< HEAD
       "id": "event-da15ad59",
+=======
+      "id": "event-56303e21",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "reconciliation-service",
       "message": "Config Change on rate-limiter",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T03:09:38.277870Z"
     },
     {
       "id": "event-cd015682",
+=======
+      "timestamp": "2026-06-08T03:08:31.075272Z"
+    },
+    {
+      "id": "event-941e20f4",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "aws",
       "entity_id": "cassandra-cluster",
       "message": "Deployment on identity-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T16:54:38.277870Z"
     },
     {
       "id": "event-d609fbd9",
+=======
+      "timestamp": "2026-06-06T16:53:31.075272Z"
+    },
+    {
+      "id": "event-f87565ae",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "ml-scoring-service",
       "message": "Health Check on api-gateway",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T14:13:38.277870Z"
     },
     {
       "id": "event-5374d08d",
+=======
+      "timestamp": "2026-06-06T14:12:31.075272Z"
+    },
+    {
+      "id": "event-dd39745a",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "ml-scoring-service",
       "message": "Health Check on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T06:39:38.277870Z"
     },
     {
       "id": "event-bf762502",
+=======
+      "timestamp": "2026-06-07T06:38:31.075272Z"
+    },
+    {
+      "id": "event-10b32481",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "aws",
       "entity_id": "webhook-handler",
       "message": "Restart on auth-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:14:38.277870Z"
     },
     {
       "id": "event-abc2918c",
+=======
+      "timestamp": "2026-06-07T23:13:31.075272Z"
+    },
+    {
+      "id": "event-b9f291be",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "reconciliation-service",
       "message": "Config Change on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T00:54:38.277870Z"
     },
     {
       "id": "event-9722070a",
+=======
+      "timestamp": "2026-06-08T00:53:31.075272Z"
+    },
+    {
+      "id": "event-43b23c5f",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "webhook-handler",
       "message": "Config Change on fraud-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T05:43:38.277870Z"
     },
     {
       "id": "event-2626ac41",
+=======
+      "timestamp": "2026-06-07T05:42:31.075272Z"
+    },
+    {
+      "id": "event-efd3db76",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "token-service",
       "message": "Failover on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T18:41:38.277870Z"
     },
     {
       "id": "event-d8cb5e46",
+=======
+      "timestamp": "2026-06-07T18:40:31.075272Z"
+    },
+    {
+      "id": "event-00553b8e",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "redis-cluster",
       "message": "Health Check on partner-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T18:24:38.277870Z"
     },
     {
       "id": "event-9216ae76",
+=======
+      "timestamp": "2026-06-07T18:23:31.075272Z"
+    },
+    {
+      "id": "event-e5b44de2",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "internal",
       "entity_id": "notification-service",
       "message": "Config Change on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T06:37:38.277870Z"
     },
     {
       "id": "event-a44950e9",
+=======
+      "timestamp": "2026-06-08T06:36:31.075272Z"
+    },
+    {
+      "id": "event-42374185",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "merchant-api",
       "message": "Scale Event on auth-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T22:24:38.277870Z"
     },
     {
       "id": "event-65841bb1",
+=======
+      "timestamp": "2026-06-07T22:23:31.075272Z"
+    },
+    {
+      "id": "event-d8d19279",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "api-gateway",
       "message": "Health Check on merchant-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T03:02:38.277870Z"
     },
     {
       "id": "event-f8d5b239",
+=======
+      "timestamp": "2026-06-07T03:01:31.075272Z"
+    },
+    {
+      "id": "event-409a079f",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "fraud-service",
       "message": "Scale Event on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T21:00:38.277870Z"
     },
     {
       "id": "event-46c71df8",
+=======
+      "timestamp": "2026-06-07T20:59:31.075272Z"
+    },
+    {
+      "id": "event-091b6e64",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "aws",
       "entity_id": "postgres-cluster",
       "message": "Failover on settlement-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T19:54:38.277870Z"
     },
     {
       "id": "event-588d92c4",
+=======
+      "timestamp": "2026-06-07T19:53:31.075272Z"
+    },
+    {
+      "id": "event-437ef91d",
+>>>>>>> origin/main
       "type": "restart",
       "source": "vmware",
       "entity_id": "partner-api",
       "message": "Health Check on webhook-handler",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T05:27:38.277870Z"
     },
     {
       "id": "event-28de1d36",
+=======
+      "timestamp": "2026-06-07T05:26:31.075272Z"
+    },
+    {
+      "id": "event-adb6186d",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "customer-service",
       "message": "Deployment on customer-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T17:56:38.277870Z"
     },
     {
       "id": "event-834bc649",
+=======
+      "timestamp": "2026-06-07T17:55:31.075272Z"
+    },
+    {
+      "id": "event-a71e5166",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "audit-service",
       "message": "Config Change on partner-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T13:49:38.277870Z"
     },
     {
       "id": "event-b8ad8c4a",
+=======
+      "timestamp": "2026-06-06T13:48:31.075272Z"
+    },
+    {
+      "id": "event-b06865d5",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "api-gateway",
       "message": "Failover on settlement-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T10:42:38.277870Z"
     },
     {
       "id": "event-0a32e966",
+=======
+      "timestamp": "2026-06-06T10:41:31.075272Z"
+    },
+    {
+      "id": "event-29cc58ea",
+>>>>>>> origin/main
       "type": "failover",
       "source": "vmware",
       "entity_id": "token-service",
       "message": "Health Check on notification-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T17:14:38.277870Z"
     },
     {
       "id": "event-e7423a96",
+=======
+      "timestamp": "2026-06-06T17:13:31.075272Z"
+    },
+    {
+      "id": "event-be76075a",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "kubernetes",
       "entity_id": "fraud-service",
       "message": "Restart on api-gateway",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T11:17:38.277870Z"
     },
     {
       "id": "event-fbc4e6ff",
+=======
+      "timestamp": "2026-06-07T11:16:31.075272Z"
+    },
+    {
+      "id": "event-2bcba85f",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "rate-limiter",
       "message": "Restart on webhook-handler",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T06:54:38.277870Z"
     },
     {
       "id": "event-b5a3395c",
+=======
+      "timestamp": "2026-06-08T06:53:31.075272Z"
+    },
+    {
+      "id": "event-1bfc7c38",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "cassandra-cluster",
       "message": "Restart on notification-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T07:04:38.277870Z"
     },
     {
       "id": "event-807a9e06",
+=======
+      "timestamp": "2026-06-07T07:03:31.075272Z"
+    },
+    {
+      "id": "event-54f7c737",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "customer-service",
       "message": "Restart on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T21:46:38.277870Z"
     },
     {
       "id": "event-506d0273",
+=======
+      "timestamp": "2026-06-07T21:45:31.075272Z"
+    },
+    {
+      "id": "event-38aadd38",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "cassandra-cluster",
       "message": "Failover on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T02:03:38.277870Z"
     },
     {
       "id": "event-c201587c",
+=======
+      "timestamp": "2026-06-07T02:02:31.075272Z"
+    },
+    {
+      "id": "event-88129411",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "webhook-handler",
       "message": "Health Check on merchant-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T00:20:38.277870Z"
     },
     {
       "id": "event-d2e71aa3",
+=======
+      "timestamp": "2026-06-08T00:19:31.075272Z"
+    },
+    {
+      "id": "event-4113f0d2",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "kubernetes",
       "entity_id": "webhook-handler",
       "message": "Deployment on settlement-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:50:38.277870Z"
     },
     {
       "id": "event-808b07ad",
+=======
+      "timestamp": "2026-06-07T14:49:31.075272Z"
+    },
+    {
+      "id": "event-fee8f8e1",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "reconciliation-service",
       "message": "Config Change on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T16:10:38.277870Z"
     },
     {
       "id": "event-6af4d2a8",
+=======
+      "timestamp": "2026-06-06T16:09:31.075272Z"
+    },
+    {
+      "id": "event-87ab8e22",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "aws",
       "entity_id": "reconciliation-service",
       "message": "Scale Event on identity-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T00:28:38.277870Z"
     },
     {
       "id": "event-a5901a40",
+=======
+      "timestamp": "2026-06-07T00:27:31.075272Z"
+    },
+    {
+      "id": "event-a904f6c4",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "auth-service",
       "message": "Scale Event on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T18:19:38.277870Z"
     },
     {
       "id": "event-d5bfa372",
+=======
+      "timestamp": "2026-06-07T18:18:31.075272Z"
+    },
+    {
+      "id": "event-d15e949d",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "postgres-cluster",
       "message": "Config Change on settlement-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T02:07:38.277870Z"
     },
     {
       "id": "event-865ac10e",
+=======
+      "timestamp": "2026-06-07T02:06:31.075272Z"
+    },
+    {
+      "id": "event-20c36968",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "postgres-cluster",
       "message": "Deployment on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T19:43:38.277870Z"
     },
     {
       "id": "event-014c4fa8",
+=======
+      "timestamp": "2026-06-06T19:42:31.075272Z"
+    },
+    {
+      "id": "event-734b98f2",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "postgres-cluster",
       "message": "Deployment on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:54:38.277870Z"
     },
     {
       "id": "event-ae57618d",
+=======
+      "timestamp": "2026-06-07T23:53:31.075272Z"
+    },
+    {
+      "id": "event-a26380c1",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "settlement-service",
       "message": "Scale Event on reconciliation-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T21:41:38.277870Z"
     },
     {
       "id": "event-cacf2fbf",
+=======
+      "timestamp": "2026-06-07T21:40:31.075272Z"
+    },
+    {
+      "id": "event-77086939",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "aws",
       "entity_id": "notification-service",
       "message": "Restart on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T19:03:38.277870Z"
     },
     {
       "id": "event-8be8cf61",
+=======
+      "timestamp": "2026-06-06T19:02:31.075272Z"
+    },
+    {
+      "id": "event-bfcc91ad",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "settlement-service",
       "message": "Scale Event on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T11:48:38.277870Z"
     },
     {
       "id": "event-8917585d",
+=======
+      "timestamp": "2026-06-06T11:47:31.075272Z"
+    },
+    {
+      "id": "event-0ae142a8",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "api-gateway",
       "message": "Config Change on webhook-handler",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:41:38.277870Z"
     },
     {
       "id": "event-7e513c77",
+=======
+      "timestamp": "2026-06-08T01:40:31.075272Z"
+    },
+    {
+      "id": "event-a0da7f44",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "fraud-service",
       "message": "Config Change on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T04:28:38.277870Z"
     },
     {
       "id": "event-04a9b61f",
+=======
+      "timestamp": "2026-06-08T04:27:31.075272Z"
+    },
+    {
+      "id": "event-492ca9e8",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "ml-scoring-service",
       "message": "Health Check on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T13:05:38.277870Z"
     },
     {
       "id": "event-3b1b32ff",
+=======
+      "timestamp": "2026-06-06T13:04:31.075272Z"
+    },
+    {
+      "id": "event-163a5801",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "auth-service",
       "message": "Health Check on partner-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T11:50:38.277870Z"
     },
     {
       "id": "event-e634745a",
+=======
+      "timestamp": "2026-06-07T11:49:31.075272Z"
+    },
+    {
+      "id": "event-8c540ddf",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "notification-service",
       "message": "Deployment on token-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:42:38.277870Z"
     },
     {
       "id": "event-1a1a871a",
+=======
+      "timestamp": "2026-06-07T14:41:31.075272Z"
+    },
+    {
+      "id": "event-2caa1bbf",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "kubernetes",
       "entity_id": "settlement-service",
       "message": "Restart on partner-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T03:41:38.277870Z"
     },
     {
       "id": "event-c1a914d3",
+=======
+      "timestamp": "2026-06-08T03:40:31.075272Z"
+    },
+    {
+      "id": "event-2bff5059",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "identity-service",
       "message": "Scale Event on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T03:55:38.277870Z"
     },
     {
       "id": "event-4ec74c41",
+=======
+      "timestamp": "2026-06-08T03:54:31.075272Z"
+    },
+    {
+      "id": "event-a247d2b8",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "vmware",
       "entity_id": "identity-service",
       "message": "Failover on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:33:38.277870Z"
     },
     {
       "id": "event-2f60eb19",
+=======
+      "timestamp": "2026-06-07T14:32:31.075272Z"
+    },
+    {
+      "id": "event-d0d14609",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "fraud-service",
       "message": "Config Change on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T12:50:38.277870Z"
     },
     {
       "id": "event-68fd8cb3",
+=======
+      "timestamp": "2026-06-07T12:49:31.075272Z"
+    },
+    {
+      "id": "event-97183e5a",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "rate-limiter",
       "message": "Health Check on auth-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T23:01:38.277870Z"
     },
     {
       "id": "event-7a250d81",
+=======
+      "timestamp": "2026-06-06T23:00:31.075272Z"
+    },
+    {
+      "id": "event-73bea332",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "ml-scoring-service",
       "message": "Failover on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T19:34:38.277870Z"
     },
     {
       "id": "event-8db3dffb",
+=======
+      "timestamp": "2026-06-06T19:33:31.075272Z"
+    },
+    {
+      "id": "event-ac56eadf",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "settlement-service",
       "message": "Failover on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T16:06:38.277870Z"
     },
     {
       "id": "event-c0891712",
+=======
+      "timestamp": "2026-06-06T16:05:31.075272Z"
+    },
+    {
+      "id": "event-73720111",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "reconciliation-service",
       "message": "Deployment on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T10:41:38.277870Z"
     },
     {
       "id": "event-adaeadcc",
+=======
+      "timestamp": "2026-06-07T10:40:31.075272Z"
+    },
+    {
+      "id": "event-d28d8817",
+>>>>>>> origin/main
       "type": "failover",
       "source": "vmware",
       "entity_id": "customer-service",
       "message": "Failover on merchant-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T13:49:38.277870Z"
     },
     {
       "id": "event-a4706a9e",
+=======
+      "timestamp": "2026-06-06T13:48:31.075272Z"
+    },
+    {
+      "id": "event-01a4be16",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "partner-api",
       "message": "Failover on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T01:24:38.277870Z"
     },
     {
       "id": "event-f4cd0c6d",
+=======
+      "timestamp": "2026-06-07T01:23:31.075272Z"
+    },
+    {
+      "id": "event-11d27f2f",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "customer-service",
       "message": "Health Check on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T17:02:38.277870Z"
     },
     {
       "id": "event-7b03502c",
+=======
+      "timestamp": "2026-06-07T17:01:31.075272Z"
+    },
+    {
+      "id": "event-b59aa86e",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "partner-api",
       "message": "Restart on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T04:47:38.277870Z"
     },
     {
       "id": "event-0baecb45",
+=======
+      "timestamp": "2026-06-08T04:46:31.075272Z"
+    },
+    {
+      "id": "event-bf2d6d77",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "cassandra-cluster",
       "message": "Failover on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T02:17:38.277870Z"
     },
     {
       "id": "event-0b6300ca",
+=======
+      "timestamp": "2026-06-07T02:16:31.075272Z"
+    },
+    {
+      "id": "event-ad4fb1a0",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "rate-limiter",
       "message": "Config Change on partner-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T23:38:38.277870Z"
     },
     {
       "id": "event-27dd61e9",
+=======
+      "timestamp": "2026-06-06T23:37:31.075272Z"
+    },
+    {
+      "id": "event-3cdd5c6b",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "ml-scoring-service",
       "message": "Scale Event on token-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T07:11:38.277870Z"
     },
     {
       "id": "event-16cb9529",
+=======
+      "timestamp": "2026-06-07T07:10:31.075272Z"
+    },
+    {
+      "id": "event-6a37c7b6",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "reconciliation-service",
       "message": "Health Check on customer-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T17:55:38.277870Z"
     },
     {
       "id": "event-b71c242b",
+=======
+      "timestamp": "2026-06-06T17:54:31.075272Z"
+    },
+    {
+      "id": "event-1a0d2a0f",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "ml-scoring-service",
       "message": "Restart on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T10:42:38.277870Z"
     },
     {
       "id": "event-23e541b3",
+=======
+      "timestamp": "2026-06-07T10:41:31.075272Z"
+    },
+    {
+      "id": "event-e9531f33",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "identity-service",
       "message": "Deployment on rate-limiter",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T16:18:38.277870Z"
     },
     {
       "id": "event-871afc88",
+=======
+      "timestamp": "2026-06-07T16:17:31.075272Z"
+    },
+    {
+      "id": "event-eb709651",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "kubernetes",
       "entity_id": "reconciliation-service",
       "message": "Restart on api-gateway",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T07:03:38.277870Z"
     },
     {
       "id": "event-d8f8eddb",
+=======
+      "timestamp": "2026-06-07T07:02:31.075272Z"
+    },
+    {
+      "id": "event-311173e8",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "identity-service",
       "message": "Health Check on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T10:47:38.277870Z"
     },
     {
       "id": "event-b0ede651",
+=======
+      "timestamp": "2026-06-06T10:46:31.075272Z"
+    },
+    {
+      "id": "event-a329fcf1",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "partner-api",
       "message": "Restart on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T09:23:38.277870Z"
     },
     {
       "id": "event-862ecb6c",
+=======
+      "timestamp": "2026-06-07T09:22:31.075272Z"
+    },
+    {
+      "id": "event-505266e2",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "partner-api",
       "message": "Deployment on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T09:04:38.277870Z"
     },
     {
       "id": "event-a6c22f2f",
+=======
+      "timestamp": "2026-06-08T09:03:31.075272Z"
+    },
+    {
+      "id": "event-abcec834",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "api-gateway",
       "message": "Health Check on fraud-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T19:43:38.277870Z"
     },
     {
       "id": "event-2e873cdd",
+=======
+      "timestamp": "2026-06-07T19:42:31.075272Z"
+    },
+    {
+      "id": "event-01475c83",
+>>>>>>> origin/main
       "type": "failover",
       "source": "vmware",
       "entity_id": "audit-service",
       "message": "Failover on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T21:14:38.277870Z"
     },
     {
       "id": "event-77550a73",
+=======
+      "timestamp": "2026-06-06T21:13:31.075272Z"
+    },
+    {
+      "id": "event-2d864b4f",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "partner-api",
       "message": "Failover on settlement-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T05:12:38.277870Z"
     },
     {
       "id": "event-1d084abc",
+=======
+      "timestamp": "2026-06-07T05:11:31.075272Z"
+    },
+    {
+      "id": "event-952a15be",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "identity-service",
       "message": "Scale Event on rate-limiter",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T03:37:38.277870Z"
     },
     {
       "id": "event-97965970",
+=======
+      "timestamp": "2026-06-07T03:36:31.075272Z"
+    },
+    {
+      "id": "event-da9e5a86",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "api-gateway",
       "message": "Failover on partner-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T20:16:38.277870Z"
     },
     {
       "id": "event-d24a7d30",
+=======
+      "timestamp": "2026-06-07T20:15:31.075272Z"
+    },
+    {
+      "id": "event-db421f3f",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "internal",
       "entity_id": "auth-service",
       "message": "Config Change on api-gateway",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T14:58:38.277870Z"
     },
     {
       "id": "event-f93cdd5a",
+=======
+      "timestamp": "2026-06-06T14:57:31.075272Z"
+    },
+    {
+      "id": "event-c0d88b33",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "reconciliation-service",
       "message": "Failover on rate-limiter",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T17:20:38.277870Z"
     },
     {
       "id": "event-8c2342b9",
+=======
+      "timestamp": "2026-06-06T17:19:31.075272Z"
+    },
+    {
+      "id": "event-0f1a3f47",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "auth-service",
       "message": "Failover on notification-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T22:58:38.277870Z"
     },
     {
       "id": "event-9b4f1b52",
+=======
+      "timestamp": "2026-06-06T22:57:31.075272Z"
+    },
+    {
+      "id": "event-666cc6d6",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "audit-service",
       "message": "Health Check on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T08:43:38.277870Z"
     },
     {
       "id": "event-feb256bd",
+=======
+      "timestamp": "2026-06-08T08:42:31.075272Z"
+    },
+    {
+      "id": "event-ff83c7c6",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "redis-cluster",
       "message": "Deployment on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T05:32:38.277870Z"
     },
     {
       "id": "event-3a52b13c",
+=======
+      "timestamp": "2026-06-07T05:31:31.075272Z"
+    },
+    {
+      "id": "event-a668e750",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "postgres-cluster",
       "message": "Restart on webhook-handler",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T03:24:38.277870Z"
     },
     {
       "id": "event-db0f4499",
+=======
+      "timestamp": "2026-06-07T03:23:31.075272Z"
+    },
+    {
+      "id": "event-cba078a2",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "api-gateway",
       "message": "Scale Event on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T20:53:38.277870Z"
     },
     {
       "id": "event-e8374d0a",
+=======
+      "timestamp": "2026-06-07T20:52:31.075272Z"
+    },
+    {
+      "id": "event-d2d34d32",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "ml-scoring-service",
       "message": "Scale Event on merchant-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T17:53:38.277870Z"
     },
     {
       "id": "event-f936f39c",
+=======
+      "timestamp": "2026-06-06T17:52:31.075272Z"
+    },
+    {
+      "id": "event-35cc53b0",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "ml-scoring-service",
       "message": "Scale Event on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T07:22:38.277870Z"
     },
     {
       "id": "event-1e2bf6b8",
+=======
+      "timestamp": "2026-06-07T07:21:31.075272Z"
+    },
+    {
+      "id": "event-57641c60",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "postgres-cluster",
       "message": "Scale Event on partner-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:44:38.277870Z"
     },
     {
       "id": "event-17957fee",
+=======
+      "timestamp": "2026-06-07T14:43:31.075272Z"
+    },
+    {
+      "id": "event-ff408fef",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "kubernetes",
       "entity_id": "postgres-cluster",
       "message": "Scale Event on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:20:38.277870Z"
     },
     {
       "id": "event-dcbcceea",
+=======
+      "timestamp": "2026-06-07T23:19:31.075272Z"
+    },
+    {
+      "id": "event-581b66b5",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "fraud-service",
       "message": "Failover on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T17:59:38.277870Z"
     },
     {
       "id": "event-f8503c2c",
+=======
+      "timestamp": "2026-06-07T17:58:31.075272Z"
+    },
+    {
+      "id": "event-937d5f4e",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "api-gateway",
       "message": "Config Change on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T09:38:38.277870Z"
     },
     {
       "id": "event-934cb0f6",
+=======
+      "timestamp": "2026-06-07T09:37:31.075272Z"
+    },
+    {
+      "id": "event-26f94fd3",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "identity-service",
       "message": "Restart on api-gateway",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T10:57:38.277870Z"
     },
     {
       "id": "event-4965ff0d",
+=======
+      "timestamp": "2026-06-07T10:56:31.075272Z"
+    },
+    {
+      "id": "event-392d6b50",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "audit-service",
       "message": "Deployment on merchant-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T00:48:38.277870Z"
     },
     {
       "id": "event-ed26bd86",
+=======
+      "timestamp": "2026-06-07T00:47:31.075272Z"
+    },
+    {
+      "id": "event-f39db84e",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "aws",
       "entity_id": "rate-limiter",
       "message": "Deployment on token-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T15:45:38.277870Z"
     },
     {
       "id": "event-fe97573d",
+=======
+      "timestamp": "2026-06-07T15:44:31.075272Z"
+    },
+    {
+      "id": "event-18a4ea94",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "auth-service",
       "message": "Failover on token-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T02:26:38.277870Z"
     },
     {
       "id": "event-c2767434",
+=======
+      "timestamp": "2026-06-08T02:25:31.075272Z"
+    },
+    {
+      "id": "event-f15544a1",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "redis-cluster",
       "message": "Deployment on merchant-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T22:36:38.277870Z"
     },
     {
       "id": "event-4f75e814",
+=======
+      "timestamp": "2026-06-07T22:35:31.075272Z"
+    },
+    {
+      "id": "event-3099da41",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "kubernetes",
       "entity_id": "notification-service",
       "message": "Config Change on settlement-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:04:38.277870Z"
     },
     {
       "id": "event-7f2442ac",
+=======
+      "timestamp": "2026-06-07T14:03:31.075272Z"
+    },
+    {
+      "id": "event-02102fee",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "cassandra-cluster",
       "message": "Failover on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:29:38.277870Z"
     },
     {
       "id": "event-763e52a4",
+=======
+      "timestamp": "2026-06-07T23:28:31.075272Z"
+    },
+    {
+      "id": "event-c8ae506b",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "webhook-handler",
       "message": "Scale Event on auth-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T04:02:38.277870Z"
     },
     {
       "id": "event-36d38f5e",
+=======
+      "timestamp": "2026-06-07T04:01:31.075272Z"
+    },
+    {
+      "id": "event-c648670f",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "audit-service",
       "message": "Failover on identity-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T23:32:38.277870Z"
     },
     {
       "id": "event-1f24c9d0",
+=======
+      "timestamp": "2026-06-06T23:31:31.075272Z"
+    },
+    {
+      "id": "event-e5155dbb",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "merchant-api",
       "message": "Config Change on rate-limiter",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T09:23:38.277870Z"
     },
     {
       "id": "event-ab3cf7d5",
+=======
+      "timestamp": "2026-06-07T09:22:31.075272Z"
+    },
+    {
+      "id": "event-f2d0b306",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "customer-service",
       "message": "Restart on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T00:35:38.277870Z"
     },
     {
       "id": "event-b73d2900",
+=======
+      "timestamp": "2026-06-08T00:34:31.075272Z"
+    },
+    {
+      "id": "event-a3e6c5b1",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "reconciliation-service",
       "message": "Failover on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T11:26:38.277870Z"
     },
     {
       "id": "event-080b4677",
+=======
+      "timestamp": "2026-06-06T11:25:31.075272Z"
+    },
+    {
+      "id": "event-86ead848",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "kubernetes",
       "entity_id": "ml-scoring-service",
       "message": "Scale Event on token-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T22:41:38.277870Z"
     },
     {
       "id": "event-208a1ad0",
+=======
+      "timestamp": "2026-06-06T22:40:31.075272Z"
+    },
+    {
+      "id": "event-268b2e7d",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "webhook-handler",
       "message": "Config Change on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T04:23:38.277870Z"
     },
     {
       "id": "event-592b3909",
+=======
+      "timestamp": "2026-06-07T04:22:31.075272Z"
+    },
+    {
+      "id": "event-fea9d5cb",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "internal",
       "entity_id": "auth-service",
       "message": "Health Check on ml-scoring-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:42:38.277870Z"
     },
     {
       "id": "event-c9b9afaa",
+=======
+      "timestamp": "2026-06-07T23:41:31.075272Z"
+    },
+    {
+      "id": "event-810adbb7",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "cassandra-cluster",
       "message": "Config Change on notification-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T11:32:38.277870Z"
     },
     {
       "id": "event-b5e89a0e",
+=======
+      "timestamp": "2026-06-06T11:31:31.075272Z"
+    },
+    {
+      "id": "event-05d4530c",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "webhook-handler",
       "message": "Config Change on api-gateway",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T21:59:38.277870Z"
     },
     {
       "id": "event-5f8a68ed",
+=======
+      "timestamp": "2026-06-06T21:58:31.075272Z"
+    },
+    {
+      "id": "event-ef1f68f1",
+>>>>>>> origin/main
       "type": "restart",
       "source": "vmware",
       "entity_id": "token-service",
       "message": "Failover on webhook-handler",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T20:51:38.277870Z"
     },
     {
       "id": "event-015d22c1",
+=======
+      "timestamp": "2026-06-06T20:50:31.075272Z"
+    },
+    {
+      "id": "event-8d191dbb",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "rate-limiter",
       "message": "Health Check on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T13:25:38.277870Z"
     },
     {
       "id": "event-e2a812c1",
+=======
+      "timestamp": "2026-06-07T13:24:31.075272Z"
+    },
+    {
+      "id": "event-d73d44d1",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "redis-cluster",
       "message": "Config Change on notification-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:24:38.277870Z"
     },
     {
       "id": "event-dca511db",
+=======
+      "timestamp": "2026-06-08T01:23:31.075272Z"
+    },
+    {
+      "id": "event-3aae468e",
+>>>>>>> origin/main
       "type": "restart",
       "source": "aws",
       "entity_id": "notification-service",
       "message": "Deployment on merchant-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T12:42:38.277870Z"
     },
     {
       "id": "event-d4c48a94",
+=======
+      "timestamp": "2026-06-07T12:41:31.075272Z"
+    },
+    {
+      "id": "event-9a7ff7d7",
+>>>>>>> origin/main
       "type": "restart",
       "source": "aws",
       "entity_id": "identity-service",
       "message": "Deployment on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T17:34:38.277870Z"
     },
     {
       "id": "event-0b46f056",
+=======
+      "timestamp": "2026-06-06T17:33:31.075272Z"
+    },
+    {
+      "id": "event-c5d338eb",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "partner-api",
       "message": "Health Check on notification-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T02:28:38.277870Z"
     },
     {
       "id": "event-efedbad4",
+=======
+      "timestamp": "2026-06-08T02:27:31.075272Z"
+    },
+    {
+      "id": "event-d80db73a",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "kubernetes",
       "entity_id": "rate-limiter",
       "message": "Config Change on webhook-handler",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T09:49:38.277870Z"
     },
     {
       "id": "event-fb625b07",
+=======
+      "timestamp": "2026-06-07T09:48:31.075272Z"
+    },
+    {
+      "id": "event-76955201",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "fraud-service",
       "message": "Failover on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T09:39:38.277870Z"
     },
     {
       "id": "event-af1c6814",
+=======
+      "timestamp": "2026-06-08T09:38:31.075272Z"
+    },
+    {
+      "id": "event-5cb55c03",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "audit-service",
       "message": "Health Check on partner-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T15:09:38.277870Z"
     },
     {
       "id": "event-b5507d8a",
+=======
+      "timestamp": "2026-06-06T15:08:31.075272Z"
+    },
+    {
+      "id": "event-9189ef8e",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "rate-limiter",
       "message": "Config Change on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T18:54:38.277870Z"
     },
     {
       "id": "event-ce313057",
+=======
+      "timestamp": "2026-06-06T18:53:31.075272Z"
+    },
+    {
+      "id": "event-88aa99ac",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "token-service",
       "message": "Restart on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T02:49:38.277870Z"
     },
     {
       "id": "event-017f29bd",
+=======
+      "timestamp": "2026-06-08T02:48:31.075272Z"
+    },
+    {
+      "id": "event-3cee5b23",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "rate-limiter",
       "message": "Failover on auth-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T04:57:38.277870Z"
     },
     {
       "id": "event-da1e9b01",
+=======
+      "timestamp": "2026-06-07T04:56:31.075272Z"
+    },
+    {
+      "id": "event-8b986165",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "settlement-service",
       "message": "Deployment on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T01:30:38.277870Z"
     },
     {
       "id": "event-20979c28",
+=======
+      "timestamp": "2026-06-07T01:29:31.075272Z"
+    },
+    {
+      "id": "event-4eb191c8",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "settlement-service",
       "message": "Config Change on webhook-handler",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T06:31:38.277870Z"
     },
     {
       "id": "event-94c2607b",
+=======
+      "timestamp": "2026-06-07T06:30:31.075272Z"
+    },
+    {
+      "id": "event-c1e8c494",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "merchant-api",
       "message": "Restart on audit-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T05:06:38.277870Z"
     },
     {
       "id": "event-85224e01",
+=======
+      "timestamp": "2026-06-07T05:05:31.075272Z"
+    },
+    {
+      "id": "event-2dd8455e",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "reconciliation-service",
       "message": "Scale Event on settlement-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:20:38.277870Z"
     },
     {
       "id": "event-d0bc1efa",
+=======
+      "timestamp": "2026-06-08T01:19:31.075272Z"
+    },
+    {
+      "id": "event-d9271590",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "customer-service",
       "message": "Health Check on merchant-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:57:38.277870Z"
     },
     {
       "id": "event-e0bea336",
+=======
+      "timestamp": "2026-06-08T01:56:31.075272Z"
+    },
+    {
+      "id": "event-95afcdd4",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "ml-scoring-service",
       "message": "Failover on api-gateway",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T23:18:38.277870Z"
     },
     {
       "id": "event-165f44b8",
+=======
+      "timestamp": "2026-06-07T23:17:31.075272Z"
+    },
+    {
+      "id": "event-e4b99451",
+>>>>>>> origin/main
       "type": "restart",
       "source": "aws",
       "entity_id": "fraud-service",
       "message": "Restart on reconciliation-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T02:29:38.277870Z"
     },
     {
       "id": "event-fc860b08",
+=======
+      "timestamp": "2026-06-08T02:28:31.075272Z"
+    },
+    {
+      "id": "event-8095a135",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "partner-api",
       "message": "Deployment on merchant-api",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:58:38.277870Z"
     },
     {
       "id": "event-26521485",
+=======
+      "timestamp": "2026-06-08T01:57:31.075272Z"
+    },
+    {
+      "id": "event-fe1e09f1",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "aws",
       "entity_id": "rate-limiter",
       "message": "Config Change on customer-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T08:06:38.277870Z"
     },
     {
       "id": "event-e84ccea6",
+=======
+      "timestamp": "2026-06-08T08:05:31.075272Z"
+    },
+    {
+      "id": "event-013b2ba7",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "reconciliation-service",
       "message": "Deployment on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T14:39:38.277870Z"
     },
     {
       "id": "event-e7f23ced",
+=======
+      "timestamp": "2026-06-07T14:38:31.075272Z"
+    },
+    {
+      "id": "event-8fbe69d8",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "postgres-cluster",
       "message": "Deployment on auth-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T10:12:38.277870Z"
     },
     {
       "id": "event-730293f3",
+=======
+      "timestamp": "2026-06-07T10:11:31.075272Z"
+    },
+    {
+      "id": "event-64e7dfa8",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "reconciliation-service",
       "message": "Failover on partner-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T19:23:38.277870Z"
     },
     {
       "id": "event-121f982b",
+=======
+      "timestamp": "2026-06-06T19:22:31.075272Z"
+    },
+    {
+      "id": "event-5be896f4",
+>>>>>>> origin/main
       "type": "failover",
       "source": "aws",
       "entity_id": "token-service",
       "message": "Failover on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T16:40:38.277870Z"
     },
     {
       "id": "event-cf2c6fe5",
+=======
+      "timestamp": "2026-06-06T16:39:31.075272Z"
+    },
+    {
+      "id": "event-501c3bca",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "cassandra-cluster",
       "message": "Health Check on audit-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T12:28:38.277870Z"
     },
     {
       "id": "event-a8082c4e",
+=======
+      "timestamp": "2026-06-06T12:27:31.075272Z"
+    },
+    {
+      "id": "event-73c12bcf",
+>>>>>>> origin/main
       "type": "failover",
       "source": "vmware",
       "entity_id": "webhook-handler",
       "message": "Deployment on token-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T12:39:38.277870Z"
     },
     {
       "id": "event-08b17358",
+=======
+      "timestamp": "2026-06-06T12:38:31.075272Z"
+    },
+    {
+      "id": "event-f758a796",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "token-service",
       "message": "Scale Event on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T10:52:38.277870Z"
     },
     {
       "id": "event-faa92736",
+=======
+      "timestamp": "2026-06-07T10:51:31.075272Z"
+    },
+    {
+      "id": "event-2cbd1393",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "ml-scoring-service",
       "message": "Health Check on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T03:58:38.277870Z"
     },
     {
       "id": "event-016d6543",
+=======
+      "timestamp": "2026-06-08T03:57:31.075272Z"
+    },
+    {
+      "id": "event-3b4cc300",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "kubernetes",
       "entity_id": "partner-api",
       "message": "Restart on webhook-handler",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T14:03:38.277870Z"
     },
     {
       "id": "event-72afca5b",
+=======
+      "timestamp": "2026-06-06T14:02:31.075272Z"
+    },
+    {
+      "id": "event-5748eb6b",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "notification-service",
       "message": "Restart on merchant-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T06:24:38.277870Z"
     },
     {
       "id": "event-e0e46187",
+=======
+      "timestamp": "2026-06-08T06:23:31.075272Z"
+    },
+    {
+      "id": "event-9abf4590",
+>>>>>>> origin/main
       "type": "restart",
       "source": "vmware",
       "entity_id": "postgres-cluster",
       "message": "Restart on ml-scoring-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T01:48:38.277870Z"
     },
     {
       "id": "event-1004389a",
+=======
+      "timestamp": "2026-06-08T01:47:31.075272Z"
+    },
+    {
+      "id": "event-c831ea44",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "vmware",
       "entity_id": "api-gateway",
       "message": "Config Change on token-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T17:16:38.277870Z"
     },
     {
       "id": "event-96ce5e99",
+=======
+      "timestamp": "2026-06-07T17:15:31.075272Z"
+    },
+    {
+      "id": "event-10482eee",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "internal",
       "entity_id": "settlement-service",
       "message": "Restart on partner-api",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T06:35:38.277870Z"
     },
     {
       "id": "event-7a77367d",
+=======
+      "timestamp": "2026-06-07T06:34:31.075272Z"
+    },
+    {
+      "id": "event-b32d2c5c",
+>>>>>>> origin/main
       "type": "restart",
       "source": "kubernetes",
       "entity_id": "postgres-cluster",
       "message": "Deployment on identity-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T21:41:38.277870Z"
     },
     {
       "id": "event-ee3dc700",
+=======
+      "timestamp": "2026-06-07T21:40:31.075272Z"
+    },
+    {
+      "id": "event-80c1a25d",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "cassandra-cluster",
       "message": "Config Change on notification-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T03:48:38.277870Z"
     },
     {
       "id": "event-6d2961f2",
+=======
+      "timestamp": "2026-06-08T03:47:31.075272Z"
+    },
+    {
+      "id": "event-dd0f53f1",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "kubernetes",
       "entity_id": "redis-cluster",
       "message": "Scale Event on customer-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T21:32:38.277870Z"
     },
     {
       "id": "event-8b111278",
+=======
+      "timestamp": "2026-06-07T21:31:31.075272Z"
+    },
+    {
+      "id": "event-425dbdd1",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "kubernetes",
       "entity_id": "customer-service",
       "message": "Config Change on notification-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T22:27:38.277870Z"
     },
     {
       "id": "event-f3125929",
+=======
+      "timestamp": "2026-06-07T22:26:31.075272Z"
+    },
+    {
+      "id": "event-c31fd65d",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "identity-service",
       "message": "Deployment on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T13:40:38.277870Z"
     },
     {
       "id": "event-66122cf1",
+=======
+      "timestamp": "2026-06-07T13:39:31.075272Z"
+    },
+    {
+      "id": "event-70b677ec",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "webhook-handler",
       "message": "Scale Event on notification-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T16:24:38.277870Z"
     },
     {
       "id": "event-45ff5efa",
+=======
+      "timestamp": "2026-06-07T16:23:31.075272Z"
+    },
+    {
+      "id": "event-f751d3dd",
+>>>>>>> origin/main
       "type": "failover",
       "source": "kubernetes",
       "entity_id": "auth-service",
       "message": "Scale Event on fraud-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T18:00:38.277870Z"
     },
     {
       "id": "event-c067ed9e",
+=======
+      "timestamp": "2026-06-06T17:59:31.075272Z"
+    },
+    {
+      "id": "event-2548c97a",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "internal",
       "entity_id": "cassandra-cluster",
       "message": "Restart on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T15:37:38.277870Z"
     },
     {
       "id": "event-ec54bc06",
+=======
+      "timestamp": "2026-06-07T15:36:31.075272Z"
+    },
+    {
+      "id": "event-1141b659",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "ml-scoring-service",
       "message": "Restart on notification-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T00:57:38.277870Z"
     },
     {
       "id": "event-313857fa",
+=======
+      "timestamp": "2026-06-07T00:56:31.075272Z"
+    },
+    {
+      "id": "event-7be0c617",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "internal",
       "entity_id": "audit-service",
       "message": "Deployment on customer-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T18:00:38.277870Z"
     },
     {
       "id": "event-736958e8",
+=======
+      "timestamp": "2026-06-06T17:59:31.075272Z"
+    },
+    {
+      "id": "event-3a57688f",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "kubernetes",
       "entity_id": "audit-service",
       "message": "Restart on webhook-handler",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T13:13:38.277870Z"
     },
     {
       "id": "event-93879e70",
+=======
+      "timestamp": "2026-06-07T13:12:31.075272Z"
+    },
+    {
+      "id": "event-1737a698",
+>>>>>>> origin/main
       "type": "restart",
       "source": "internal",
       "entity_id": "ml-scoring-service",
       "message": "Deployment on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T23:51:38.277870Z"
     },
     {
       "id": "event-951526c3",
+=======
+      "timestamp": "2026-06-06T23:50:31.075272Z"
+    },
+    {
+      "id": "event-0c5f7632",
+>>>>>>> origin/main
       "type": "scale_event",
       "source": "vmware",
       "entity_id": "rate-limiter",
       "message": "Restart on settlement-service",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T21:19:38.277870Z"
     },
     {
       "id": "event-fe263e83",
+=======
+      "timestamp": "2026-06-06T21:18:31.075272Z"
+    },
+    {
+      "id": "event-58b8c782",
+>>>>>>> origin/main
       "type": "failover",
       "source": "internal",
       "entity_id": "auth-service",
       "message": "Deployment on reconciliation-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T15:38:38.277870Z"
     },
     {
       "id": "event-c6cb6e4e",
+=======
+      "timestamp": "2026-06-06T15:37:31.075272Z"
+    },
+    {
+      "id": "event-df9f0fa3",
+>>>>>>> origin/main
       "type": "config_change",
       "source": "vmware",
       "entity_id": "api-gateway",
       "message": "Deployment on ml-scoring-service",
       "severity": "warning",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T15:21:38.277870Z"
     },
     {
       "id": "event-5566743a",
+=======
+      "timestamp": "2026-06-07T15:20:31.075272Z"
+    },
+    {
+      "id": "event-4fa89c05",
+>>>>>>> origin/main
       "type": "restart",
       "source": "aws",
       "entity_id": "token-service",
       "message": "Config Change on reconciliation-service",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T19:29:38.277870Z"
     },
     {
       "id": "event-28df4ef3",
+=======
+      "timestamp": "2026-06-07T19:28:31.075272Z"
+    },
+    {
+      "id": "event-bb7b410e",
+>>>>>>> origin/main
       "type": "restart",
       "source": "aws",
       "entity_id": "auth-service",
       "message": "Scale Event on rate-limiter",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-06T19:34:38.277870Z"
     },
     {
       "id": "event-914284bf",
+=======
+      "timestamp": "2026-06-06T19:33:31.075272Z"
+    },
+    {
+      "id": "event-7ee4abc2",
+>>>>>>> origin/main
       "type": "deployment",
       "source": "aws",
       "entity_id": "settlement-service",
       "message": "Failover on rate-limiter",
       "severity": "info",
+<<<<<<< HEAD
       "timestamp": "2026-06-08T00:28:38.277870Z"
     },
     {
       "id": "event-7449b4a3",
+=======
+      "timestamp": "2026-06-08T00:27:31.075272Z"
+    },
+    {
+      "id": "event-4d13700d",
+>>>>>>> origin/main
       "type": "health_check",
       "source": "aws",
       "entity_id": "reconciliation-service",
       "message": "Scale Event on partner-api",
       "severity": "error",
+<<<<<<< HEAD
       "timestamp": "2026-06-07T12:17:38.277870Z"
     }
   ],
   "generated_at": "2026-06-08T10:01:38.282480Z"
+=======
+      "timestamp": "2026-06-07T12:16:31.075272Z"
+    }
+  ],
+  "generated_at": "2026-06-08T10:00:31.077557Z"
+>>>>>>> origin/main
 }

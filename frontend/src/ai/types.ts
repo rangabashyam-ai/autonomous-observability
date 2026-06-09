@@ -38,6 +38,10 @@ export interface CopilotResponse {
   model?: string;
   agent?: string;
   timestamp?: string;
+<<<<<<< HEAD
+=======
+  fallback_reason?: string;
+>>>>>>> origin/main
 }
 
 export interface AgentConfig {

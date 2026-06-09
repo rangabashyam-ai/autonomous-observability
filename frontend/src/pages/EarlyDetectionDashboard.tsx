@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
@@ -16,6 +17,11 @@ import {
 import { analyzeEarlyDetection, copilotChat } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
+=======
+import { useEffect, useMemo, useState } from 'react';
+import { analyzeEarlyDetection } from '../api/client';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+>>>>>>> origin/main
 import type { EarlyDetection } from '../types/intelligence';
 import { PageHeader } from '../components/ui';
 import { Badge } from '../components/ui/badge';
@@ -226,6 +232,29 @@ function ConfidenceRing({ value, size = 88 }: { value: number; size?: number }) 
   const offset = circumference - (value / 100) * circumference;
   const color = value >= 85 ? '#ef4444' : value >= 70 ? '#f97316' : value >= 50 ? '#eab308' : '#3b82f6';
 
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selectedDetection = detections[selectedIdx] ?? detections[0];
+
+  const copilotContext = useMemo(() => {
+    if (!selectedDetection) return null;
+    return {
+      pageType: 'prediction' as const,
+      selectedEntity: selectedDetection.pattern_id,
+      entityData: {
+        prediction: selectedDetection.expected_impacted_service,
+        confidence: selectedDetection.confidence,
+        estimated_time_to_outage: `${selectedDetection.estimated_time_to_incident_minutes} minutes`,
+        evidence: selectedDetection.matched_alerts,
+        related_patterns: selectedDetection.expected_symptoms,
+        occurrence_count: selectedDetection.occurrence_count_historical,
+      },
+      relatedAlerts: selectedDetection.matched_alerts,
+      analysisResults: { ...selectedDetection } as Record<string, unknown>,
+    };
+  }, [selectedDetection]);
+
+  useRegisterCopilotContext(copilotContext);
+
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -342,6 +371,7 @@ function AiSuggestionsBlock({
           <Sparkles className="h-4 w-4 text-primary" />
           <h4 className="text-sm font-semibold text-text-primary">AI Assistant</h4>
         </div>
+<<<<<<< HEAD
         <button
           type="button"
           onClick={onAskAi}
@@ -385,6 +415,21 @@ function AiSuggestionsBlock({
                   {entry.content}
                 </p>
               ) : (
+=======
+      ) : (
+        <div className="space-y-4">
+          {detections.map((d, idx) => (
+            <div
+              key={d.pattern_id}
+              onClick={() => setSelectedIdx(idx)}
+              className={`p-5 rounded-xl cursor-pointer transition-colors ${
+                selectedIdx === idx
+                  ? 'bg-red-100 dark:bg-red-950/40 border-2 border-red-500/50'
+                  : 'bg-red-50 dark:bg-red-950/20 border border-red-500/30 hover:border-red-500/50'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-4">
+>>>>>>> origin/main
                 <div>
                   <p className="font-medium text-text-primary mb-1 flex items-center gap-1.5">
                     <Bot className="h-3.5 w-3.5 text-primary" />

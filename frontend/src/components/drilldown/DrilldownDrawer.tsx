@@ -130,12 +130,15 @@ export function DrilldownSection({ title, children, icon }: { title: string; chi
   );
 }
 
-export function DrilldownMetricCard({ label, value, unit, trend, status }: {
+import { cn } from '../../lib/cn';
+
+export function DrilldownMetricCard({ label, value, unit, trend, status, onClick }: {
   label: string;
   value: number | string;
   unit?: string;
   trend?: 'up' | 'down' | 'stable';
   status?: 'good' | 'warning' | 'critical';
+  onClick?: () => void;
 }) {
   const statusColors = {
     good: 'text-green-600 dark:text-green-400',
@@ -150,7 +153,13 @@ export function DrilldownMetricCard({ label, value, unit, trend, status }: {
   };
 
   return (
-    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+    <div
+      className={cn(
+        "p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors duration-150",
+        onClick && "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:shadow-sm"
+      )}
+      onClick={onClick}
+    >
       <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">{label}</p>
       <div className="flex items-baseline gap-2">
         <p className={`text-2xl font-bold ${status ? statusColors[status] : 'text-slate-900 dark:text-white'}`}>

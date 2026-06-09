@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getMonitoringDashboard, getOverview } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Overview } from '../types/intelligence';
@@ -10,11 +10,15 @@ import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
 import { generateDualTrend, generateTrend, TrendChart, MiniAreaChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Activity, ShieldAlert, AlertTriangle, TrendingUp, Users, Zap, ExternalLink } from 'lucide-react';
+import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
+import InlineCopilot from '../components/copilot/InlineCopilot';
 
 export default function ExecutiveCommandCenter() {
+  const navigate = useNavigate();
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<'health' | 'revenue' | 'incidents' | 'sla' | 'customers' | null>(null);
 
   useEffect(() => {
     Promise.all([getMonitoringDashboard(), getOverview()])
@@ -106,6 +110,7 @@ export default function ExecutiveCommandCenter() {
             variant={businessHealth >= 95 ? 'success' : businessHealth >= 85 ? 'warning' : 'critical'}
             sub="Composite SLA + availability"
             trend={1.2}
+            onClick={() => setActiveDrawer('health')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-2">
@@ -115,6 +120,7 @@ export default function ExecutiveCommandCenter() {
             variant="critical"
             sub="Estimated 24h exposure"
             trend={-3.4}
+            onClick={() => setActiveDrawer('revenue')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-2">
@@ -123,6 +129,7 @@ export default function ExecutiveCommandCenter() {
             value={exec!.active_incidents}
             variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
             sub={`${overview.summary.open_alerts} open alerts`}
+            onClick={() => setActiveDrawer('incidents')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -132,6 +139,7 @@ export default function ExecutiveCommandCenter() {
             variant="success"
             sub="Rolling 30-day window"
             trend={0.08}
+            onClick={() => setActiveDrawer('sla')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -140,6 +148,7 @@ export default function ExecutiveCommandCenter() {
             value={exec!.customer_impact_count.toLocaleString()}
             variant={exec!.customer_impact_count > 50 ? 'warning' : 'default'}
             sub="Across all active incidents"
+            onClick={() => setActiveDrawer('customers')}
           />
         </div>
       </Grid12>
@@ -166,7 +175,7 @@ export default function ExecutiveCommandCenter() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-4">
+          <div className="col-span-12 lg:col-span-4" id="business-impact-trends-section">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>Business Impact Trends</CardTitle>
@@ -182,7 +191,7 @@ export default function ExecutiveCommandCenter() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3">
+          <div className="col-span-12 lg:col-span-3" id="revenue-risk-section">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>Revenue Risk Timeline</CardTitle>
@@ -196,79 +205,501 @@ export default function ExecutiveCommandCenter() {
         </Grid12>
       </CollapsibleSection>
 
-      <CollapsibleSection
-        title="Global Operations"
-        description="Service status, regional health, and KPI trends"
-        className="mt-6"
-      >
-        <Grid12>
-          <div className="col-span-12 lg:col-span-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Global Service Status</CardTitle>
-                <Link to="/operations" className="text-xs text-primary hover:underline">
-                  Details →
-                </Link>
-              </CardHeader>
-              <div className="space-y-3">
-                {services.slice(0, 6).map((svc) => (
-                  <div key={svc.id} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-text-primary truncate">{svc.name}</p>
-                      <UtilizationBar label="" value={svc.availability} max={100} />
+      <div id="global-operations-section">
+        <CollapsibleSection
+          title="Global Operations"
+          description="Service status, regional health, and KPI trends"
+          className="mt-6"
+        >
+          <Grid12>
+            <div className="col-span-12 lg:col-span-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Global Service Status</CardTitle>
+                  <Link to="/operations" className="text-xs text-primary hover:underline">
+                    Details →
+                  </Link>
+                </CardHeader>
+                <div className="space-y-3">
+                  {services.slice(0, 6).map((svc) => (
+                    <div key={svc.id} className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-text-primary truncate">{svc.name}</p>
+                        <UtilizationBar label="" value={svc.availability} max={100} />
+                      </div>
+                      <HealthBadge health={svc.health} />
                     </div>
-                    <HealthBadge health={svc.health} />
+                  ))}
+                </div>
+              </Card>
+            </div>
+            <div className="col-span-12 lg:col-span-4">
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle>Regional Health Map</CardTitle>
+                </CardHeader>
+                <RegionalHealthMap className="h-[180px]" />
+                <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-success" /> Healthy
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-warning" /> Warning
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-critical" /> Critical
+                  </span>
+                </div>
+              </Card>
+            </div>
+            <div className="col-span-12 lg:col-span-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Business KPI Trends</CardTitle>
+                </CardHeader>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Transaction Volume', value: services.reduce((a, s) => a + s.transaction_volume, 0) },
+                    { label: 'Success Rate', value: `${exec!.transaction_success_rate.toFixed(1)}%` },
+                    { label: 'Services at Risk', value: exec!.services_at_risk, alert: true },
+                    { label: 'Early Warnings', value: overview.summary.early_warnings, alert: overview.summary.early_warnings > 0 },
+                  ].map((kpi) => (
+                    <div
+                      key={kpi.label}
+                      className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-card-hover"
+                    >
+                      <p className="text-[10px] text-text-secondary">{kpi.label}</p>
+                      <p className={`text-lg font-semibold mt-1 ${kpi.alert ? 'text-critical' : 'text-text-primary'}`}>
+                        {typeof kpi.value === 'number' ? kpi.value.toLocaleString() : kpi.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          </Grid12>
+        </CollapsibleSection>
+      </div>
+
+      {/* Drilldown Drawer for Executive Metrics */}
+      <DrilldownDrawer
+        isOpen={activeDrawer !== null}
+        onClose={() => setActiveDrawer(null)}
+        title={
+          activeDrawer === 'health' ? 'Business Health Score' :
+          activeDrawer === 'revenue' ? 'Revenue at Risk' :
+          activeDrawer === 'incidents' ? 'Active Incidents' :
+          activeDrawer === 'sla' ? 'SLA Compliance' :
+          activeDrawer === 'customers' ? 'Customers Impacted' : ''
+        }
+        subtitle={
+          activeDrawer === 'health' ? 'Overall operational health score' :
+          activeDrawer === 'revenue' ? 'Estimated financial exposure due to operational issues' :
+          activeDrawer === 'incidents' ? 'Current operational incidents requiring mitigation' :
+          activeDrawer === 'sla' ? 'Rolling 30-day compliance targets and trends' :
+          activeDrawer === 'customers' ? 'Estimated users affected by active incidents' : ''
+        }
+        type={
+          activeDrawer === 'incidents' || activeDrawer === 'customers' ? 'incident' :
+          activeDrawer === 'revenue' || activeDrawer === 'sla' ? 'api' : 'service'
+        }
+        health={
+          activeDrawer === 'health' ? (businessHealth >= 95 ? 'healthy' : businessHealth >= 85 ? 'warning' : 'critical') :
+          activeDrawer === 'revenue' ? (exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'healthy') :
+          activeDrawer === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') :
+          activeDrawer === 'sla' ? (exec!.sla_compliance >= 99.5 ? 'healthy' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical') :
+          activeDrawer === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
+        }
+      >
+        {activeDrawer === 'health' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Service Availability"
+                value={`${exec!.service_availability.toFixed(2)}%`}
+                status={exec!.service_availability >= 99.9 ? 'good' : exec!.service_availability >= 99.0 ? 'warning' : 'critical'}
+              />
+              <DrilldownMetricCard
+                label="Transaction Success Rate"
+                value={`${exec!.transaction_success_rate.toFixed(2)}%`}
+                status={exec!.transaction_success_rate >= 99.0 ? 'good' : 'warning'}
+              />
+              <DrilldownMetricCard
+                label="SLA Compliance"
+                value={`${exec!.sla_compliance.toFixed(2)}%`}
+                status={exec!.sla_compliance >= 99.0 ? 'good' : 'warning'}
+              />
+              <DrilldownMetricCard
+                label="Services at Risk"
+                value={exec!.services_at_risk}
+                status={exec!.services_at_risk === 0 ? 'good' : 'critical'}
+                onClick={() => {
+                  document.getElementById('health-degraded-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+            </div>
+            
+            <div id="health-degraded-section">
+              <DrilldownSection title="Degraded Services" icon={<Activity className="w-4 h-4" />}>
+                {services.filter(s => s.health !== 'healthy').length === 0 ? (
+                  <p className="text-xs text-text-secondary">All services are currently healthy.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {services.filter(s => s.health !== 'healthy').map(s => (
+                      <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{s.name}</p>
+                          <p className="text-[10px] text-text-secondary">Latency: {s.latency_p99_ms.toFixed(1)}ms · Error Rate: {s.error_rate.toFixed(2)}%</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <HealthBadge health={s.health} />
+                          <Link to={`/services/${s.id}`} className="p-1 hover:bg-card-hover rounded font-semibold text-primary" title="View details">
+                            <ExternalLink className="w-4 h-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
+                )}
+              </DrilldownSection>
+            </div>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity="Business Health Score"
+                entityData={{
+                  business_health_score: businessHealth,
+                  service_availability: exec!.service_availability,
+                  transaction_success_rate: exec!.transaction_success_rate,
+                  sla_compliance: exec!.sla_compliance,
+                  services_at_risk: exec!.services_at_risk,
+                  degraded_services: services.filter(s => s.health !== 'healthy').map(s => ({ id: s.id, name: s.name, health: s.health, latency: s.latency_p99_ms, error_rate: s.error_rate })),
+                }}
+                relatedMetrics={{
+                  business_health: businessHealth,
+                  transaction_success_rate: exec!.transaction_success_rate,
+                  service_availability: exec!.service_availability,
+                }}
+                suggestedQuestions={[
+                  "Why is the Business Health Score at this level?",
+                  "Which service degradation is impacting availability the most?",
+                  "How is the score calculated?"
+                ]}
+              />
+            </div>
           </div>
-          <div className="col-span-12 lg:col-span-4">
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle>Regional Health Map</CardTitle>
-              </CardHeader>
-              <RegionalHealthMap className="h-[180px]" />
-              <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-success" /> Healthy
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-warning" /> Warning
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-critical" /> Critical
-                </span>
-              </div>
-            </Card>
-          </div>
-          <div className="col-span-12 lg:col-span-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Business KPI Trends</CardTitle>
-              </CardHeader>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Transaction Volume', value: services.reduce((a, s) => a + s.transaction_volume, 0) },
-                  { label: 'Success Rate', value: `${exec!.transaction_success_rate.toFixed(1)}%` },
-                  { label: 'Services at Risk', value: exec!.services_at_risk, alert: true },
-                  { label: 'Early Warnings', value: overview.summary.early_warnings, alert: overview.summary.early_warnings > 0 },
-                ].map((kpi) => (
-                  <div
-                    key={kpi.label}
-                    className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-card-hover"
-                  >
-                    <p className="text-[10px] text-text-secondary">{kpi.label}</p>
-                    <p className={`text-lg font-semibold mt-1 ${kpi.alert ? 'text-critical' : 'text-text-primary'}`}>
-                      {typeof kpi.value === 'number' ? kpi.value.toLocaleString() : kpi.value}
-                    </p>
+        )}
+
+        {activeDrawer === 'revenue' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Estimated 24h Exposure"
+                value={`$${exec!.revenue_impact_usd.toLocaleString()}`}
+                status={exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Services Contributing"
+                value={services.filter(s => s.health !== 'healthy').length}
+                status={services.filter(s => s.health !== 'healthy').length > 0 ? 'warning' : 'good'}
+                onClick={() => {
+                  document.getElementById('revenue-breakdown-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+            </div>
+
+            <div id="revenue-breakdown-section">
+              <DrilldownSection title="Estimated Revenue Risk Breakdown" icon={<Zap className="w-4 h-4" />}>
+                {services.filter(s => s.health !== 'healthy').length === 0 ? (
+                  <p className="text-xs text-text-secondary">No active service risks impacting revenue.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {(() => {
+                      const degraded = services.filter(s => s.health !== 'healthy');
+                      const totalWeight = degraded.reduce((acc, s) => acc + (s.health === 'critical' ? 3 : 1), 0);
+                      return degraded.map((s) => {
+                        const weight = s.health === 'critical' ? 3 : 1;
+                        const pct = totalWeight > 0 ? weight / totalWeight : 0;
+                        const allocated = Math.round(exec!.revenue_impact_usd * pct);
+                        return (
+                          <div key={s.id} className="p-3 rounded-lg border border-border bg-background">
+                            <div className="flex justify-between items-start mb-1">
+                              <div>
+                                <p className="text-sm font-semibold text-text-primary">{s.name}</p>
+                                <p className="text-[10px] text-text-secondary">Health: <span className={s.health === 'critical' ? 'text-critical font-medium' : 'text-warning font-medium'}>{s.health}</span></p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-critical">${allocated.toLocaleString()}</p>
+                                <p className="text-[10px] text-text-secondary">~{Math.round(pct * 100)}% share</p>
+                              </div>
+                            </div>
+                            <div className="w-full bg-border rounded-full h-1.5 mt-2">
+                              <div className="bg-critical h-1.5 rounded-full" style={{ width: `${Math.round(pct * 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
-                ))}
-              </div>
-            </Card>
+                )}
+              </DrilldownSection>
+            </div>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity="Revenue at Risk"
+                entityData={{
+                  revenue_at_risk: exec!.revenue_impact_usd,
+                  contributors: services.filter(s => s.health !== 'healthy').map(s => {
+                    const degraded = services.filter(s2 => s2.health !== 'healthy');
+                    const totalWeight = degraded.reduce((acc, s2) => acc + (s2.health === 'critical' ? 3 : 1), 0);
+                    const weight = s.health === 'critical' ? 3 : 1;
+                    const pct = totalWeight > 0 ? weight / totalWeight : 0;
+                    return {
+                      id: s.id,
+                      name: s.name,
+                      health: s.health,
+                      allocated_risk: Math.round(exec!.revenue_impact_usd * pct)
+                    };
+                  })
+                }}
+                relatedMetrics={{
+                  revenue_risk: exec!.revenue_impact_usd,
+                  active_incidents: exec!.active_incidents,
+                }}
+                suggestedQuestions={[
+                  "How is the revenue exposure calculated?",
+                  "Which service causes the highest financial risk?",
+                  "What mitigation steps will reduce this risk?"
+                ]}
+              />
+            </div>
           </div>
-        </Grid12>
-      </CollapsibleSection>
+        )}
+
+        {activeDrawer === 'incidents' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Active Incidents"
+                value={exec!.active_incidents}
+                status={exec!.active_incidents > 0 ? 'critical' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Open Alerts"
+                value={overview.summary.open_alerts}
+                status={overview.summary.open_alerts > 0 ? 'warning' : 'good'}
+                onClick={() => {
+                  document.getElementById('active-incidents-list-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+            </div>
+
+            <div id="active-incidents-list-section">
+              <DrilldownSection title="Active Incidents List" icon={<ShieldAlert className="w-4 h-4" />}>
+                {overview.recent_incidents.slice(0, exec!.active_incidents).length === 0 ? (
+                  <p className="text-xs text-text-secondary">No active incidents found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {overview.recent_incidents.slice(0, exec!.active_incidents).map(inc => (
+                      <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-critical/30 bg-critical/10 text-critical`}>
+                            {inc.severity}
+                          </span>
+                          <span className="text-[10px] text-text-secondary">{inc.service}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
+                        <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
+                        <div className="flex gap-2">
+                          <DrilldownButton onClick={() => navigate(`/rca?id=${inc.incident_id}`)} variant="primary">
+                            View RCA
+                          </DrilldownButton>
+                          <DrilldownButton onClick={() => navigate(`/blast-radius?id=${inc.incident_id}`)} variant="secondary">
+                            Blast Radius
+                          </DrilldownButton>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DrilldownSection>
+            </div>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity="Active Incidents"
+                entityData={{
+                  active_incidents_count: exec!.active_incidents,
+                  incidents: overview.recent_incidents.slice(0, exec!.active_incidents),
+                }}
+                relatedIncidents={overview.recent_incidents.slice(0, exec!.active_incidents)}
+                suggestedQuestions={[
+                  "Can you explain the root cause of these active incidents?",
+                  "What is the estimated time to resolution?",
+                  "Are there correlated alerts for these incidents?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeDrawer === 'sla' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Rolling 30d Compliance"
+                value={`${exec!.sla_compliance.toFixed(2)}%`}
+                status={exec!.sla_compliance >= 99.5 ? 'good' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical'}
+                onClick={() => {
+                  document.getElementById('service-sla-standings-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+              <DrilldownMetricCard
+                label="Target SLA"
+                value="99.90%"
+                status="good"
+              />
+            </div>
+
+            <div id="service-sla-standings-section">
+              <DrilldownSection title="Service SLA Standings" icon={<TrendingUp className="w-4 h-4" />}>
+                <div className="space-y-3">
+                  {[...services]
+                    .sort((a, b) => a.availability - b.availability)
+                    .map(s => (
+                      <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{s.name}</p>
+                          <p className="text-[10px] text-text-secondary">Uptime Availability</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${s.availability >= 99.9 ? 'text-success' : s.availability >= 99.5 ? 'text-warning' : 'text-critical'}`}>
+                            {s.availability.toFixed(2)}%
+                          </p>
+                          <span className={`text-[9px] px-1 rounded font-medium ${s.availability >= 99.9 ? 'bg-success/10 text-success' : 'bg-critical/10 text-critical'}`}>
+                            {s.availability >= 99.9 ? 'COMPLIANT' : 'VIOLATION'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </DrilldownSection>
+            </div>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity="SLA Compliance"
+                entityData={{
+                  sla_compliance: exec!.sla_compliance,
+                  service_slas: services.map(s => ({ name: s.name, availability: s.availability, compliant: s.availability >= 99.9 }))
+                }}
+                relatedMetrics={{
+                  sla_compliance: exec!.sla_compliance,
+                  service_availability: exec!.service_availability
+                }}
+                suggestedQuestions={[
+                  "Which service is the main contributor to SLA violations?",
+                  "How does the rolling 30-day window work?",
+                  "Is the Gateway service meeting its uptime target?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeDrawer === 'customers' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Total Customers Affected"
+                value={exec!.customer_impact_count.toLocaleString()}
+                status={exec!.customer_impact_count > 50 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Active Incidents"
+                value={exec!.active_incidents}
+                status={exec!.active_incidents > 0 ? 'critical' : 'good'}
+                onClick={() => {
+                  document.getElementById('customer-impact-breakdown-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+            </div>
+
+            <div id="customer-impact-breakdown-section">
+              <DrilldownSection title="Impact Breakdown per Incident" icon={<Users className="w-4 h-4" />}>
+                {(() => {
+                  const activeIncidents = overview.recent_incidents.slice(0, exec!.active_incidents);
+                  const totalImpact = exec!.customer_impact_count;
+                  return activeIncidents.length === 0 ? (
+                    <p className="text-xs text-text-secondary">No active incident impact detected.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeIncidents.map((inc, index) => {
+                        let allocated = 0;
+                        if (activeIncidents.length === 1) {
+                          allocated = totalImpact;
+                        } else if (index === 0) {
+                          allocated = Math.round(totalImpact * 0.63);
+                        } else {
+                          allocated = totalImpact - Math.round(totalImpact * 0.63);
+                        }
+                        return (
+                          <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
+                            <div className="flex justify-between items-start mb-1">
+                              <div>
+                                <p className="text-xs font-semibold text-text-secondary uppercase">{inc.severity} · {inc.service}</p>
+                                <p className="text-xs text-text-primary font-medium mt-0.5">{inc.title}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-bold text-warning">{allocated.toLocaleString()}</p>
+                                <p className="text-[9px] text-text-secondary font-medium">users affected</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </DrilldownSection>
+            </div>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity="Customers Impacted"
+                entityData={{
+                  total_customer_impact: exec!.customer_impact_count,
+                  active_incidents_count: exec!.active_incidents,
+                  breakdown: overview.recent_incidents.slice(0, exec!.active_incidents).map((inc, index) => {
+                    const activeIncidents = overview.recent_incidents.slice(0, exec!.active_incidents);
+                    const totalImpact = exec!.customer_impact_count;
+                    const allocated = activeIncidents.length === 1 ? totalImpact : index === 0 ? Math.round(totalImpact * 0.63) : totalImpact - Math.round(totalImpact * 0.63);
+                    return {
+                      incident_id: inc.incident_id,
+                      service: inc.service,
+                      title: inc.title,
+                      severity: inc.severity,
+                      allocated_impact: allocated
+                    };
+                  })
+                }}
+                relatedIncidents={overview.recent_incidents.slice(0, exec!.active_incidents)}
+                suggestedQuestions={[
+                  "Which incident affects the largest number of users?",
+                  "How is user impact calculated?",
+                  "What is the status of the Payment Authorization mitigation?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </DrilldownDrawer>
     </div>
   );
 }

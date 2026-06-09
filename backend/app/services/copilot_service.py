@@ -44,170 +44,43 @@ def _parse_structured_response(raw: str) -> dict[str, Any]:
     }
 
 
-def _as_list(value: Any) -> list[Any]:
-    if isinstance(value, list):
-        return value
-    if value:
-        return [value]
-    return []
-
-
-def _unique_strings(values: list[Any], limit: int = 5) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if isinstance(value, dict):
-            text = value.get("title") or value.get("summary") or value.get("id") or str(value)
-        else:
-            text = str(value)
-        if text and text not in seen:
-            seen.add(text)
-            result.append(text)
-        if len(result) >= limit:
-            break
-    return result
-
-
-def _first_detection_from_context(context: dict[str, Any], entity_data: dict[str, Any]) -> dict[str, Any]:
-    if isinstance(entity_data.get("threat"), dict):
-        return entity_data["threat"]
-    if isinstance(entity_data.get("detection"), dict):
-        return entity_data["detection"]
-
-    selected = context.get("selected_entity")
-    detections = context.get("analysis_results", {}).get("detections", [])
-    if isinstance(detections, list):
-        for detection in detections:
-            if not isinstance(detection, dict):
-                continue
-            if detection.get("pattern_id") == selected or detection.get("expected_impacted_service_id") == selected:
-                return detection
-        if detections and isinstance(detections[0], dict):
-            return detections[0]
-    return {}
-
-
-def _mock_prediction_response(context: dict[str, Any], question: str) -> dict[str, Any]:
-    entity_data = context.get("entity_data", {})
-    detection = _first_detection_from_context(context, entity_data)
-    q = question.lower()
-
-    service = (
-        entity_data.get("prediction")
-        or entity_data.get("service")
-        or detection.get("expected_impacted_service")
-        or detection.get("service_name")
-        or context.get("selected_entity", "this service")
-    )
-    confidence = entity_data.get("confidence", detection.get("confidence", "N/A"))
-    eta = (
-        entity_data.get("estimated_time_to_outage")
-        or entity_data.get("eta_minutes")
-        or detection.get("estimated_time_to_incident_minutes")
-        or "N/A"
-    )
-    if isinstance(eta, int | float):
-        eta = f"{eta} minutes"
-
-    actions = _unique_strings(
-        _as_list(entity_data.get("recommended_actions"))
-        + _as_list(detection.get("recommended_actions"))
-        + _as_list(context.get("analysis_results", {}).get("clearance_plan", {}).get("priority_actions")),
-        limit=5,
-    )
-    if not actions:
-        actions = ["Scale affected resources", "Review correlated alerts", "Prepare incident response"]
-
-    matched_alerts = (
-        _as_list(entity_data.get("matched_alerts_details"))
-        + _as_list(detection.get("matched_alerts_details"))
-        + _as_list(entity_data.get("evidence"))
-        + _as_list(detection.get("matched_alerts"))
-        + _as_list(context.get("related_alerts"))
-    )
-    evidence = _unique_strings(matched_alerts, limit=5)
-    coverage = detection.get("match_coverage") or entity_data.get("match_coverage") or {}
-    coverage_text = ""
-    if isinstance(coverage, dict) and coverage.get("matched") is not None:
-        coverage_text = f"Pattern coverage: {coverage.get('matched')}/{coverage.get('total')} alerts"
-
-    findings = [
-        f"Confidence: {confidence}%",
-        f"ETA to incident: {eta}",
-    ]
-    if detection.get("risk_level") or entity_data.get("risk_level"):
-        findings.append(f"Risk level: {entity_data.get('risk_level', detection.get('risk_level'))}")
-    if detection.get("progression_stage") or entity_data.get("progression_stage"):
-        findings.append(f"Progression stage: {entity_data.get('progression_stage', detection.get('progression_stage'))}")
-    if coverage_text:
-        findings.append(coverage_text)
-
-    if any(word in q for word in ["why", "elevated", "risk", "cause", "reason"]):
-        summary = (
-            f"{service} is at elevated risk because the active signals match a known precursor pattern "
-            f"with {confidence}% confidence and an ETA of {eta}."
-        )
-        return {
-            "summary": summary,
-            "findings": findings,
-            "evidence": evidence,
-            "recommended_actions": actions[:3],
-            "confidence": f"{confidence}%",
-        }
-
-    if any(word in q for word in ["playbook", "run", "remediate", "action", "fix", "intervene"]):
-        return {
-            "summary": f"Run the immediate mitigation playbook for {service}; focus on the actions that reduce load and clear the matched signals before ETA {eta}.",
-            "findings": findings,
-            "evidence": evidence,
-            "recommended_actions": actions,
-            "confidence": f"{confidence}%",
-        }
-
-    if any(word in q for word in ["defer", "safely", "wait", "ignore", "pause"]):
-        can_defer = not (
-            str(entity_data.get("risk_level", detection.get("risk_level", ""))).lower() in {"critical", "high"}
-            or str(entity_data.get("progression_stage", detection.get("progression_stage", ""))).lower() == "imminent"
-        )
-        summary = (
-            f"Do not defer the primary signals for {service}; confidence is {confidence}% and ETA is {eta}."
-            if not can_defer
-            else f"You can defer only low-severity secondary signals for {service}; keep monitoring the matched precursor alerts."
-        )
-        return {
-            "summary": summary,
-            "findings": findings,
-            "evidence": evidence,
-            "recommended_actions": actions[:3],
-            "confidence": f"{confidence}%",
-        }
-
-    if any(word in q for word in ["first", "prioritize", "priority", "highest"]):
-        return {
-            "summary": f"Prioritize {service} first because it has the strongest matched pattern, {confidence}% confidence, and ETA {eta}.",
-            "findings": findings,
-            "evidence": evidence,
-            "recommended_actions": actions[:4],
-            "confidence": f"{confidence}%",
-        }
-
-    return {
-        "summary": f"Early detection view for {service}: {confidence}% confidence with ETA {eta}. Ask about why, playbook, deferral, or priority for a focused answer.",
-        "findings": findings,
-        "evidence": evidence,
-        "recommended_actions": actions[:3],
-        "confidence": f"{confidence}%",
-    }
-
-
 def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
     """Rule-based fallback when OpenRouter is unavailable."""
     page_type = context.get("page_type", "")
     entity = context.get("selected_entity", "current context")
-    q = question.lower()
+    q = question.lower().strip()
     entity_data = context.get("entity_data", {})
     analysis = context.get("analysis_results", {})
     investigation = context.get("investigation_results", {})
+
+    # Guardrail check for stupid / unrelated questions in mock fallback
+    op_keywords = [
+        "cpu", "mem", "latency", "error", "alert", "incident", "status", "health", "metrics",
+        "pod", "node", "container", "api", "jvm", "database", "queue", "rps", "throughput",
+        "rca", "blast", "remediate", "help", "happen", "diagnose", "root cause", "failure",
+        "why", "how", "what", "detail", "usage", "performance", "avail", "warn", "critical",
+        "effect", "impact", "cause", "solve", "fix", "resolution", "remedy", "issue", "trouble", "problem"
+    ]
+    entity_words = [w.strip("-_") for w in re.split(r'[^a-zA-Z0-9]', entity.lower()) if len(w) > 2]
+    q_words = set(re.split(r'[^a-zA-Z0-9]', q))
+    pronouns = {"it", "its", "itt", "this", "them", "they"}
+    
+    is_related = (
+        not q or 
+        any(w in q for w in entity_words) or 
+        any(k in q for k in op_keywords) or
+        any(p in q_words for p in pronouns) or
+        bool(q_words.intersection({"hi", "hello", "hey", "help"}))
+    )
+    
+    if not is_related:
+        return {
+            "summary": f"I am optimized to assist only with operational and metric questions related to the selected resource: {entity}. Please ask a question related to this resource's health, metrics, alerts, or dependencies.",
+            "findings": [],
+            "evidence": [],
+            "recommended_actions": [],
+            "confidence": "0%",
+        }
 
     if any(other in q for other in ["auth-service", "merchant-service", "settlement"]):
         if entity and not any(s in entity.lower() for s in q.split()):
@@ -283,7 +156,16 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
         }
 
     if page_type == "prediction":
-        return _mock_prediction_response(context, question)
+        return {
+            "summary": f"Early detection prediction: {entity_data.get('prediction', entity)}.",
+            "findings": [
+                f"Confidence: {entity_data.get('confidence', 'N/A')}%",
+                f"ETA to outage: {entity_data.get('estimated_time_to_outage', 'N/A')}",
+            ],
+            "evidence": entity_data.get("evidence", [])[:5],
+            "recommended_actions": ["Scale affected resources", "Review correlated alerts", "Prepare incident response"],
+            "confidence": f"{entity_data.get('confidence', 70)}%",
+        }
 
     if page_type == "workflow":
         return {
@@ -348,11 +230,35 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
             result["agent"] = agent.page_type
             return result
         except Exception as exc:
-            logger.warning("OpenRouter call failed, using mock fallback: %s", exc)
+            logger.exception("OpenRouter call failed")
+            err_msg = str(exc)
+            friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your OpenRouter API key (HTTP Error 402: Payment Required). Please top up your account or configure a new key."
+            if "402" not in err_msg and "Payment Required" not in err_msg:
+                friendly_err = f"AI assistant call failed: {err_msg}"
+            
+            return {
+                "summary": friendly_err,
+                "findings": [],
+                "evidence": [],
+                "recommended_actions": [
+                  "Add credits to your OpenRouter account",
+                  "Configure a valid key in backend/.env"
+                ],
+                "confidence": "0%",
+                "model": "error-unresolved",
+                "agent": agent.page_type,
+                "timestamp": timestamp,
+            }
 
-    result = _mock_response(context, user_question or (messages[-1].get("content", "") if messages else ""))
-    result["model"] = "mock-fallback"
-    result["fallback_reason"] = "OpenRouter unavailable or insufficient credits"
-    result["timestamp"] = timestamp
-    result["agent"] = agent.page_type
-    return result
+    return {
+        "summary": "OPENROUTER_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
+        "findings": [],
+        "evidence": [],
+        "recommended_actions": [
+          "Set a valid OPENROUTER_API_KEY in backend/.env"
+        ],
+        "confidence": "0%",
+        "model": "error-unconfigured",
+        "agent": agent.page_type,
+        "timestamp": timestamp,
+    }
