@@ -8,6 +8,7 @@ interface MetricCardProps {
   trend?: number;
   variant?: 'default' | 'success' | 'warning' | 'critical';
   className?: string;
+  onClick?: () => void;
 }
 
 const valueColors = {
@@ -17,16 +18,19 @@ const valueColors = {
   critical: 'text-critical',
 };
 
-export function MetricCard({ label, value, sub, trend, variant = 'default', className }: MetricCardProps) {
+export function MetricCard({ label, value, sub, trend, variant = 'default', className, onClick }: MetricCardProps) {
   return (
     <div
       className={cn(
         'rounded-[var(--radius-card)] border border-border bg-card p-5 shadow-sm',
         'transition-colors duration-200 hover:bg-card-hover',
+        'h-[140px] flex flex-col justify-between',
+        onClick && 'cursor-pointer hover:shadow-md',
         className
       )}
+      onClick={onClick}
     >
-      <p className="text-xs font-medium text-text-secondary mb-2">{label}</p>
+      <p className="text-xs font-medium text-text-secondary">{label}</p>
       <div className="flex items-end justify-between gap-2">
         <p className={cn('text-3xl font-semibold tracking-tight', valueColors[variant])}>{value}</p>
         {trend !== undefined && (
@@ -41,7 +45,7 @@ export function MetricCard({ label, value, sub, trend, variant = 'default', clas
           </span>
         )}
       </div>
-      {sub && <p className="text-xs text-text-secondary mt-1.5">{sub}</p>}
+      {sub && <p className="text-xs text-text-secondary mt-auto">{sub}</p>}
     </div>
   );
 }

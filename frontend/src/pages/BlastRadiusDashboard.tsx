@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import ReactFlow, { Background, Controls, type Node, type Edge } from 'reactflow';
+import ReactFlow, { Background, Controls, MarkerType, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { analyzeBlastRadius, getDependencyGraph } from '../api/client';
 import type { BlastRadiusResult } from '../types/intelligence';

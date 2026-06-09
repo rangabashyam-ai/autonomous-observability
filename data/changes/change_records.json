@@ -1,38 +1,62 @@
 {
   "changes": [
     {
+<<<<<<< HEAD
+      "id": "change-aa10ae00",
+=======
       "id": "change-12749416",
+>>>>>>> origin/main
       "title": "Database migration for auth-service",
       "type": "normal",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-2",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-02T06:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-02T06:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "audit-service",
         "ml-scoring-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-62c886e7",
+=======
       "id": "change-35169388",
+>>>>>>> origin/main
       "title": "Firewall rule for ml-scoring-service",
       "type": "standard",
       "status": "scheduled",
       "risk": "medium",
       "requested_by": "engineer-10",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-23T08:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-23T08:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "ml-scoring-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-942aa915",
+=======
       "id": "change-d23ec039",
+>>>>>>> origin/main
       "title": "Firewall rule for webhook-handler",
       "type": "normal",
       "status": "completed",
       "risk": "low",
       "requested_by": "engineer-4",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-27T15:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-27T15:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "token-service",
         "settlement-service",
@@ -40,75 +64,123 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-543b3e61",
+=======
       "id": "change-0f39eae5",
+>>>>>>> origin/main
       "title": "Config update for ml-scoring-service",
       "type": "emergency",
       "status": "in_progress",
       "risk": "low",
       "requested_by": "engineer-1",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-28T23:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-28T23:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "identity-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-0a143a2a",
+=======
       "id": "change-6e308450",
+>>>>>>> origin/main
       "title": "Firewall rule for customer-service",
       "type": "emergency",
       "status": "scheduled",
       "risk": "high",
       "requested_by": "engineer-8",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-28T07:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-28T07:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "reconciliation-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-8054cb42",
+=======
       "id": "change-1bf03c3b",
+>>>>>>> origin/main
       "title": "Certificate renewal for customer-service",
       "type": "standard",
       "status": "in_progress",
       "risk": "high",
       "requested_by": "engineer-2",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-29T22:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-29T22:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "audit-service",
         "customer-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-121bdf16",
+=======
       "id": "change-25030f15",
+>>>>>>> origin/main
       "title": "Config update for reconciliation-service",
       "type": "standard",
       "status": "scheduled",
       "risk": "high",
       "requested_by": "engineer-2",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-31T20:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-31T20:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "rate-limiter"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-9eef69df",
+=======
       "id": "change-0fd44ab9",
+>>>>>>> origin/main
       "title": "Firewall rule for rate-limiter",
       "type": "standard",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-9",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-01T06:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-01T06:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "audit-service",
         "webhook-handler"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-c5be7eb5",
+=======
       "id": "change-36c09db7",
+>>>>>>> origin/main
       "title": "Config update for rate-limiter",
       "type": "emergency",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-7",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-06T06:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-06T06:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "token-service",
         "merchant-api",
@@ -116,13 +188,21 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-c61a28a7",
+=======
       "id": "change-7b008bf9",
+>>>>>>> origin/main
       "title": "Firewall rule for reconciliation-service",
       "type": "emergency",
       "status": "in_progress",
       "risk": "high",
       "requested_by": "engineer-1",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-25T21:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-25T21:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "api-gateway",
         "fraud-service",
@@ -130,49 +210,81 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-975b24e9",
+=======
       "id": "change-28160f6b",
+>>>>>>> origin/main
       "title": "Certificate renewal for reconciliation-service",
       "type": "standard",
       "status": "in_progress",
       "risk": "low",
       "requested_by": "engineer-5",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-29T09:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-29T09:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "audit-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-f9f45b98",
+=======
       "id": "change-841bcfb4",
+>>>>>>> origin/main
       "title": "Firewall rule for rate-limiter",
       "type": "normal",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-4",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-25T20:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-25T20:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "merchant-api"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-803f2bc1",
+=======
       "id": "change-c9e18292",
+>>>>>>> origin/main
       "title": "Firewall rule for api-gateway",
       "type": "normal",
       "status": "completed",
       "risk": "medium",
       "requested_by": "engineer-9",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-26T09:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-26T09:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "rate-limiter"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-ed4bfd52",
+=======
       "id": "change-47a4ac6f",
+>>>>>>> origin/main
       "title": "Firewall rule for api-gateway",
       "type": "normal",
       "status": "in_progress",
       "risk": "medium",
       "requested_by": "engineer-10",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-31T07:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-31T07:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "partner-api",
         "fraud-service",
@@ -180,51 +292,83 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-e4d18026",
+=======
       "id": "change-c2ef2263",
+>>>>>>> origin/main
       "title": "Database migration for audit-service",
       "type": "emergency",
       "status": "in_progress",
       "risk": "low",
       "requested_by": "engineer-5",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-21T11:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-21T11:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "ml-scoring-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-86b2e09b",
+=======
       "id": "change-d55b70b6",
+>>>>>>> origin/main
       "title": "Database migration for webhook-handler",
       "type": "normal",
       "status": "scheduled",
       "risk": "high",
       "requested_by": "engineer-7",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-26T15:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-26T15:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "merchant-api",
         "audit-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-91800f2b",
+=======
       "id": "change-0969485e",
+>>>>>>> origin/main
       "title": "Database migration for auth-service",
       "type": "standard",
       "status": "completed",
       "risk": "medium",
       "requested_by": "engineer-7",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-29T21:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-29T21:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "fraud-service",
         "webhook-handler"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-6c098747",
+=======
       "id": "change-aa77385c",
+>>>>>>> origin/main
       "title": "Certificate renewal for auth-service",
       "type": "standard",
       "status": "scheduled",
       "risk": "medium",
       "requested_by": "engineer-2",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-01T00:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-01T00:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "notification-service",
         "rate-limiter",
@@ -232,26 +376,42 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-cdb8d305",
+=======
       "id": "change-78d07013",
+>>>>>>> origin/main
       "title": "Certificate renewal for reconciliation-service",
       "type": "normal",
       "status": "in_progress",
       "risk": "medium",
       "requested_by": "engineer-4",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-07T19:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-07T19:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "customer-service",
         "merchant-api"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-5ecd10fc",
+=======
       "id": "change-6285560f",
+>>>>>>> origin/main
       "title": "Firewall rule for ml-scoring-service",
       "type": "normal",
       "status": "completed",
       "risk": "high",
       "requested_by": "engineer-6",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-02T20:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-02T20:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "identity-service",
         "notification-service",
@@ -259,13 +419,21 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-920a4424",
+=======
       "id": "change-27dcccd5",
+>>>>>>> origin/main
       "title": "Certificate renewal for notification-service",
       "type": "normal",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-5",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-29T01:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-29T01:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "fraud-service",
         "identity-service",
@@ -273,54 +441,90 @@
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-e2322acc",
+=======
       "id": "change-05e2b008",
+>>>>>>> origin/main
       "title": "Config update for customer-service",
       "type": "normal",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-10",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-20T17:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-20T17:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "merchant-api"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-7f5322e7",
+=======
       "id": "change-443a7fba",
+>>>>>>> origin/main
       "title": "Firewall rule for token-service",
       "type": "emergency",
       "status": "completed",
       "risk": "high",
       "requested_by": "engineer-10",
+<<<<<<< HEAD
+      "scheduled_at": "2026-06-01T09:01:38.327335Z",
+=======
       "scheduled_at": "2026-06-01T09:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "partner-api"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-020fdf7a",
+=======
       "id": "change-4a1269e7",
+>>>>>>> origin/main
       "title": "Config update for rate-limiter",
       "type": "standard",
       "status": "scheduled",
       "risk": "low",
       "requested_by": "engineer-6",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-19T22:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-19T22:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "token-service",
         "ml-scoring-service"
       ]
     },
     {
+<<<<<<< HEAD
+      "id": "change-3cf4c0ad",
+=======
       "id": "change-7e826c1b",
+>>>>>>> origin/main
       "title": "Config update for webhook-handler",
       "type": "standard",
       "status": "in_progress",
       "risk": "low",
       "requested_by": "engineer-6",
+<<<<<<< HEAD
+      "scheduled_at": "2026-05-27T23:01:38.327335Z",
+=======
       "scheduled_at": "2026-05-27T23:00:31.095523Z",
+>>>>>>> origin/main
       "affected_services": [
         "settlement-service"
       ]
     }
   ],
+<<<<<<< HEAD
+  "generated_at": "2026-06-08T10:01:40.791794Z"
+=======
   "generated_at": "2026-06-08T10:00:32.371408Z"
+>>>>>>> origin/main
 }

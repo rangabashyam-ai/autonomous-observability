@@ -79,6 +79,39 @@ def rca_analyze(req: RCARequest):
     )
 
 
+class RCAAgentRequest(BaseModel):
+    alerts: list[str]
+    symptoms: list[str]
+    service: Optional[str] = None
+    time_window_hours: int = 24
+
+
+@router.post("/rca/agent-analyze")
+def rca_agent_analyze(req: RCAAgentRequest):
+    from app.agents.rca_agent import RCAAgent
+    return RCAAgent().analyze_from_signals(
+        req.alerts,
+        req.symptoms,
+        req.service or "",
+        req.time_window_hours,
+    )
+
+
+class ReportChatRequest(BaseModel):
+    question: str
+    report_context: str
+    report_type: str
+    history: list[dict] = []
+
+
+@router.post("/agents/report-chat")
+def report_chat(req: ReportChatRequest):
+    from app.agents.report_chat_agent import answer_report_question
+    return answer_report_question(
+        req.question, req.report_context, req.report_type, req.history
+    )
+
+
 @router.post("/blast-radius/analyze")
 def blast_radius_analyze(req: BlastRadiusRequest):
     return analyze_blast_radius(
@@ -141,6 +174,8 @@ def ask_scoped_copilot(req: ScopedCopilotRequest):
         req.context_type, req.context_payload, req.question, req.history or []
     )
 
+<<<<<<< HEAD
+=======
 
 class ChatBlastRadiusRequest(BaseModel):
     service: str
@@ -153,3 +188,4 @@ def blast_radius_chat_investigate(req: ChatBlastRadiusRequest):
     from app.services.chat_blast_radius import chat_blast_radius_query
     return chat_blast_radius_query(req.service, req.question, req.history or [])
 
+>>>>>>> origin/main

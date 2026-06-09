@@ -6,24 +6,57 @@ import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
 import RelatedResourcesPanel, { IncidentContextPanel } from '../components/drilldown/RelatedResourcesPanel';
 import { DrilldownMetricCard } from '../components/drilldown/DrilldownDrawer';
+import { getMonitoringDashboard, getOverview, getDependencyGraph } from '../api/client';
+import type { ServiceMetric } from '../types/api';
+import type { Overview } from '../types/intelligence';
 
 export default function ServiceDetailPage() {
   const { serviceId } = useParams<{ serviceId: string }>();
   const navigate = useNavigate();
-  const [service, setService] = useState<any>(null);
+  const [service, setService] = useState<ServiceMetric | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [relatedServices, setRelatedServices] = useState<ServiceMetric[]>([]);
 
   useEffect(() => {
-    // Mock service data - in production, fetch from API
-    setService({
-      id: serviceId,
-      name: serviceId?.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Service',
-      health: 'warning',
-      latency_p99_ms: 103.9,
-      error_rate: 1.836,
-      throughput_rps: 4706,
-      availability: 99.837,
-      transaction_volume: 28913,
-    });
+    setLoading(true);
+    Promise.all([
+      getMonitoringDashboard(),
+      getOverview(),
+      getDependencyGraph('microservice', 'latency'),
+    ])
+      .then(([monitoring, ovr, graph]) => {
+        setOverview(ovr);
+
+        // Find the matching service from real monitoring data
+        const found = monitoring.service.services.find((s) => s.id === serviceId);
+        if (found) {
+          setService(found);
+        } else {
+          // Fallback to a constructed object if service not found by exact ID
+          setService({
+            id: serviceId || 'unknown',
+            name: serviceId?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Service',
+            health: 'warning',
+            latency_p99_ms: 103.9,
+            error_rate: 1.836,
+            throughput_rps: 4706,
+            transaction_volume: 28913,
+            availability: 99.837,
+          });
+        }
+
+        // Find related services from the dependency graph edges
+        const relatedIds = new Set<string>();
+        graph.edges.forEach((edge) => {
+          if (edge.source === serviceId) relatedIds.add(edge.target);
+          if (edge.target === serviceId) relatedIds.add(edge.source);
+        });
+        const related = monitoring.service.services.filter((s) => relatedIds.has(s.id));
+        setRelatedServices(related.slice(0, 5));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [serviceId]);
 
   const copilotContext = useMemo(() => {
@@ -40,8 +73,13 @@ export default function ServiceDetailPage() {
           error_rate: service.error_rate,
           throughput_rps: service.throughput_rps,
         },
+<<<<<<< HEAD
         upstream: ['auth-service'],
         downstream: ['postgres-cluster', 'kafka-cluster'],
+=======
+        upstream: relatedServices.filter((_, i) => i % 2 === 0).map((s) => s.id),
+        downstream: relatedServices.filter((_, i) => i % 2 !== 0).map((s) => s.id),
+>>>>>>> origin/main
         recent_deployments: [
           { version: 'v2.4.1 → v2.4.2', time: '2 hours ago', status: 'SUCCESS' },
         ],
@@ -50,6 +88,7 @@ export default function ServiceDetailPage() {
         { title: 'CPU utilization above 75%', severity: 'P3' },
         { title: 'Error rate spike detected', severity: 'P2' },
       ],
+<<<<<<< HEAD
       relatedIncidents: [
         { id: 'INC-1234', title: 'High latency on payment authorization', severity: 'P2' },
       ],
@@ -64,6 +103,29 @@ export default function ServiceDetailPage() {
 
   if (!service) {
     return <div className="p-6">Loading...</div>;
+=======
+      relatedIncidents: overview?.recent_incidents?.filter((inc) =>
+        inc.service?.toLowerCase().includes(serviceId?.toLowerCase() ?? '')
+      ).slice(0, 3) ?? [],
+      dependencyData: {
+        upstream: relatedServices.filter((_, i) => i % 2 === 0).map((s) => s.id),
+        downstream: relatedServices.filter((_, i) => i % 2 !== 0).map((s) => s.id),
+      },
+    };
+  }, [service, overview, relatedServices, serviceId]);
+
+  useRegisterCopilotContext(copilotContext);
+
+  if (loading || !service) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading service details...</p>
+        </div>
+      </div>
+    );
+>>>>>>> origin/main
   }
 
   const getHealthBadge = (health: string) => {
@@ -77,64 +139,53 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // Mock trend data
+  // Generate trend data based on real service metrics
   const latencyTrend = Array.from({ length: 24 }, (_, i) => ({
     time: `${i}:00`,
-    value: 80 + Math.random() * 40,
+    value: service.latency_p99_ms * (0.7 + Math.random() * 0.6),
   }));
 
   const errorTrend = Array.from({ length: 24 }, (_, i) => ({
     time: `${i}:00`,
-    value: 1 + Math.random() * 2,
+    value: service.error_rate * (0.5 + Math.random() * 1.0),
   }));
 
   const trafficTrend = Array.from({ length: 24 }, (_, i) => ({
     time: `${i}:00`,
-    value: 4000 + Math.random() * 1500,
+    value: service.throughput_rps * (0.7 + Math.random() * 0.6),
   }));
 
-  // Mock related resources
-  const relatedResources = [
-    {
-      id: 'postgres-cluster',
-      name: 'PostgreSQL Cluster',
-      type: 'database' as const,
-      relationship: 'downstream' as const,
-      health: 'warning' as const,
-      metrics: [
-        { label: 'Connections', value: '245/300' },
-        { label: 'Query Latency', value: '45ms' },
-      ],
-    },
-    {
-      id: 'auth-service',
-      name: 'Auth Service',
-      type: 'service' as const,
-      relationship: 'upstream' as const,
-      health: 'healthy' as const,
-      metrics: [
-        { label: 'Latency', value: '12ms' },
-        { label: 'Error Rate', value: '0.2%' },
-      ],
-    },
-    {
-      id: 'kafka-cluster',
-      name: 'Kafka Cluster',
-      type: 'infrastructure' as const,
-      relationship: 'downstream' as const,
-      health: 'healthy' as const,
-      metrics: [
-        { label: 'Throughput', value: '2.5K msg/s' },
-        { label: 'Lag', value: '120ms' },
-      ],
-    },
-  ];
+  // Build related resources from real dependency data
+  const relatedResources = relatedServices.map((rs, i) => ({
+    id: rs.id,
+    name: rs.name,
+    type: 'service' as const,
+    relationship: (i % 2 === 0 ? 'upstream' : 'downstream') as 'upstream' | 'downstream',
+    health: rs.health as 'healthy' | 'warning' | 'critical',
+    metrics: [
+      { label: 'Latency', value: `${rs.latency_p99_ms.toFixed(1)}ms` },
+      { label: 'Error Rate', value: `${rs.error_rate.toFixed(2)}%` },
+    ],
+  }));
 
-  // Mock incidents and alerts
-  const incidents = [
+  // Build incidents from real overview data
+  const serviceIncidents = overview?.recent_incidents
+    ?.filter((inc) => inc.service?.toLowerCase().includes(serviceId?.toLowerCase() ?? ''))
+    .slice(0, 3)
+    .map((inc) => ({
+      id: inc.incident_id,
+      title: inc.title,
+      severity: (inc.severity.startsWith('P') ? inc.severity : `P${inc.severity}`) as 'P1' | 'P2' | 'P3' | 'P4',
+      status: 'acknowledged' as const,
+      timestamp: 'Recent',
+      type: 'incident' as const,
+    })) ?? [];
+
+  // If no matching incidents, show generic ones
+  const incidents = serviceIncidents.length > 0 ? serviceIncidents : [
     {
       id: 'INC-1234',
-      title: 'High latency on payment authorization',
+      title: `High latency on ${service.name}`,
       severity: 'P2' as const,
       status: 'acknowledged' as const,
       timestamp: '2 hours ago',
@@ -145,7 +196,7 @@ export default function ServiceDetailPage() {
   const alerts = [
     {
       id: 'ALT-5678',
-      title: 'CPU utilization above 75%',
+      title: `CPU utilization above 75% on ${service.name}`,
       severity: 'P3' as const,
       status: 'open' as const,
       timestamp: '15 minutes ago',
@@ -153,8 +204,8 @@ export default function ServiceDetailPage() {
     },
     {
       id: 'ALT-5679',
-      title: 'Error rate spike detected',
-      severity: 'P2' as const,
+      title: `Error rate spike detected on ${service.name}`,
+      severity: service.error_rate > 1.5 ? 'P2' as const : 'P3' as const,
       status: 'acknowledged' as const,
       timestamp: '1 hour ago',
       type: 'alert' as const,
@@ -232,31 +283,31 @@ export default function ServiceDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <DrilldownMetricCard
                   label="P99 Latency"
-                  value={service.latency_p99_ms}
+                  value={service.latency_p99_ms.toFixed(1)}
                   unit="ms"
                   status={service.latency_p99_ms > 100 ? 'warning' : 'good'}
-                  trend="up"
+                  trend={service.latency_p99_ms > 100 ? 'up' : 'stable'}
                 />
                 <DrilldownMetricCard
                   label="Error Rate"
-                  value={service.error_rate}
+                  value={service.error_rate.toFixed(2)}
                   unit="%"
                   status={service.error_rate > 1.5 ? 'warning' : 'good'}
-                  trend="up"
+                  trend={service.error_rate > 1 ? 'up' : 'stable'}
                 />
                 <DrilldownMetricCard
                   label="Throughput"
-                  value={service.throughput_rps}
+                  value={service.throughput_rps.toFixed(0)}
                   unit=" RPS"
                   status="good"
                   trend="stable"
                 />
                 <DrilldownMetricCard
                   label="Availability"
-                  value={service.availability}
+                  value={service.availability.toFixed(2)}
                   unit="%"
                   status={service.availability < 99.9 ? 'warning' : 'good'}
-                  trend="down"
+                  trend={service.availability < 99.9 ? 'down' : 'stable'}
                 />
               </div>
             </section>
@@ -366,7 +417,7 @@ export default function ServiceDetailPage() {
               insights={[]}
               entityType="service"
               entityName={service.name}
-              health={service.health}
+              health={service.health as 'healthy' | 'warning' | 'critical'}
             />
 
             {/* Incidents & Alerts */}
@@ -389,10 +440,13 @@ export default function ServiceDetailPage() {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-slate-600 dark:text-slate-400">Monthly Uptime</span>
-                    <span className="font-bold text-slate-900 dark:text-white">99.87%</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{service.availability.toFixed(2)}%</span>
                   </div>
                   <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500 rounded-full" style={{ width: '99.87%' }} />
+                    <div
+                      className={`h-full rounded-full ${service.availability >= 99.9 ? 'bg-green-500' : 'bg-amber-500'}`}
+                      style={{ width: `${Math.min(service.availability, 100)}%` }}
+                    />
                   </div>
                 </div>
                 <div>
@@ -400,7 +454,15 @@ export default function ServiceDetailPage() {
                     <span className="text-slate-600 dark:text-slate-400">SLA Target</span>
                     <span className="font-bold text-slate-900 dark:text-white">99.9%</span>
                   </div>
-                  <p className="text-xs text-amber-600 dark:text-amber-400">⚠️ Below target by 0.03%</p>
+                  {service.availability < 99.9 ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      ⚠️ Below target by {(99.9 - service.availability).toFixed(2)}%
+                    </p>
+                  ) : (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      ✓ Above target by {(service.availability - 99.9).toFixed(2)}%
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -48,10 +48,39 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
     """Rule-based fallback when OpenRouter is unavailable."""
     page_type = context.get("page_type", "")
     entity = context.get("selected_entity", "current context")
-    q = question.lower()
+    q = question.lower().strip()
     entity_data = context.get("entity_data", {})
     analysis = context.get("analysis_results", {})
     investigation = context.get("investigation_results", {})
+
+    # Guardrail check for stupid / unrelated questions in mock fallback
+    op_keywords = [
+        "cpu", "mem", "latency", "error", "alert", "incident", "status", "health", "metrics",
+        "pod", "node", "container", "api", "jvm", "database", "queue", "rps", "throughput",
+        "rca", "blast", "remediate", "help", "happen", "diagnose", "root cause", "failure",
+        "why", "how", "what", "detail", "usage", "performance", "avail", "warn", "critical",
+        "effect", "impact", "cause", "solve", "fix", "resolution", "remedy", "issue", "trouble", "problem"
+    ]
+    entity_words = [w.strip("-_") for w in re.split(r'[^a-zA-Z0-9]', entity.lower()) if len(w) > 2]
+    q_words = set(re.split(r'[^a-zA-Z0-9]', q))
+    pronouns = {"it", "its", "itt", "this", "them", "they"}
+    
+    is_related = (
+        not q or 
+        any(w in q for w in entity_words) or 
+        any(k in q for k in op_keywords) or
+        any(p in q_words for p in pronouns) or
+        bool(q_words.intersection({"hi", "hello", "hey", "help"}))
+    )
+    
+    if not is_related:
+        return {
+            "summary": f"I am optimized to assist only with operational and metric questions related to the selected resource: {entity}. Please ask a question related to this resource's health, metrics, alerts, or dependencies.",
+            "findings": [],
+            "evidence": [],
+            "recommended_actions": [],
+            "confidence": "0%",
+        }
 
     if any(other in q for other in ["auth-service", "merchant-service", "settlement"]):
         if entity and not any(s in entity.lower() for s in q.split()):
@@ -201,11 +230,35 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
             result["agent"] = agent.page_type
             return result
         except Exception as exc:
-            logger.warning("OpenRouter call failed, using mock fallback: %s", exc)
+            logger.exception("OpenRouter call failed")
+            err_msg = str(exc)
+            friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your OpenRouter API key (HTTP Error 402: Payment Required). Please top up your account or configure a new key."
+            if "402" not in err_msg and "Payment Required" not in err_msg:
+                friendly_err = f"AI assistant call failed: {err_msg}"
+            
+            return {
+                "summary": friendly_err,
+                "findings": [],
+                "evidence": [],
+                "recommended_actions": [
+                  "Add credits to your OpenRouter account",
+                  "Configure a valid key in backend/.env"
+                ],
+                "confidence": "0%",
+                "model": "error-unresolved",
+                "agent": agent.page_type,
+                "timestamp": timestamp,
+            }
 
-    result = _mock_response(context, user_question or (messages[-1].get("content", "") if messages else ""))
-    result["model"] = "mock-fallback"
-    result["fallback_reason"] = "OpenRouter unavailable or insufficient credits"
-    result["timestamp"] = timestamp
-    result["agent"] = agent.page_type
-    return result
+    return {
+        "summary": "OPENROUTER_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
+        "findings": [],
+        "evidence": [],
+        "recommended_actions": [
+          "Set a valid OPENROUTER_API_KEY in backend/.env"
+        ],
+        "confidence": "0%",
+        "model": "error-unconfigured",
+        "agent": agent.page_type,
+        "timestamp": timestamp,
+    }

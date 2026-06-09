@@ -2,6 +2,7 @@ import type {
   BlastRadiusResult,
   EarlyDetection,
   Incident,
+  IncidentClickAnalysis,
   Investigation,
   KnowledgeGraph,
   Overview,
@@ -96,18 +97,33 @@ export async function getIncidents(params?: {
   severity?: string;
   service?: string;
   search?: string;
+  state?: string;
 }): Promise<{ incidents: Incident[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit', String(params.limit));
-  if (params?.offset) q.set('offset', String(params.offset));
+  if (params?.offset !== undefined) q.set('offset', String(params.offset));
   if (params?.severity) q.set('severity', params.severity);
   if (params?.service) q.set('service', params.service);
   if (params?.search) q.set('search', params.search);
+  if (params?.state) q.set('state', params.state);
   return fetchJson(`${BASE}/incidents/?${q}`);
 }
 
 export async function getIncident(id: string): Promise<Incident> {
   return fetchJson(`${BASE}/incidents/${id}`);
+}
+
+export async function getIncidentClickAnalysis(id: string): Promise<IncidentClickAnalysis> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/analysis`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeRCA(body: {
@@ -122,6 +138,52 @@ export async function analyzeRCA(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export async function analyzeRCAWithAgent(body: {
+  alerts: string[];
+  symptoms: string[];
+  service?: string;
+  time_window_hours?: number;
+}): Promise<IncidentClickAnalysis> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18000);
+  try {
+    return await fetchJson(`${BASE}/rca/agent-analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Agent analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function askReportChat(body: {
+  question: string;
+  report_context: string;
+  report_type: string;
+  history: { role: string; content: string }[];
+}): Promise<{ answer: string | null; error: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 32000);
+  try {
+    return await fetchJson(`${BASE}/agents/report-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Response timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeBlastRadius(body: {
