@@ -12,6 +12,7 @@ def _filter_incidents(
     severity: Optional[str] = None,
     service: Optional[str] = None,
     search: Optional[str] = None,
+    state: Optional[str] = None,
 ) -> list:
     if severity:
         incidents = [i for i in incidents if i.get("severity") == severity]
@@ -29,6 +30,8 @@ def _filter_incidents(
             or q in i.get("incident_id", "").lower()
             or q in i.get("root_cause", "").lower()
         ]
+    if state:
+        incidents = [i for i in incidents if i.get("state") == state]
     return incidents
 
 
@@ -39,9 +42,10 @@ def get_incidents(
     severity: Optional[str] = None,
     service: Optional[str] = None,
     search: Optional[str] = None,
+    state: Optional[str] = None,
 ):
     data = read_json("incidents/service_now_incidents.json")
-    incidents = _filter_incidents(data.get("incidents", []), severity, service, search)
+    incidents = _filter_incidents(data.get("incidents", []), severity, service, search, state)
     total = len(incidents)
     return {
         "incidents": incidents[offset: offset + limit],
@@ -81,6 +85,15 @@ def get_knowledge_graph_summary():
         "edge_count": len(data.get("edges", [])),
         "pattern_count": len(data.get("pattern_library", [])),
     }
+
+
+@router.get("/{incident_id}/analysis")
+def get_incident_analysis(incident_id: str):
+    from app.agents.incident_analysis import get_incident_click_analysis
+    result = get_incident_click_analysis(incident_id)
+    if result.get("type") == "error":
+        raise HTTPException(status_code=404, detail=result.get("error", "Not found"))
+    return result
 
 
 @router.get("/{incident_id}")

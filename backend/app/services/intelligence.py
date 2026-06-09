@@ -319,63 +319,9 @@ def _bfs_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[str
 
 
 def detect_early_failures(current_alerts: list[str] | None = None) -> dict:
-    kg = _load_knowledge_graph()
-    open_alerts = _load_alerts()
-    patterns = kg.get("pattern_library", [])
-
-    if not current_alerts:
-        # Use open alerts from monitoring as "current conditions"
-        current_alerts = list({
-            a["title"] for a in open_alerts
-            if a.get("status") in ("open", "acknowledged")
-        })[:5]
-
-    detections = []
-    current_set = {_slug(a) for a in current_alerts}
-
-    for pattern in patterns:
-        pattern_alerts = {_slug(a) for a in pattern.get("alerts", [])}
-        overlap = current_set & pattern_alerts
-        if len(overlap) >= 1:
-            match_ratio = len(overlap) / max(len(pattern_alerts), 1)
-            confidence = round(min(95, pattern.get("confidence", 0.7) * 100 * match_ratio + 20), 0)
-            svc = pattern.get("expected_service", "payment-authorization")
-            svc_name = svc.replace("-", " ").title()
-            detections.append({
-                "pattern_id": pattern["id"],
-                "status": "probable_incident_forming",
-                "confidence": int(confidence),
-                "matched_alerts": [a.replace("-", " ").title() for a in overlap],
-                "matched_alert_raw": list(overlap),
-                "expected_symptoms": pattern.get("symptoms", []),
-                "expected_impacted_service": svc_name,
-                "expected_impacted_service_id": svc,
-                "estimated_time_to_incident_minutes": pattern.get("avg_time_to_incident_minutes", 8),
-                "occurrence_count_historical": pattern.get("occurrence_count", 0),
-                "recommended_actions": [
-                    "Start evidence collection on " + svc_name,
-                    "Open proactive investigation",
-                    "Notify SRE on-call",
-                    "Prepare remediation runbook",
-                    "Review recent deployments and changes",
-                ],
-                "evidence_collection_plan": [
-                    f"Collect CPU/memory metrics for {svc}",
-                    f"Check queue depth on kafka-cluster",
-                    f"Review auth-service latency trends",
-                    "Pull recent change records (last 4 hours)",
-                    "Snapshot dependency path to postgres-cluster",
-                ],
-            })
-
-    detections.sort(key=lambda x: x["confidence"], reverse=True)
-
-    return {
-        "current_conditions": current_alerts,
-        "detections": detections[:5],
-        "total_patterns_evaluated": len(patterns),
-        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    """Delegate to the advanced dependency-aware detection engine."""
+    from app.services.early_detection import detect_early_failures_v2
+    return detect_early_failures_v2(current_alerts)
 
 
 INVESTIGATION_STEPS = [
@@ -912,4 +858,8 @@ def generate_mock_sre_response(context_type: str, context_payload: dict, questio
             
     else:
         return f"Scoped assistant: Received context type {context_type}. Please let me know how I can assist you with this payload."
+
+
+
+
 
