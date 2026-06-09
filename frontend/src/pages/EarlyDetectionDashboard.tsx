@@ -1,28 +1,9 @@
-<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  Bot,
-  Clock,
-  MessageSquare,
-  RefreshCw,
-  Send,
-  ShieldAlert,
-  Sparkles,
-  Target,
-  TrendingUp,
-  Zap,
-} from 'lucide-react';
 import { analyzeEarlyDetection, copilotChat } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
-=======
-import { useEffect, useMemo, useState } from 'react';
-import { analyzeEarlyDetection } from '../api/client';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
->>>>>>> origin/main
 import type { EarlyDetection } from '../types/intelligence';
+import { Sparkles, Bot, MessageSquare, ShieldAlert, Send, RefreshCw, AlertTriangle, Target, Zap, Clock, TrendingUp, ArrowRight } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -225,15 +206,12 @@ function formatApiError(message: string): { title: string; detail: string; hint?
   return { title: 'Failed to load detections', detail: message };
 }
 
-function ConfidenceRing({ value, size = 88 }: { value: number; size?: number }) {
+function ConfidenceRing({ value, size = 88, selectedDetection }: { value: number; size?: number; selectedDetection: DetectionExtended }) {
   const stroke = 6;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (value / 100) * circumference;
   const color = value >= 85 ? '#ef4444' : value >= 70 ? '#f97316' : value >= 50 ? '#eab308' : '#3b82f6';
-
-  const [selectedIdx, setSelectedIdx] = useState(0);
-  const selectedDetection = detections[selectedIdx] ?? detections[0];
 
   const copilotContext = useMemo(() => {
     if (!selectedDetection) return null;
@@ -371,7 +349,6 @@ function AiSuggestionsBlock({
           <Sparkles className="h-4 w-4 text-primary" />
           <h4 className="text-sm font-semibold text-text-primary">AI Assistant</h4>
         </div>
-<<<<<<< HEAD
         <button
           type="button"
           onClick={onAskAi}
@@ -415,21 +392,6 @@ function AiSuggestionsBlock({
                   {entry.content}
                 </p>
               ) : (
-=======
-      ) : (
-        <div className="space-y-4">
-          {detections.map((d, idx) => (
-            <div
-              key={d.pattern_id}
-              onClick={() => setSelectedIdx(idx)}
-              className={`p-5 rounded-xl cursor-pointer transition-colors ${
-                selectedIdx === idx
-                  ? 'bg-red-100 dark:bg-red-950/40 border-2 border-red-500/50'
-                  : 'bg-red-50 dark:bg-red-950/20 border border-red-500/30 hover:border-red-500/50'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
->>>>>>> origin/main
                 <div>
                   <p className="font-medium text-text-primary mb-1 flex items-center gap-1.5">
                     <Bot className="h-3.5 w-3.5 text-primary" />
@@ -1232,7 +1194,7 @@ export default function EarlyDetectionDashboard() {
               <Card className="overflow-hidden">
                 <div className="p-6 border-b border-border bg-gradient-to-r from-red-500/5 via-transparent to-transparent">
                   <div className="flex flex-col sm:flex-row gap-6">
-                    <ConfidenceRing value={selected.confidence} />
+                    <ConfidenceRing value={selected.confidence} selectedDetection={selected} />
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <AlertTriangle className="h-4 w-4 text-critical" />
