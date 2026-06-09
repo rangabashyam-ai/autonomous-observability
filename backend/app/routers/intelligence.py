@@ -174,6 +174,8 @@ def ask_scoped_copilot(req: ScopedCopilotRequest):
         req.context_type, req.context_payload, req.question, req.history or []
     )
 
+<<<<<<< HEAD
+=======
 
 class ChatPathRequest(BaseModel):
     service: str
@@ -186,3 +188,4 @@ def blast_radius_chat_path(req: ChatPathRequest):
     from app.services.intelligence import chat_path_query
     return chat_path_query(req.service, req.question, req.history or [])
 
+>>>>>>> origin/main

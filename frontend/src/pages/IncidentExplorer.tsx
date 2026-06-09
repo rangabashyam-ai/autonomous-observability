@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
+<<<<<<< HEAD
+import { useSearchParams } from 'react-router-dom';
+import { getIncidents, getIncident } from '../api/client';
+import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import type { Incident } from '../types/intelligence';
+=======
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getIncidents, getIncident, getIncidentClickAnalysis } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Incident, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
+>>>>>>> origin/main
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary } from '../components/ui';
 import { ReportChat } from '../components/ReportChat';
 
@@ -667,10 +674,13 @@ export default function IncidentExplorer() {
     }
   }, [searchParams]);
 
+<<<<<<< HEAD
+=======
   const hasMore = isActiveFilter ? false : incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+>>>>>>> origin/main
   const copilotContext = useMemo(() => {
     if (!selected) return null;
     return {

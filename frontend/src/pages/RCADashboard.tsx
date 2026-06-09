@@ -1,5 +1,9 @@
+<<<<<<< HEAD
+import { useMemo, useState } from 'react';
+=======
 import { useEffect, useMemo, useState } from 'react';
 import { ReportChat } from '../components/ReportChat';
+>>>>>>> origin/main
 import { Link } from 'react-router-dom';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import { Search, RefreshCw, ChevronDown, History, GitCompare, Brain, AlertCircle, CheckCircle, Clock, TrendingUp, Zap, Activity } from 'lucide-react';

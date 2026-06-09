@@ -298,6 +298,8 @@ export async function copilotChat(
   });
 }
 
+<<<<<<< HEAD
+=======
 export async function chatDependencyPath(
   service: string,
   question: string,
@@ -313,3 +315,4 @@ export async function chatDependencyPath(
   );
 }
 
+>>>>>>> origin/main

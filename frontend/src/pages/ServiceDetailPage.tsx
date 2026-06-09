@@ -73,8 +73,13 @@ export default function ServiceDetailPage() {
           error_rate: service.error_rate,
           throughput_rps: service.throughput_rps,
         },
+<<<<<<< HEAD
+        upstream: ['auth-service'],
+        downstream: ['postgres-cluster', 'kafka-cluster'],
+=======
         upstream: relatedServices.filter((_, i) => i % 2 === 0).map((s) => s.id),
         downstream: relatedServices.filter((_, i) => i % 2 !== 0).map((s) => s.id),
+>>>>>>> origin/main
         recent_deployments: [
           { version: 'v2.4.1 → v2.4.2', time: '2 hours ago', status: 'SUCCESS' },
         ],
@@ -83,6 +88,22 @@ export default function ServiceDetailPage() {
         { title: 'CPU utilization above 75%', severity: 'P3' },
         { title: 'Error rate spike detected', severity: 'P2' },
       ],
+<<<<<<< HEAD
+      relatedIncidents: [
+        { id: 'INC-1234', title: 'High latency on payment authorization', severity: 'P2' },
+      ],
+      dependencyData: {
+        upstream: ['auth-service'],
+        downstream: ['postgres-cluster', 'kafka-cluster'],
+      },
+    };
+  }, [service]);
+
+  useRegisterCopilotContext(copilotContext);
+
+  if (!service) {
+    return <div className="p-6">Loading...</div>;
+=======
       relatedIncidents: overview?.recent_incidents?.filter((inc) =>
         inc.service?.toLowerCase().includes(serviceId?.toLowerCase() ?? '')
       ).slice(0, 3) ?? [],
@@ -104,6 +125,7 @@ export default function ServiceDetailPage() {
         </div>
       </div>
     );
+>>>>>>> origin/main
   }
 
   const getHealthBadge = (health: string) => {
