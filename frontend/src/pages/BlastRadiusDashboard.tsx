@@ -41,6 +41,25 @@ export default function BlastRadiusDashboard() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(false);
   const [selection, setSelection] = useState<GraphSelection>(null);
+  const [activeModal, setActiveModal] = useState<'business_impact' | 'severity' | 'scope' | 'customers' | null>(null);
+
+  const baseServiceImpact = useMemo(() => {
+    const serviceImpactMap: Record<string, number> = {
+      'payment-authorization': 95,
+      'settlement-processing': 90,
+      'api-gateway-services': 85,
+      'fraud-detection': 75,
+      'merchant-services': 70,
+      'partner-integrations': 60,
+    };
+    return serviceImpactMap[service] ?? 50;
+  }, [service]);
+
+  const scopeModifier = useMemo(() => {
+    if (!result) return 0;
+    const isSystemic = result.issue_scope === 'systemic';
+    return isSystemic ? 20 : 0;
+  }, [result]);
 
   const applyGraphVisuals = useCallback(
     (
@@ -215,6 +234,178 @@ export default function BlastRadiusDashboard() {
 
   useRegisterCopilotContext(copilotContext);
 
+  const renderMetricModal = () => {
+    if (!activeModal || !result) return null;
+
+    let title = '';
+    let explanation = null;
+
+    const isSystemic = result.issue_scope === 'systemic';
+
+    if (activeModal === 'business_impact') {
+      title = 'Business Impact Score';
+      explanation = (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            A dynamic score out of 100 reflecting the severity of the incident based on the target service's criticality and overall failure scope.
+          </p>
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Base Service Priority ({rootLabel}):</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{baseServiceImpact} pts</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Systemic Scope Modifier:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">+{scopeModifier} pts</span>
+            </div>
+            <hr className="border-slate-200 dark:border-slate-800" />
+            <div className="flex justify-between items-center text-sm font-bold">
+              <span className="text-slate-900 dark:text-white">Calculated Score:</span>
+              <span className="text-red-600 dark:text-red-400">{result.business_impact_score} / 100</span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 italic leading-relaxed">
+            * Note: Base service impact scores are pre-assigned by SLA significance (e.g. Payment Authorization = 95, Gateway = 85). Systemic modifier (+20) is added when the propagation depth triggers systemic classification. Total score is capped at 100.
+          </div>
+        </div>
+      );
+    } else if (activeModal === 'severity') {
+      title = 'Severity Recommendation';
+      explanation = (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Automatically maps the Business Impact Score into operational priority recommendations to trigger SRE response.
+          </p>
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="space-y-2">
+              <div className={`flex justify-between items-center p-2 rounded-lg text-xs border ${result.severity_recommendation === 'P1' ? 'bg-red-50/70 border-red-300 dark:bg-red-950/30 dark:border-red-800 text-red-700 dark:text-red-400 font-bold' : 'border-transparent text-slate-600 dark:text-slate-400'}`}>
+                <span>P1 (Critical)</span>
+                <span>Impact Score ≥ 85</span>
+              </div>
+              <div className={`flex justify-between items-center p-2 rounded-lg text-xs border ${result.severity_recommendation === 'P2' ? 'bg-orange-50/70 border-orange-300 dark:bg-orange-950/30 dark:border-orange-800 text-orange-700 dark:text-orange-400 font-bold' : 'border-transparent text-slate-600 dark:text-slate-400'}`}>
+                <span>P2 (Major)</span>
+                <span>Impact Score 70 - 84</span>
+              </div>
+              <div className={`flex justify-between items-center p-2 rounded-lg text-xs border ${result.severity_recommendation === 'P3' ? 'bg-yellow-50/70 border-yellow-300 dark:bg-yellow-950/30 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400 font-bold' : 'border-transparent text-slate-600 dark:text-slate-400'}`}>
+                <span>P3 (Moderate)</span>
+                <span>Impact Score &lt; 70</span>
+              </div>
+            </div>
+            <hr className="border-slate-200 dark:border-slate-800" />
+            <div className="text-xs">
+              Current Business Impact: <span className="font-bold text-slate-850 dark:text-slate-200">{result.business_impact_score}</span> → Severity matches <span className="font-bold text-slate-850 dark:text-slate-200">{result.severity_recommendation}</span> criteria.
+            </div>
+          </div>
+        </div>
+      );
+    } else if (activeModal === 'scope') {
+      title = 'Incident Scope';
+      explanation = (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Differentiates between a localized failure zone and a wide-scale systemic outage using dependency path traversal.
+          </p>
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Suspected Origin node:</span>
+              <span className="font-mono text-slate-800 dark:text-slate-200">{result.input?.source_component ?? service}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Downstream microservices impacted:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{result.currently_impacted_services.length} services</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Includes Gateway layer:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{isSystemic ? 'Yes (Systemic Trigger)' : 'No'}</span>
+            </div>
+            <hr className="border-slate-200 dark:border-slate-800" />
+            <div className="flex justify-between items-center text-sm font-bold">
+              <span className="text-slate-900 dark:text-white">Classification:</span>
+              <span className={`uppercase ${isSystemic ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>{result.issue_scope}</span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed space-y-1">
+            <p><strong>Systemic Outage Conditions:</strong></p>
+            <ul className="list-disc list-inside">
+              <li>Outage propagates to more than 4 downstream microservices.</li>
+              <li>Or failure compromises high-level gateway router layers (e.g. `api-gateway`).</li>
+            </ul>
+          </div>
+        </div>
+      );
+    } else if (activeModal === 'customers') {
+      title = 'Customers Estimated';
+      explanation = (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Computes a baseline estimation of the number of active customer accounts experiencing degraded request patterns.
+          </p>
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Business Impact score:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{result.business_impact_score}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-555 dark:text-slate-400 font-medium">Scope Multiplier:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{isSystemic ? '50x (Systemic Multiplier)' : '10x (Localized Multiplier)'}</span>
+            </div>
+            <hr className="border-slate-200 dark:border-slate-800" />
+            <div className="flex justify-between items-center text-sm font-bold">
+              <span className="text-slate-900 dark:text-white">Estimated Affected Users:</span>
+              <span className="text-blue-600 dark:text-blue-400">{result.impacted_customers_estimate.toLocaleString()} accounts</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+            * Multiplier coefficients are calibrated to represent average transaction volumes per impact tier (Systemic outages impact multiple parallel service zones, thus utilizing a 50x multiplier).
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        {/* Backdrop overlay */}
+        <div
+          className="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm transition-opacity"
+          onClick={() => setActiveModal(null)}
+        />
+
+        {/* Modal container */}
+        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-250 dark:border-slate-700 rounded-2xl w-full max-w-md shadow-2xl relative z-10 overflow-hidden transform transition-all">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-150 dark:border-slate-750 bg-slate-50/50 dark:bg-slate-900/40">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {title} Analysis
+            </h3>
+            <button
+              onClick={() => setActiveModal(null)}
+              className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-350 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-705 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            {explanation}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end px-6 py-3.5 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-150 dark:border-slate-755">
+            <button
+              onClick={() => setActiveModal(null)}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-105 dark:bg-slate-700 text-slate-750 dark:text-slate-250 border border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <PageHeader
@@ -231,10 +422,29 @@ export default function BlastRadiusDashboard() {
       {result && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <StatCard label="Business Impact" value={result.business_impact_score} sub="/ 100" alert={result.business_impact_score >= 80} />
-            <StatCard label="Severity" value={result.severity_recommendation} />
-            <StatCard label="Scope" value={result.issue_scope} alert={result.issue_scope === 'systemic'} />
-            <StatCard label="Customers Est." value={result.impacted_customers_estimate} />
+            <StatCard
+              label="Business Impact"
+              value={result.business_impact_score}
+              sub="/ 100"
+              alert={result.business_impact_score >= 80}
+              onClick={() => setActiveModal('business_impact')}
+            />
+            <StatCard
+              label="Severity"
+              value={result.severity_recommendation}
+              onClick={() => setActiveModal('severity')}
+            />
+            <StatCard
+              label="Scope"
+              value={result.issue_scope}
+              alert={result.issue_scope === 'systemic'}
+              onClick={() => setActiveModal('scope')}
+            />
+            <StatCard
+              label="Customers Est."
+              value={result.impacted_customers_estimate.toLocaleString()}
+              onClick={() => setActiveModal('customers')}
+            />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 xl:gap-5">
@@ -343,6 +553,7 @@ export default function BlastRadiusDashboard() {
           </div>
         </>
       )}
+      {renderMetricModal()}
     </div>
   );
 }

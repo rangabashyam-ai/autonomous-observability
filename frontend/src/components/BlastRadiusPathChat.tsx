@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
-import { chatDependencyPath } from '../api/client';
+import { chatBlastRadius } from '../api/client';
 import { mutedText } from './ui';
 
 interface Props {
@@ -41,13 +41,12 @@ export default function BlastRadiusPathChat({ service }: Props) {
     setIsLoading(true);
     
     try {
-      // Build a simple chat history payload for the backend if needed
       const historyPayload = messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
       
-      const response = await chatDependencyPath(service, text, historyPayload);
+      const response = await chatBlastRadius(service, text, historyPayload);
       
       const assistantMsg: Message = {
         id: `a-${Date.now()}`,
@@ -60,7 +59,7 @@ export default function BlastRadiusPathChat({ service }: Props) {
       const errorMsg: Message = {
         id: `e-${Date.now()}`,
         role: 'assistant',
-        content: `Error checking path: ${err.message || 'Unknown error occurred'}`,
+        content: `Error investigating blast radius: ${err.message || 'Unknown error occurred'}`,
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -77,9 +76,12 @@ export default function BlastRadiusPathChat({ service }: Props) {
   };
 
   const suggestedPrompts = [
-    'Check this dependency path for errors',
-    'Identify the root cause in the path',
-    'How does failure propagate here?',
+    'Explain this blast radius',
+    'Identify the root cause',
+    'Show impact propagation',
+    'List affected services',
+    'Summarize business impact',
+    'Recommend next investigation steps',
   ];
 
   return (
@@ -90,8 +92,8 @@ export default function BlastRadiusPathChat({ service }: Props) {
             <Bot className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-900 dark:text-white">Path Diagnostics</h3>
-            <p className="text-[9px] text-slate-500 dark:text-slate-400">Trace and diagnose downstream path anomalies</p>
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white">Blast Radius Investigation</h3>
+            <p className="text-[9px] text-slate-500 dark:text-slate-400">Analyze blast propagation and downstream impact</p>
           </div>
         </div>
       </div>
@@ -101,16 +103,17 @@ export default function BlastRadiusPathChat({ service }: Props) {
           <div className="space-y-2">
             <p className={`text-[9px] font-semibold uppercase tracking-wider ${mutedText} flex items-center gap-1`}>
               <Sparkles className="w-2.5 h-2.5" />
-              Diagnose Path
+              Quick Actions
             </p>
-            <div className="flex flex-col gap-1">
+            <div className="grid grid-cols-2 gap-1.5">
               {suggestedPrompts.map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => handleSend(p)}
                   disabled={isLoading}
-                  className="text-left text-[10px] px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 hover:border-emerald-500 text-slate-750 dark:text-slate-200 transition-colors disabled:opacity-50"
+                  className="text-left text-[10px] px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 hover:border-emerald-500 hover:bg-emerald-50/10 text-slate-750 dark:text-slate-200 transition-colors disabled:opacity-50 truncate"
+                  title={p}
                 >
                   {p}
                 </button>
@@ -135,7 +138,7 @@ export default function BlastRadiusPathChat({ service }: Props) {
         {isLoading && (
           <div className={`flex items-center gap-2 text-[10px] ${mutedText}`}>
             <Loader2 className="w-3 h-3 animate-spin" />
-            Gemini is evaluating dependency path...
+            Gemini is analyzing blast radius...
           </div>
         )}
         <div ref={bottomRef} />
@@ -145,7 +148,7 @@ export default function BlastRadiusPathChat({ service }: Props) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask Gemini to diagnose this path..."
+          placeholder="Ask Gemini about this blast radius..."
           disabled={isLoading}
           className="flex-1 h-8 px-2.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
         />

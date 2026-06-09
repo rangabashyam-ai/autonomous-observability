@@ -358,8 +358,11 @@ function NodeDetail({
           <span className="text-[9px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
             {layerLabel(d.layer)}
           </span>
-          <span className="text-[9px] px-2 py-0.5 rounded font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">
-            risk {d.riskScore.toFixed(0)}
+          <span
+            className="text-[9px] px-2 py-0.5 rounded font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-help"
+            title="Failure Propagation Risk: Probability of this component degrading or propagating failure in the current incident topology"
+          >
+            Risk: {d.riskScore.toFixed(0)}%
           </span>
         </div>
       </div>
@@ -367,6 +370,14 @@ function NodeDetail({
       <div className="px-3 py-1 bg-white dark:bg-slate-800/30">
         <MiniPipeline d={d} rootId={rootId} rootLabel={rootLabel} onSelectNode={onSelectNode} />
         <DetailRow label="Current status">{d.currentImpact}</DetailRow>
+        <DetailRow label="Failure Risk Score">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-900 dark:text-white font-mono">{d.riskScore.toFixed(0)}%</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Probability of operational degradation or cascading failure propagation within the current topology
+            </span>
+          </div>
+        </DetailRow>
         <DetailRow label={d.statusLabel}>
           <span className={d.statusLabel === 'Why healthy' ? 'text-green-700 dark:text-green-300' : ''}>
             {d.statusExplanation}

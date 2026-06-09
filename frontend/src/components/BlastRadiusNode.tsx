@@ -104,8 +104,12 @@ function BlastRadiusNode({ data }: NodeProps<BlastRadiusNodeData>) {
         <div className="flex items-center justify-between mt-1.5 gap-1">
           <span className="text-[9px] text-slate-500 dark:text-slate-400 truncate">{data.type}</span>
           {!dimmed && (
-            <span className="text-[9px] font-mono font-semibold shrink-0" style={{ color: nodeStyle.border }}>
-              risk {data.riskScore.toFixed(0)}
+            <span
+              className="text-[9px] font-mono font-semibold shrink-0 cursor-help"
+              style={{ color: nodeStyle.border }}
+              title="Failure Propagation Risk: Probability of this component degrading or propagating failure in the current incident topology"
+            >
+              Risk: {data.riskScore.toFixed(0)}%
             </span>
           )}
         </div>
