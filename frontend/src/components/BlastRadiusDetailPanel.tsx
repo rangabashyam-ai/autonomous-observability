@@ -121,13 +121,15 @@ export function IncidentPropagationSummary({
   result,
   rootLabel,
   selection,
+  alerts = ['CPU Saturation', 'API Error Spike'],
+  symptoms = ['Latency Increase', 'Retry Storm'],
 }: {
   result: BlastRadiusResult;
   rootLabel: string;
   selection: Selection;
+  alerts?: string[];
+  symptoms?: string[];
 }) {
-  const alerts = result.input?.alerts || ['CPU Saturation', 'API Error Spike'];
-  const symptoms = result.input?.symptoms || ['Latency Increase', 'Retry Storm'];
   
   const selectedNode = selection?.type === 'node' ? selection.detail : null;
   const selectedEdge = selection?.type === 'edge' ? selection.detail : null;

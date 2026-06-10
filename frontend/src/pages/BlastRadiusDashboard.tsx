@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import ReactFlow, { Background, Controls, MarkerType, type Node, type Edge } from 'reactflow';
+import ReactFlow, { Background, Controls, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { analyzeBlastRadius, getDependencyGraph } from '../api/client';
 import type { BlastRadiusResult } from '../types/intelligence';
@@ -91,9 +91,9 @@ export default function BlastRadiusDashboard() {
         nodesToRender = graphData.nodes.filter(node => 
           localServices.some(ls => 
             node.id.toLowerCase() === ls.toLowerCase() ||
-            node.data.label.toLowerCase() === ls.toLowerCase() ||
+            node.label.toLowerCase() === ls.toLowerCase() ||
             node.id.toLowerCase().includes(ls.toLowerCase()) ||
-            node.data.label.toLowerCase().includes(ls.toLowerCase())
+            node.label.toLowerCase().includes(ls.toLowerCase())
           ) || node.id.toLowerCase().includes(filterRegion.toLowerCase())
         );
         const nodeIds = new Set(nodesToRender.map(n => n.id));
@@ -363,7 +363,7 @@ export default function BlastRadiusDashboard() {
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-555 dark:text-slate-400 font-medium">Suspected Origin node:</span>
-              <span className="font-mono text-slate-800 dark:text-slate-200">{result.input?.source_component ?? service}</span>
+              <span className="font-mono text-slate-800 dark:text-slate-200">{service}</span>
             </div>
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-555 dark:text-slate-400 font-medium">Downstream microservices impacted:</span>
@@ -532,9 +532,6 @@ export default function BlastRadiusDashboard() {
       Critical: '🔴',
     };
     const statusEmoji = statusEmojiMap[status] || '🟢';
-
-    const isHighlightActive = selectedRegionHighlight === rName;
-    const isFilterActive = selectedRegionFilter === rName;
 
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -811,6 +808,8 @@ export default function BlastRadiusDashboard() {
                   result={result}
                   rootLabel={rootLabel}
                   selection={selectionDetail}
+                  alerts={alerts}
+                  symptoms={symptoms}
                 />
               </div>
               
