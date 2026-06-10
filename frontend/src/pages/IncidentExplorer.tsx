@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getIncidents, getIncident, getIncidentClickAnalysis } from '../api/client';
+import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Incident, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary } from '../components/ui';
@@ -137,9 +137,11 @@ function LLMAnalysisBlock({ content, model, error }: {
 // Build compact context string from incident analysis for the chat
 // ---------------------------------------------------------------------------
 
-function buildIncidentContext(incident: Incident, analysis: IncidentClickAnalysis): string {
-  if (analysis.chat_context) return analysis.chat_context;
-
+function buildIncidentContext(
+  incident: Incident,
+  analysis: IncidentClickAnalysis,
+  changeRequests?: { tickets: TicketFlow[] } | null,
+): string {
   const lines: string[] = [
     `INCIDENT: ${incident.incident_id} — ${incident.title}`,
     `SEVERITY: ${incident.severity}  STATE: ${incident.state ?? 'Unknown'}`,
@@ -212,7 +214,30 @@ function buildIncidentContext(incident: Incident, analysis: IncidentClickAnalysi
   }
 
   if (analysis.llm_analysis) lines.push(`AI_ANALYSIS: ${analysis.llm_analysis}`);
-  return lines.join('\n');
+
+  const baseContext = analysis.chat_context ?? lines.join('\n');
+
+  if (!changeRequests?.tickets?.length) return baseContext;
+
+  const crLines: string[] = ['CHANGE_REQUESTS:'];
+  changeRequests.tickets.slice(0, 3).forEach((ticket) => {
+    const jira = ticket.jira_key ? ` (JIRA: ${ticket.jira_key})` : '';
+    crLines.push(`  TICKET: ${ticket.incident_id}${jira} | ${ticket.service} | ${ticket.incident_state} | ROOT_CAUSE: ${ticket.root_cause} | FIX: ${ticket.fix}`);
+    ticket.versions.forEach((v) => {
+      const comment = v.comment.length > 120 ? v.comment.slice(0, 120) + '…' : v.comment;
+      crLines.push(`    v${v.version} [${v.status}] ${v.timestamp.slice(0, 10)} by ${v.changed_by}: ${comment}`);
+      if (v.fixes_applied.length > 0) {
+        const fixes = v.fixes_applied.slice(0, 2).map((f) => (f.length > 80 ? f.slice(0, 80) + '…' : f));
+        crLines.push(`      FIXES_APPLIED: ${fixes.join('; ')}`);
+      }
+      if (v.issues_arised.length > 0) {
+        const issues = v.issues_arised.slice(0, 2).map((i) => (i.length > 80 ? i.slice(0, 80) + '…' : i));
+        crLines.push(`      ISSUES_ARISED: ${issues.join('; ')}`);
+      }
+    });
+  });
+
+  return `${baseContext}\n${crLines.join('\n')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -472,21 +497,279 @@ function AnalysisSection({ analysis, loading }: {
 }
 
 // ---------------------------------------------------------------------------
-// Incident popup modal
+// Version status badge
 // ---------------------------------------------------------------------------
 
-function IncidentPopup({ incident, analysis, analysisLoading, analysisError, onClose }: {
-  incident: Incident;
-  analysis: IncidentClickAnalysis | null;
-  analysisLoading: boolean;
-  analysisError: string | null;
-  onClose: () => void;
-}) {
+const VERSION_STATUS_CFG: Record<string, string> = {
+  Open:        'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+  'In Progress':'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+  'In Review': 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+  Resolved:    'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+  Done:        'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600',
+  Closed:      'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600',
+};
+
+type TicketVersion = {
+  version: number;
+  status: string;
+  timestamp: string;
+  changed_by: string;
+  comment: string;
+  priority: string;
+  assignee: string | null;
+  fixes_applied: string[];
+  issues_arised: string[];
+};
+
+type TicketFlow = {
+  incident_id: string;
+  jira_key: string | null;
+  jira_id: string | null;
+  summary: string;
+  incident_state: string;
+  service: string;
+  severity: string;
+  root_cause: string;
+  fix: string;
+  impacted_components: string[];
+  versions: TicketVersion[];
+};
+
+// ---------------------------------------------------------------------------
+// Change Requests slide-over modal
+// ---------------------------------------------------------------------------
+
+function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onClose: () => void }) {
+  const [tickets, setTickets]   = useState<TicketFlow[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    getIncidentChangeRequests(incidentId)
+      .then((r) => setTickets(r.tickets))
+      .catch((e) => setError(e?.message ?? 'Failed to load change requests'))
+      .finally(() => setLoading(false));
+  }, [incidentId]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  const toggle = (key: string) =>
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  return (
+    <div className="fixed inset-0 z-[60] flex" role="dialog" aria-modal="true">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Slide-over panel — right side */}
+      <div className="relative ml-auto z-10 w-full max-w-xl h-full flex flex-col bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0 bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-900 dark:text-white">Change Request History</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{incidentId}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800 transition-colors"
+            aria-label="Close change requests"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-6">
+          {loading && (
+            <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-500">
+              <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              Loading change requests…
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && tickets.length === 0 && (
+            <div className="text-center py-10 text-xs text-slate-500 dark:text-slate-400">
+              No change request history found for this incident.
+            </div>
+          )}
+
+          {tickets.map((ticket, ti) => (
+            <div key={`${ticket.incident_id}-${ti}`} className="space-y-3">
+              {/* Ticket header */}
+              <div className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    {ticket.jira_key && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded">
+                        {ticket.jira_key}
+                      </span>
+                    )}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${severityClass(ticket.severity)}`}>
+                      {ticket.severity}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{ticket.service}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">{ticket.summary}</p>
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                    <span>Root cause: <span className="text-red-600 dark:text-red-400 font-medium">{ticket.root_cause}</span></span>
+                    <span>Fix: <span className="text-emerald-600 dark:text-emerald-400 font-medium">{ticket.fix}</span></span>
+                  </div>
+                </div>
+                <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                  VERSION_STATUS_CFG[ticket.incident_state] ?? VERSION_STATUS_CFG['Done']
+                }`}>{ticket.incident_state}</span>
+              </div>
+
+              {/* Version timeline */}
+              <div className="relative pl-5 space-y-0">
+                {/* Vertical line */}
+                <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+
+                {ticket.versions.map((v) => {
+                  const key = `${ticket.incident_id}-${ti}-v${v.version}`;
+                  const isOpen = expanded[key];
+                  const statusCls = VERSION_STATUS_CFG[v.status] ?? VERSION_STATUS_CFG['Done'];
+                  const hasFixes  = v.fixes_applied.length > 0;
+                  const hasIssues = v.issues_arised.length > 0;
+
+                  return (
+                    <div key={key} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-5 top-3 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 dark:bg-slate-600 flex items-center justify-center">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          v.status === 'Resolved' || v.status === 'Done' || v.status === 'Closed'
+                            ? 'bg-emerald-500'
+                            : v.status === 'In Progress' || v.status === 'In Review'
+                            ? 'bg-blue-500'
+                            : 'bg-red-400'
+                        }`} />
+                      </div>
+
+                      <div className="mb-3 ml-1">
+                        {/* Version row (always visible, clickable) */}
+                        <button
+                          onClick={() => toggle(key)}
+                          className="w-full text-left flex items-start gap-2 group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">v{v.version}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${statusCls}`}>{v.status}</span>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                {new Date(v.timestamp).toLocaleString()}
+                              </span>
+                              {v.assignee && (
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
+                                  → {v.assignee}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug line-clamp-2">{v.comment}</p>
+                          </div>
+                          <span className="shrink-0 mt-1 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors">
+                            <svg className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </span>
+                        </button>
+
+                        {/* Expanded detail */}
+                        {isOpen && (
+                          <div className="mt-2 ml-0 space-y-2">
+                            {hasFixes && (
+                              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg">
+                                <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Fixes Applied
+                                </p>
+                                <ul className="space-y-1">
+                                  {v.fixes_applied.map((fix, fi) => (
+                                    <li key={fi} className="flex gap-1.5 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                      <span className="shrink-0 mt-0.5 text-emerald-500">•</span>{fix}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {hasIssues && (
+                              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg">
+                                <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Issues Arised
+                                </p>
+                                <ul className="space-y-1">
+                                  {v.issues_arised.map((iss, ii) => (
+                                    <li key={ii} className="flex gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+                                      <span className="shrink-0 mt-0.5 text-amber-500">⚠</span>{iss}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {!hasFixes && !hasIssues && (
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 italic pl-1">No fixes or issues recorded at this stage.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Incident popup modal
+// ---------------------------------------------------------------------------
+
+function IncidentPopup({ incident, analysis, analysisLoading, analysisError, changeRequests, onClose }: {
+  incident: Incident;
+  analysis: IncidentClickAnalysis | null;
+  analysisLoading: boolean;
+  analysisError: string | null;
+  changeRequests: { tickets: TicketFlow[] } | null;
+  onClose: () => void;
+}) {
+  const [crOpen, setCrOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (crOpen) setCrOpen(false); else onClose(); } };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, crOpen]);
 
   return (
     <div
@@ -513,7 +796,20 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, onC
               <StateBadge state={incident.state} />
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{incident.incident_id}</span>
             </div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
+            <div className="flex items-center gap-2 mt-1">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
+              <button
+                id="btn-change-requests"
+                onClick={(e) => { e.stopPropagation(); setCrOpen(true); }}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-violet-100 hover:bg-violet-200 dark:bg-violet-950/50 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 transition-all hover:shadow-sm active:scale-95"
+                aria-label="View change request history"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Change Requests
+              </button>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -574,12 +870,20 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, onC
           {/* Chat — only once analysis has loaded */}
           {!analysisLoading && analysis && (
             <ReportChat
-              reportContext={buildIncidentContext(incident, analysis)}
+              reportContext={buildIncidentContext(incident, analysis, changeRequests)}
               reportType={analysis.type}
             />
           )}
         </div>
       </div>
+
+      {/* Change Requests slide-over */}
+      {crOpen && (
+        <ChangeRequestsModal
+          incidentId={incident.incident_id}
+          onClose={() => setCrOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -601,6 +905,7 @@ export default function IncidentExplorer() {
   const [analysis, setAnalysis]             = useState<IncidentClickAnalysis | null>(null);
   const [analysisError, setAnalysisError]   = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [changeRequests, setChangeRequests] = useState<{ tickets: TicketFlow[] } | null>(null);
   const [search, setSearch]                 = useState('');
   const [severity, setSeverity]             = useState('');
   const [loading, setLoading]               = useState(true);
@@ -658,10 +963,14 @@ export default function IncidentExplorer() {
         setSelected(inc);
         setAnalysisError(null);
         setAnalysisLoading(true);
+        setChangeRequests(null);
         getIncidentClickAnalysis(inc.incident_id)
           .then(setAnalysis)
           .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
           .finally(() => setAnalysisLoading(false));
+        getIncidentChangeRequests(inc.incident_id)
+          .then((r) => setChangeRequests({ tickets: r.tickets }))
+          .catch(() => setChangeRequests(null));
       })
       .catch((err) => setAnalysisError(err?.message ?? 'Failed to load incident'));
   }, [searchParams]);
@@ -671,16 +980,21 @@ export default function IncidentExplorer() {
     setAnalysis(null);
     setAnalysisError(null);
     setAnalysisLoading(true);
+    setChangeRequests(null);
     getIncidentClickAnalysis(inc.incident_id)
       .then(setAnalysis)
       .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
       .finally(() => setAnalysisLoading(false));
+    getIncidentChangeRequests(inc.incident_id)
+      .then((r) => setChangeRequests({ tickets: r.tickets }))
+      .catch(() => setChangeRequests(null));
   };
 
   const handleClose = () => {
     setSelected(null);
     setAnalysis(null);
     setAnalysisError(null);
+    setChangeRequests(null);
   };
 
   const hasMore    = isActiveFilter ? false : incidents.length < total;
@@ -855,6 +1169,7 @@ export default function IncidentExplorer() {
           analysis={analysis}
           analysisLoading={analysisLoading}
           analysisError={analysisError}
+          changeRequests={changeRequests}
           onClose={handleClose}
         />
       )}

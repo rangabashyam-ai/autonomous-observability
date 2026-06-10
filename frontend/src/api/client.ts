@@ -126,6 +126,38 @@ export async function getIncidentClickAnalysis(id: string): Promise<IncidentClic
   }
 }
 
+export async function getIncidentChangeRequests(id: string): Promise<{
+  incident_id: string;
+  tickets: Array<{
+    incident_id: string;
+    jira_key: string | null;
+    jira_id: string | null;
+    summary: string;
+    incident_state: string;
+    service: string;
+    severity: string;
+    root_cause: string;
+    fix: string;
+    impacted_components: string[];
+    region: string;
+    environment: string;
+    versions: Array<{
+      version: number;
+      status: string;
+      timestamp: string;
+      changed_by: string;
+      comment: string;
+      priority: string;
+      assignee: string | null;
+      fixes_applied: string[];
+      issues_arised: string[];
+    }>;
+  }>;
+  total: number;
+}> {
+  return fetchJson(`${BASE}/incidents/${id}/change-requests`);
+}
+
 export async function analyzeRCA(body: {
   alerts: string[];
   symptoms: string[];

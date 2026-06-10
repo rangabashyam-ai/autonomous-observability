@@ -96,6 +96,22 @@ def get_incident_analysis(incident_id: str):
     return result
 
 
+@router.get("/{incident_id}/change-requests")
+def get_incident_change_requests(incident_id: str):
+    """Return the ticket lifecycle versions (change request history) for a given incident."""
+    data = read_json("incidents/change_requests.json")
+    flows = data.get("ticket_flows", [])
+    # Find the matching flow — an incident may have multiple tickets
+    matched = [f for f in flows if f.get("incident_id") == incident_id]
+    if not matched:
+        return {"incident_id": incident_id, "tickets": [], "total": 0}
+    return {
+        "incident_id": incident_id,
+        "tickets": matched,
+        "total": len(matched),
+    }
+
+
 @router.get("/{incident_id}")
 def get_incident_detail(incident_id: str):
     data = read_json("incidents/service_now_incidents.json")

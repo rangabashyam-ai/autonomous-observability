@@ -8,20 +8,26 @@ Answer using ONLY the facts in the provided context.
 
 Rules (follow in order):
 
-1. VAGUE question — broad, ambiguous, could mean many things \
-(e.g. "is it okay?", "how is it doing?", "any issues?", "status?", "is it doing okay?") \
-→ ask ONE short clarifying question. \
-Example: "Could you be more specific — are you asking about root cause, \
-a particular metric, dependency impact, or the recommended action?"
+1. VAGUE question — a single bare word or phrase with zero operational specificity \
+(e.g. "status?", "okay?", "fine?", "good?"). \
+Questions that reference the component, service, API, health, metrics, performance, \
+expected behaviour, working state, or any operational concept are NOT vague — \
+treat them as Rule 2. \
+→ Only if truly vague: ask ONE short clarifying question. \
+Example: "Could you be more specific — are you asking about a particular metric, \
+dependency impact, health status, or recommended action?"
 
 2. SPECIFIC question about the report — ANY question touching: \
+health, status, performance, whether something is working as expected, \
 root cause, where the issue originated, why it arose, why an action was prescribed, \
 alerts, symptoms, components, metrics, anomalies, applied fix, suggestions, \
 recommendations, post-fix incidents, similar incidents, caution level, dependency path, \
 AI analysis, reasoning, or any other operational data shown in the report \
-→ answer in under 70 words. Plain prose or 2–3 bullets. No markdown headers.
+→ answer in under 80 words. Plain prose or 2–3 bullets. No markdown headers. \
+Always reference the concrete metric values and HEALTH field from the context.
 
    Key mappings (use when the field is present in context):
+   - "working as expected?" / "status?" / "how is it doing?" → HEALTH + key METRICS (cpu, error_rate, latency) + incident_count
    - "where did it start?" / "origin?" → ORIGIN_COMPONENT from DEPENDENCY_PATH
    - "why did it arise?" / "root cause?" → ALERTS + SYMPTOMS + ROOT_CAUSE + REASONING
    - "why was this action prescribed?" → RECOMMENDATIONS + REASONING + CAUTION_LEVEL + AI_ANALYSIS
@@ -67,15 +73,27 @@ def answer_report_question(
 
     messages.append({"role": "user", "content": question})
 
-    try:
-        resp = chat_completion(
-            messages=messages,
-            model=FAST_MODEL,
-            temperature=0.2,
-            max_tokens=180,
-            timeout=28,
-        )
-        answer = resp["choices"][0]["message"]["content"]
-        return {"answer": answer, "error": None}
-    except Exception as exc:
-        return {"answer": None, "error": str(exc)}
+    import time
+
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            resp = chat_completion(
+                messages=messages,
+                model=FAST_MODEL,
+                temperature=0.2,
+                max_tokens=180,
+                timeout=28,
+            )
+            answer = resp["choices"][0]["message"]["content"]
+            return {"answer": answer, "error": None}
+        except Exception as exc:
+            last_exc = exc
+            err_str = str(exc).lower()
+            # Retry once on transient rate-limit or timeout errors
+            if attempt == 0 and ("429" in err_str or "timeout" in err_str or "timed out" in err_str):
+                time.sleep(2)
+                continue
+            break
+
+    return {"answer": None, "error": str(last_exc)}

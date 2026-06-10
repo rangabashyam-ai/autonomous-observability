@@ -38,11 +38,27 @@ export function ReportChat({ reportContext, reportType }: ReportChatProps) {
         report_type: reportType,
         history: messages.slice(-8),
       });
-      const content = res.answer ?? 'The agent timed out. Please try again.';
+      let content: string;
+      if (res.answer) {
+        content = res.answer;
+      } else if (res.error) {
+        const e = res.error.toLowerCase();
+        if (e.includes('429') || e.includes('rate limit') || e.includes('rate_limit')) {
+          content = 'Rate limit reached — please wait a moment and try again.';
+        } else if (e.includes('401') || e.includes('unauthorized') || e.includes('api key')) {
+          content = 'Agent not configured — check the API key in your backend .env file.';
+        } else if (e.includes('timed out') || e.includes('timeout')) {
+          content = 'The agent timed out — please try again.';
+        } else {
+          content = `Agent error: ${res.error}`;
+        }
+      } else {
+        content = 'The agent returned an empty response. Please try again.';
+      }
       setMessages([...nextMessages, { role: 'assistant', content }]);
     } catch (err: any) {
-      const msg = (err.message ?? '').toLowerCase().includes('timeout') || (err.message ?? '').toLowerCase().includes('timed out')
-        ? 'The agent timed out. Please try again.'
+      const msg = (err.message ?? '').toLowerCase().includes('timed out')
+        ? 'The agent timed out — please try again.'
         : `Something went wrong: ${err.message}`;
       setMessages([...nextMessages, { role: 'assistant', content: msg }]);
     } finally {
