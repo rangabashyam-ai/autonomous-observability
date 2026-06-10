@@ -183,7 +183,7 @@ export default function Layout() {
                   aria-expanded={showNotifications}
                 >
                   <Bell className="h-4 w-4" />
-                  {overview && overview.recent_incidents.length > 0 && (
+                  {overview && ((overview.summary.active_incidents ?? 0) > 0 || (overview.summary.open_alerts ?? 0) > 0) && (
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-critical" />
                   )}
                 </button>
@@ -196,49 +196,81 @@ export default function Layout() {
                     <div className="px-4 pb-2.5 border-b border-border flex items-center justify-between">
                       <span className="text-xs font-semibold text-text-primary">Active Alerts & Incidents</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-critical/10 text-critical font-bold">
-                        {overview?.recent_incidents.length ?? 0} Active
+                        {((overview?.summary.active_incidents ?? 0) + (overview?.summary.open_alerts ?? 0))} Active
                       </span>
                     </div>
                     <div className="max-h-64 overflow-y-auto px-2 pt-2 divide-y divide-border/50">
                       {!overview ? (
                         <div className="py-6 text-center text-xs text-text-secondary">Loading alerts...</div>
-                      ) : overview.recent_incidents.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-text-secondary">No active incidents</div>
+                      ) : overview.recent_incidents.length === 0 && overview.open_alerts_preview.length === 0 ? (
+                        <div className="py-6 text-center text-xs text-text-secondary">No active alerts or incidents</div>
                       ) : (
-                        overview.recent_incidents.map((inc) => (
-                          <div key={inc.incident_id} className="py-2.5 px-2 hover:bg-card-hover rounded-lg transition-colors group text-left">
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <span className={cn(
-                                "text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0",
-                                inc.severity === 'critical' || inc.severity === 'P1'
-                                  ? "border-critical/30 bg-critical/10 text-critical"
-                                  : "border-warning/30 bg-warning/10 text-warning"
-                              )}>
-                                {inc.severity}
-                              </span>
-                              <span className="text-[9px] text-text-secondary font-medium truncate">{inc.service}</span>
+                        <>
+                          {/* Active Incidents */}
+                          {overview.recent_incidents.slice(0, 5).map((inc) => (
+                            <div key={inc.incident_id} className="py-2.5 px-2 hover:bg-card-hover rounded-lg transition-colors group text-left">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className={cn(
+                                  "text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0",
+                                  inc.severity === 'critical' || inc.severity === 'P1'
+                                    ? "border-critical/30 bg-critical/10 text-critical"
+                                    : "border-warning/30 bg-warning/10 text-warning"
+                                )}>
+                                  {inc.severity}
+                                </span>
+                                <span className="text-[9px] text-text-secondary font-medium truncate">{inc.service}</span>
+                              </div>
+                              <p className="text-xs font-semibold text-text-primary group-hover:text-primary transition-colors mb-2 line-clamp-2">
+                                {inc.title}
+                              </p>
+                              <div className="flex gap-1.5">
+                                <Link
+                                  to={`/rca?id=${inc.incident_id}`}
+                                  onClick={() => setShowNotifications(false)}
+                                  className="text-[10px] font-bold px-2.5 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                                >
+                                  RCA
+                                </Link>
+                                <Link
+                                  to={`/blast-radius?id=${inc.incident_id}`}
+                                  onClick={() => setShowNotifications(false)}
+                                  className="text-[10px] font-semibold px-2.5 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
+                                >
+                                  Blast Radius
+                                </Link>
+                              </div>
                             </div>
-                            <p className="text-xs font-semibold text-text-primary group-hover:text-primary transition-colors mb-2 line-clamp-2">
-                              {inc.title}
-                            </p>
-                            <div className="flex gap-1.5">
-                              <Link
-                                to={`/rca?id=${inc.incident_id}`}
-                                onClick={() => setShowNotifications(false)}
-                                className="text-[10px] font-bold px-2.5 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                              >
-                                RCA
-                              </Link>
-                              <Link
-                                to={`/blast-radius?id=${inc.incident_id}`}
-                                onClick={() => setShowNotifications(false)}
-                                className="text-[10px] font-semibold px-2.5 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
-                              >
-                                Blast Radius
-                              </Link>
+                          ))}
+
+                          {/* Active Alerts */}
+                          {overview.open_alerts_preview.slice(0, 5).map((alert, idx) => (
+                            <div key={`alert-${alert.title}-${idx}`} className="py-2.5 px-2 hover:bg-card-hover rounded-lg transition-colors group text-left">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className={cn(
+                                  "text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0",
+                                  alert.severity === 'critical'
+                                    ? "border-critical/30 bg-critical/10 text-critical"
+                                    : "border-warning/30 bg-warning/10 text-warning"
+                                )}>
+                                  {alert.severity}
+                                </span>
+                                <span className="text-[9px] text-text-secondary font-medium truncate">{alert.entity_id}</span>
+                              </div>
+                              <p className="text-xs font-semibold text-text-primary group-hover:text-primary transition-colors mb-2 line-clamp-2">
+                                {alert.title}
+                              </p>
+                              <div className="flex gap-1.5">
+                                <Link
+                                  to="/early-detection"
+                                  onClick={() => setShowNotifications(false)}
+                                  className="text-[10px] font-semibold px-2.5 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
+                                >
+                                  View Alert Details
+                                </Link>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          ))}
+                        </>
                       )}
                     </div>
                     <div className="border-t border-border mt-2 pt-2.5 px-4 text-center">

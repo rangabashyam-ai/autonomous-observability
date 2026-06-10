@@ -104,7 +104,7 @@ export default function ExecutiveCommandCenter() {
       />
 
       <Grid12 className="mb-4">
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Business Health Score"
             value={`${businessHealth}%`}
@@ -114,17 +114,7 @@ export default function ExecutiveCommandCenter() {
             onClick={() => setActiveDrawer('health')}
           />
         </div>
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-          <MetricCard
-            label="Revenue at Risk"
-            value={`$${exec!.revenue_impact_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-            variant="critical"
-            sub="Estimated 24h exposure"
-            trend={-3.4}
-            onClick={() => setActiveDrawer('revenue')}
-          />
-        </div>
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Active Incidents"
             value={exec!.active_incidents}
@@ -156,7 +146,7 @@ export default function ExecutiveCommandCenter() {
 
       <CollapsibleSection title="Executive Intelligence" description="AI summary and business impact trends">
         <Grid12>
-          <div className="col-span-12 lg:col-span-5">
+          <div className="col-span-12 lg:col-span-6">
             <Card hover className="h-full">
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -176,7 +166,7 @@ export default function ExecutiveCommandCenter() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-4" id="business-impact-trends-section">
+          <div className="col-span-12 lg:col-span-6" id="business-impact-trends-section">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>Business Impact Trends</CardTitle>
@@ -190,17 +180,6 @@ export default function ExecutiveCommandCenter() {
                   <span className="h-2 w-2 rounded-full bg-success" /> Success Rate
                 </span>
               </div>
-            </Card>
-          </div>
-          <div className="col-span-12 lg:col-span-3" id="revenue-risk-section">
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle>Revenue Risk Timeline</CardTitle>
-              </CardHeader>
-              <MiniAreaChart data={revenueTrend} height={120} color="#EF4444" />
-              <p className="text-xs text-text-secondary mt-2">
-                Peak exposure: ${Math.max(...revenueTrend.map((d) => d.value)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </p>
             </Card>
           </div>
         </Grid12>

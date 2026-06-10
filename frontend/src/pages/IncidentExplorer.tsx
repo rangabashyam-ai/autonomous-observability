@@ -633,15 +633,11 @@ export default function IncidentExplorer() {
       offset: newOffset,
       search: activeSearch || undefined,
       severity: severity || undefined,
+      active: isActiveFilter || undefined,
     })
       .then((r) => {
         let displayIncidents = r.incidents;
         let displayTotal = r.total;
-
-        if (isActiveFilter) {
-          displayIncidents = r.incidents.slice(0, 2);
-          displayTotal = 2;
-        }
 
         if (resetOffset) {
           setIncidents(displayIncidents);
@@ -693,7 +689,7 @@ export default function IncidentExplorer() {
     setAnalysisError(null);
   };
 
-  const hasMore = isActiveFilter ? false : incidents.length < total;
+  const hasMore = incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

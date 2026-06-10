@@ -38,7 +38,7 @@ export default function HomeOverview() {
             <Link to="/incidents" className="text-xs text-blue-700 dark:text-blue-400 hover:underline">View all →</Link>
           </div>
           <div className="space-y-2">
-            {data.recent_incidents.map((inc) => (
+            {data.recent_incidents.slice(0, 6).map((inc) => (
               <Link
                 key={inc.incident_id}
                 to={`/incidents?id=${inc.incident_id}`}

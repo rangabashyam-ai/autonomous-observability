@@ -18,6 +18,7 @@ GUIDELINES:
 8. FOLLOW-UPS: Answer follow-up questions directly and progressively. Don't repeat previous summaries.
 9. REMEDIATION: When asked about fixes, provide concrete, specific SRE troubleshooting steps based on the entity type, alerts, and incidents in the payload.
 10. RESPONSE QUALITY: Give the kind of analysis a senior SRE engineer would provide — insightful, specific, and actionable.
+11. BE SPECIFIC, CITE NAMES AND NUMBERS: Never give generic, blind SRE advice when the context payload lists specific services (e.g., "Api Gateway Services", "Settlement Processing", etc.), metrics (e.g. availability, latency), or statuses. Always reference these specific resources, call out their exact metrics and states, and provide precise diagnostic/remediation steps tailored to them.
 
 RESPONSE FORMAT:
 You MUST respond with valid JSON only (no markdown fences):
@@ -29,7 +30,6 @@ You MUST respond with valid JSON only (no markdown fences):
   "confidence": "85%"
 }
 """
-
 
 
 def build_system_prompt(agent_role: str, context: dict[str, Any]) -> str:
@@ -53,6 +53,6 @@ def build_system_prompt(agent_role: str, context: dict[str, Any]) -> str:
         f"YOUR ROLE: {agent_role}\n\n"
         f"CURRENT CONTEXT PAYLOAD:\n"
         f"{json.dumps(payload, indent=2, default=str)}\n\n"
-        f"Answer ONLY about: {selected}\n"
+        f"Answer about the selected entity: {selected} (and its related services, components, metrics, or incidents in the context payload)\n"
         f"Page type: {context.get('page_type', 'unknown')}"
     )
