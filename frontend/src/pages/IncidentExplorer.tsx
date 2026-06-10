@@ -665,7 +665,6 @@ export default function IncidentExplorer() {
       })
       .catch((err) => setAnalysisError(err?.message ?? 'Failed to load incident'));
   }, [searchParams]);
-
   const handleRowClick = (inc: Incident) => {
     setSelected(inc);
     setAnalysis(null);
@@ -686,7 +685,6 @@ export default function IncidentExplorer() {
   const hasMore    = isActiveFilter ? false : incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
   const totalPages  = Math.ceil(total / PAGE_SIZE);
-
   const copilotContext = useMemo(() => {
     if (!selected) return null;
     return {
@@ -759,7 +757,6 @@ export default function IncidentExplorer() {
             </div>
           )}
         </div>
-
         {hasMore && !loading && (
           <button
             onClick={() => load(false)}

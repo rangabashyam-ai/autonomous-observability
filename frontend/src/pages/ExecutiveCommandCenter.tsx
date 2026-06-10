@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
 import { generateDualTrend, generateTrend, TrendChart, MiniAreaChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
-import { Sparkles, Activity, ShieldAlert, AlertTriangle, TrendingUp, Users, Zap, ExternalLink } from 'lucide-react';
+import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
