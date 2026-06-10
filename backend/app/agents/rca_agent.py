@@ -78,7 +78,7 @@ class RCAAgent(BaseAgent):
             build_rca_context,
         )
         from app.services.intelligence import analyze_rca
-        from app.services.openrouter_client import chat_completion, FAST_MODEL
+        from app.services.groq_client import chat_completion, FAST_MODEL
 
         incidents  = _load_incidents()
         dep_edges  = _load_dep_edges()
@@ -195,7 +195,7 @@ class RCAAgent(BaseAgent):
             build_rca_signals_context,
         )
         from app.services.intelligence import analyze_rca
-        from app.services.openrouter_client import chat_completion, FAST_MODEL
+        from app.services.groq_client import chat_completion, FAST_MODEL
 
         dep_edges = _load_dep_edges()
         primary   = service.lower().replace(" ", "-")

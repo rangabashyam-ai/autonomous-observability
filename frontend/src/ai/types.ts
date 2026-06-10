@@ -11,14 +11,14 @@ export interface CopilotContextPayload {
   context_scope: 'strict';
   page_type: PageType;
   selected_entity: string;
-  entity_data: Record<string, unknown>;
-  related_metrics: Record<string, unknown>;
-  related_alerts: unknown[];
-  related_incidents: unknown[];
-  dependency_data: Record<string, unknown>;
-  analysis_results: Record<string, unknown>;
-  investigation_results: Record<string, unknown>;
-  user_question: string;
+  entity_data?: Record<string, unknown>;
+  related_metrics?: Record<string, unknown>;
+  related_alerts?: unknown[];
+  related_incidents?: unknown[];
+  dependency_data?: Record<string, unknown>;
+  analysis_results?: Record<string, unknown>;
+  investigation_results?: Record<string, unknown>;
+  user_question?: string;
 }
 
 export interface ChatMessage {
