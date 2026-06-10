@@ -89,7 +89,7 @@ class CautionaryRCAAgent(BaseAgent):
             _detect_metric_anomalies,
             build_cautionary_context,
         )
-        from app.services.openrouter_client import chat_completion, FAST_MODEL
+        from app.services.groq_client import chat_completion, FAST_MODEL
 
         incidents  = _load_incidents()
         dep_edges  = _load_dep_edges()

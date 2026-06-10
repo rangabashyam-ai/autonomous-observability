@@ -144,7 +144,7 @@ export interface IncidentClickAnalysis {
   post_fix_incidents?: { incident_id: string; title: string; root_cause: string; service: string; start_time: string }[];
   path_alerts?: { title: string; severity: string; entity_id: string; metric: string; value?: number }[];
   recommendations?: string[];
-  // LLM deep analysis (present when OPENROUTER_API_KEY is configured)
+  // LLM deep analysis (present when GROQ_API_KEY is configured)
   llm_analysis?: string | null;
   llm_model?: string;
   llm_error?: string;

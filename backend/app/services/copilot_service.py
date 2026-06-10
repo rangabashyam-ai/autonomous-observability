@@ -12,7 +12,16 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from app.services.agent_router import get_agent
-from app.services.openrouter_client import chat_with_fallback, select_model
+from app.services.groq_client import chat_with_fallback, select_model
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from the project's root .env file.
+# This ensures GROQ_API_KEY and related settings are available regardless of
+# the current working directory when the server starts.
+project_root = Path(__file__).resolve().parents[3]
+env_path = project_root / ".env"
+load_dotenv(dotenv_path=env_path, override=False)
 
 
 def _parse_structured_response(raw: str) -> dict[str, Any]:
@@ -35,6 +44,24 @@ def _parse_structured_response(raw: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         pass
 
+    # Try a lenient parse if the model returned a JSON-like string with extra text.
+    brace_start = text.find("{")
+    brace_end = text.rfind("}")
+    if brace_start != -1 and brace_end > brace_start:
+        candidate = text[brace_start:brace_end + 1]
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return {
+                    "summary": parsed.get("summary", ""),
+                    "findings": parsed.get("findings", []) or [],
+                    "evidence": parsed.get("evidence", []) or [],
+                    "recommended_actions": parsed.get("recommended_actions", []) or [],
+                    "confidence": parsed.get("confidence", ""),
+                }
+        except json.JSONDecodeError:
+            pass
+
     return {
         "summary": raw[:500],
         "findings": [],
@@ -45,7 +72,7 @@ def _parse_structured_response(raw: str) -> dict[str, Any]:
 
 
 def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
-    """Rule-based fallback when OpenRouter is unavailable."""
+    """Rule-based fallback when GROQ is unavailable."""
     page_type = context.get("page_type", "")
     entity = context.get("selected_entity", "current context")
     q = question.lower().strip()
@@ -204,7 +231,9 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
 
 def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dict[str, Any]:
     """Process a copilot chat request with context guardrails."""
-    page_type = context.get("page_type", "executive")
+    page_type = context.get("page_type")
+    if not page_type:
+        page_type = "early_detection"
     agent = get_agent(page_type)
     system_prompt = agent.get_system_prompt(context)
 
@@ -221,7 +250,7 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
     model = select_model(page_type, len(messages))
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    if os.environ.get("OPENROUTER_API_KEY"):
+    if os.environ.get("GROQ_API_KEY"):
         try:
             raw, model_used = chat_with_fallback(llm_messages, model)
             result = _parse_structured_response(raw)
@@ -230,18 +259,20 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
             result["agent"] = agent.page_type
             return result
         except Exception as exc:
-            logger.exception("OpenRouter call failed")
+            logger.exception("GROQ call failed")
             err_msg = str(exc)
-            friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your OpenRouter API key (HTTP Error 402: Payment Required). Please top up your account or configure a new key."
-            if "402" not in err_msg and "Payment Required" not in err_msg:
-                friendly_err = f"AI assistant call failed: {err_msg}"
+            friendly_err = "The AI assistant is temporarily unavailable due to an issue with your GROQ API key or request. Please verify your key, account balance, and GROQ endpoint."
+            if "402" in err_msg or "Payment Required" in err_msg:
+                friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your GROQ API key. Please top up your account or configure a new key."
+            elif "403" in err_msg or "1010" in err_msg:
+                friendly_err = "The AI assistant request was blocked by GROQ. Check your GROQ_API_KEY, GROQ_BASE_URL, and make sure the request is not being blocked by Cloudflare or an invalid endpoint."
             
             return {
                 "summary": friendly_err,
                 "findings": [],
                 "evidence": [],
                 "recommended_actions": [
-                  "Add credits to your OpenRouter account",
+                  "Add credits to your GROQ account",
                   "Configure a valid key in backend/.env"
                 ],
                 "confidence": "0%",
@@ -251,11 +282,11 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
             }
 
     return {
-        "summary": "OPENROUTER_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
+        "summary": "GROQ_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
         "findings": [],
         "evidence": [],
         "recommended_actions": [
-          "Set a valid OPENROUTER_API_KEY in backend/.env"
+          "Set a valid GROQ_API_KEY in backend/.env"
         ],
         "confidence": "0%",
         "model": "error-unconfigured",

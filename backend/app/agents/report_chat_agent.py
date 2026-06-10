@@ -40,7 +40,7 @@ def answer_report_question(
     report_type: str,
     history: list[dict],
 ) -> dict:
-    from app.services.openrouter_client import chat_completion, FAST_MODEL
+    from app.services.groq_client import chat_completion, FAST_MODEL
 
     messages: list[dict] = [
         {"role": "system", "content": _SYSTEM_PROMPT},

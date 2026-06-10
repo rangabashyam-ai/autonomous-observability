@@ -74,3 +74,5 @@ frontend/tsconfig.tsbuildinfo
 *.bak
 *.tmp
 *.orig
+
+conflict_solver.py

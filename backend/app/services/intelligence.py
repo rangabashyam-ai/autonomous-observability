@@ -692,7 +692,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         "the architecture elements outlined above."
     )
 
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("GROQ_API_KEY")
     
     if api_key:
         messages = [{"role": "system", "content": system_prompt}]
@@ -709,13 +709,13 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "Autonomous IT Operations Platform"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         }
         
         try:
+            base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
             req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
+                f"{base_url}/chat/completions",
                 data=json.dumps(req_body).encode("utf-8"),
                 headers=headers,
                 method="POST"
@@ -725,7 +725,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
                 answer = res_data["choices"][0]["message"]["content"]
                 return {
                     "answer": answer,
-                    "sources": ["openrouter.ai (anthropic/claude-3.5-sonnet)"],
+                    "sources": ["groq.ai (anthropic/claude-3.5-sonnet)"],
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
         except Exception as e:
