@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import dagre from 'dagre';
+import * as dagre from 'dagre';
 import ReactFlow, {
   Background,
   Controls,
@@ -51,10 +51,6 @@ const HEATMAPS: { id: HeatmapMetric; label: string }[] = [
   { id: 'risk_score', label: 'Risk Score' },
 ];
 
-const LAYER_ORDER = [
-  'business_service', 'application', 'microservice', 'container',
-  'platform', 'server', 'rack', 'network',
-];
 function buildNodes(graph: DependencyGraph, selectedId: string | null): Node[] {
   return graph.nodes.map((node) => {
     return {
@@ -601,11 +597,10 @@ export default function DependencyMap() {
             <button
               key={v.id}
               onClick={() => { setView(v.id); setSelectedNodeId(null); setSearchTerm(''); setNodePopupOpen(false); }}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                view === v.id
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
-              }`}
+              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${view === v.id
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
+                }`}
             >
               {v.label}
             </button>
@@ -617,11 +612,10 @@ export default function DependencyMap() {
             <button
               key={h.id}
               onClick={() => setHeatmap(h.id)}
-              className={`px-2 py-1 text-[10px] rounded border transition-colors ${
-                heatmap === h.id
-                  ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
-                  : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-500 dark:text-slate-400'
-              }`}
+              className={`px-2 py-1 text-[10px] rounded border transition-colors ${heatmap === h.id
+                ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-500 dark:text-slate-400'
+                }`}
             >
               {h.label}
             </button>
