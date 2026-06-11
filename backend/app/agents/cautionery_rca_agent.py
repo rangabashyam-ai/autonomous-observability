@@ -160,7 +160,7 @@ class CautionaryRCAAgent(BaseAgent):
         # Deterministic reasoning
         reasoning_parts: list[str] = [f"Fix applied: '{applied_fix}'."]
         if dep_path:
-            reasoning_parts.append(f"Dependency path: {' → '.join(dep_path)}.")
+            reasoning_parts.append(f"Correlated dependency path (via metric propagation): {' → '.join(dep_path)}.")
         if post_fix:
             reasoning_parts.append(
                 f"{len(post_fix)} incident(s) on overlapping components after fix: "

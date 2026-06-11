@@ -112,7 +112,7 @@ class RCAAgent(BaseAgent):
         # --- deterministic reasoning ---
         reasoning_parts: list[str] = []
         if dep_path:
-            reasoning_parts.append(f"Dependency path extracted: {' → '.join(dep_path)}.")
+            reasoning_parts.append(f"Correlated dependency path extracted via component-aware metric propagation: {' → '.join(dep_path)}.")
         # Include only first anomaly component
         for comp, issues in list(anomalous.items())[:1]:
             reasoning_parts.append(f"Metric anomaly on {comp}: {', '.join(issues[:2])}.")
@@ -215,7 +215,7 @@ class RCAAgent(BaseAgent):
 
         reasoning_parts: list[str] = []
         if dep_path:
-            reasoning_parts.append(f"Dependency path: {' → '.join(dep_path)}.")
+            reasoning_parts.append(f"Correlated dependency path (via metric propagation): {' → '.join(dep_path)}.")
         for comp, issues in list(anomalous.items())[:1]:
             reasoning_parts.append(f"Metric anomaly on {comp}: {', '.join(issues[:2])}.")
         if not anomalous:

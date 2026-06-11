@@ -119,22 +119,59 @@ def get_dependency_paths(node_id: str):
         raise HTTPException(status_code=404, detail="Node not found")
 
     edges = _get_edges()
+    
+    # We will use the agent's logic to fetch metrics and determine correlation
+    try:
+        from app.agents.incident_analysis import _get_metrics_snapshot, _is_correlated
+        
+        # Get all reachable nodes to fetch metrics
+        reachable = {node_id}
+        q = [node_id]
+        while q:
+            n = q.pop(0)
+            for e in edges:
+                if e["source"] == n and e["target"] not in reachable:
+                    reachable.add(e["target"])
+                    q.append(e["target"])
+                if e["target"] == n and e["source"] not in reachable:
+                    reachable.add(e["source"])
+                    q.append(e["source"])
+                    
+        comp_metrics = _get_metrics_snapshot(list(reachable))
+    except ImportError:
+        comp_metrics = {}
+        def _is_correlated(*args): return True
+
     upstream = []
     downstream = []
 
     def walk_up(nid, visited):
         for e in edges:
             if e["target"] == nid and e["source"] not in visited:
-                visited.add(e["source"])
-                upstream.append({"node": e["source"], "relationship": e["relationship"]})
-                walk_up(e["source"], visited)
+                src = e["source"]
+                visited.add(src)
+                corr = _is_correlated(src, nid, comp_metrics) if comp_metrics else True
+                upstream.append({
+                    "node": src, 
+                    "relationship": e["relationship"],
+                    "metrics": comp_metrics.get(src, {}),
+                    "is_correlated": corr
+                })
+                walk_up(src, visited)
 
     def walk_down(nid, visited):
         for e in edges:
             if e["source"] == nid and e["target"] not in visited:
-                visited.add(e["target"])
-                downstream.append({"node": e["target"], "relationship": e["relationship"]})
-                walk_down(e["target"], visited)
+                tgt = e["target"]
+                visited.add(tgt)
+                corr = _is_correlated(nid, tgt, comp_metrics) if comp_metrics else True
+                downstream.append({
+                    "node": tgt, 
+                    "relationship": e["relationship"],
+                    "metrics": comp_metrics.get(tgt, {}),
+                    "is_correlated": corr
+                })
+                walk_down(tgt, visited)
 
     walk_up(node_id, {node_id})
     walk_down(node_id, {node_id})
@@ -142,6 +179,7 @@ def get_dependency_paths(node_id: str):
     return {
         "node_id": node_id,
         "node": nodes_map[node_id],
+        "metrics": comp_metrics.get(node_id, {}),
         "upstream": upstream,
         "downstream": downstream,
     }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import dagre from 'dagre';
 import ReactFlow, {
   Background,
   Controls,
@@ -8,6 +9,7 @@ import ReactFlow, {
   MarkerType,
   type Node,
   type Edge,
+  type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -53,47 +55,12 @@ const LAYER_ORDER = [
   'business_service', 'application', 'microservice', 'container',
   'platform', 'server', 'rack', 'network',
 ];
-const X_GAP = 250;
-const Y_GAP = 190;
-const MAX_PER_ROW = 7;
-const LAYER_EXTRA_Y = 70;
-
-function layoutNodes(graph: DependencyGraph, selectedId: string | null): Node[] {
-  const layerCounts: Record<string, number> = {};
-  graph.nodes.forEach((n) => {
-    layerCounts[n.layer] = (layerCounts[n.layer] ?? 0) + 1;
-  });
-
-  const layerBaseY: Record<string, number> = {};
-  let cumY = 0;
-  LAYER_ORDER.forEach((layer) => {
-    if (!layerCounts[layer]) return;
-    layerBaseY[layer] = cumY;
-    const rows = Math.ceil(layerCounts[layer] / MAX_PER_ROW);
-    cumY += rows * Y_GAP + LAYER_EXTRA_Y;
-  });
-  graph.nodes.forEach((n) => {
-    if (LAYER_ORDER.includes(n.layer) || n.layer in layerBaseY) return;
-    layerBaseY[n.layer] = cumY;
-    cumY += Y_GAP + LAYER_EXTRA_Y;
-  });
-
-  const layerIndex: Record<string, number> = {};
-
+function buildNodes(graph: DependencyGraph, selectedId: string | null): Node[] {
   return graph.nodes.map((node) => {
-    layerIndex[node.layer] = (layerIndex[node.layer] ?? 0) + 1;
-    const idx = layerIndex[node.layer] - 1;
-    const count = layerCounts[node.layer];
-    const col = idx % MAX_PER_ROW;
-    const subRow = Math.floor(idx / MAX_PER_ROW);
-    const colsInRow = Math.min(count - subRow * MAX_PER_ROW, MAX_PER_ROW);
-    const x = (col - (colsInRow - 1) / 2) * X_GAP;
-    const y = (layerBaseY[node.layer] ?? 0) + subRow * Y_GAP;
-
     return {
       id: node.id,
       type: 'dependency',
-      position: { x, y },
+      position: { x: 0, y: 0 },
       data: {
         label: node.label,
         type: node.type,
@@ -106,6 +73,114 @@ function layoutNodes(graph: DependencyGraph, selectedId: string | null): Node[] 
         isSearchMatch: false,
         dimmed: false,
       },
+    };
+  });
+}
+
+function getLayoutedNodes(nodes: Node[], edges: Edge[], direction = 'LR'): Node[] {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 200 });
+
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: 220, height: 80 });
+  });
+
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  const MAX_PER_COL = 6;
+  const X_OFFSET = 260;
+  const Y_GAP = 120;
+
+  const sortedNodes = [...nodes].sort((a, b) => dagreGraph.node(a.id).x - dagreGraph.node(b.id).x);
+
+  const groups: Node[][] = [];
+  let currentGroup: Node[] = [];
+  let currentX = -999999;
+
+  sortedNodes.forEach((node) => {
+    const pos = dagreGraph.node(node.id);
+    if (pos.x - currentX > 100) {
+      if (currentGroup.length > 0) groups.push(currentGroup);
+      currentGroup = [node];
+      currentX = pos.x;
+    } else {
+      currentGroup.push(node);
+    }
+  });
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  let cumulativeXShift = 0;
+  const finalPositions: Record<string, { x: number; y: number }> = {};
+
+  groups.forEach((groupNodes) => {
+    groupNodes.sort((a, b) => dagreGraph.node(a.id).y - dagreGraph.node(b.id).y);
+
+    const subCols = Math.ceil(groupNodes.length / MAX_PER_COL);
+    const baseX = dagreGraph.node(groupNodes[0].id).x + cumulativeXShift;
+
+    let sumY = 0;
+    groupNodes.forEach((n) => (sumY += dagreGraph.node(n.id).y));
+    const avgY = sumY / groupNodes.length;
+
+    groupNodes.forEach((node, idx) => {
+      const subColIndex = Math.floor(idx / MAX_PER_COL);
+      const rowIndex = idx % MAX_PER_COL;
+
+      const finalX = baseX + subColIndex * X_OFFSET;
+      const numInThisCol = Math.min(MAX_PER_COL, groupNodes.length - subColIndex * MAX_PER_COL);
+      const startY = avgY - ((numInThisCol - 1) * Y_GAP) / 2;
+      const finalY = startY + rowIndex * Y_GAP;
+
+      finalPositions[node.id] = { x: finalX, y: finalY };
+    });
+
+    if (subCols > 1) {
+      cumulativeXShift += (subCols - 1) * X_OFFSET;
+    }
+  });
+
+  // Y-axis compaction to remove massive vertical gaps left by Dagre
+  const yValues = Object.values(finalPositions).map((p) => p.y).sort((a, b) => a - b);
+  const yBands: number[] = [];
+  yValues.forEach((y) => {
+    if (yBands.length === 0 || y - yBands[yBands.length - 1] > 50) {
+      yBands.push(y);
+    }
+  });
+
+  const compactYBands: Record<number, number> = {};
+  let currentY = 0;
+  yBands.forEach((bandY, i) => {
+    compactYBands[bandY] = currentY;
+    if (i < yBands.length - 1) {
+      const originalDiff = yBands[i + 1] - bandY;
+      currentY += Math.min(originalDiff, Y_GAP);
+    }
+  });
+
+  Object.keys(finalPositions).forEach((id) => {
+    const originalY = finalPositions[id].y;
+    const bandY = yBands.find((b) => originalY >= b && originalY <= b + 50);
+    if (bandY !== undefined) {
+      finalPositions[id].y = compactYBands[bandY] + (originalY - bandY);
+    }
+  });
+
+  return nodes.map((node) => {
+    return {
+      ...node,
+      position: {
+        x: finalPositions[node.id].x - 220 / 2,
+        y: finalPositions[node.id].y - 80 / 2,
+      },
+      width: 220,
+      height: 80,
     };
   });
 }
@@ -284,6 +359,9 @@ function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: No
             key={node.id}
             reportContext={context}
             reportType="dependency_node"
+            subtitle="Scoped to Maps"
+            entityName={node.label}
+            suggestedQuestions={['What are the upstream dependencies?', 'Is this node healthy?', 'Show metrics for this node']}
           />
         </div>
       </div>
@@ -306,6 +384,7 @@ export default function DependencyMap() {
   const [newDep, setNewDep] = useState({ source: '', target: '', relationship: 'calls' });
   const [searchTerm, setSearchTerm] = useState('');
   const [nodePopupOpen, setNodePopupOpen] = useState(false);
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -324,8 +403,10 @@ export default function DependencyMap() {
     try {
       const data = await getDependencyGraph(view, heatmap, selectedNodeId);
       setGraph(data);
-      setNodes(layoutNodes(data, selectedNodeId));
-      setEdges(buildEdges(data, highlightIds));
+      const rawNodes = buildNodes(data, selectedNodeId);
+      const rawEdges = buildEdges(data, highlightIds);
+      setNodes(getLayoutedNodes(rawNodes, rawEdges));
+      setEdges(rawEdges);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load graph');
     } finally {
@@ -339,10 +420,23 @@ export default function DependencyMap() {
 
   useEffect(() => {
     if (graph) {
-      setNodes(layoutNodes(graph, selectedNodeId));
-      setEdges(buildEdges(graph, highlightIds));
+      const rawNodes = buildNodes(graph, selectedNodeId);
+      const rawEdges = buildEdges(graph, highlightIds);
+      setNodes(getLayoutedNodes(rawNodes, rawEdges));
+      setEdges(rawEdges);
     }
   }, [selectedNodeId, paths, graph, highlightIds, setNodes, setEdges]);
+
+  // Ensure map zooms out completely to show all components
+  useEffect(() => {
+    if (rfInstance && graph && nodes.length > 0) {
+      setTimeout(() => {
+        window.requestAnimationFrame(() => {
+          rfInstance.fitView({ padding: 0.2 });
+        });
+      }, 50);
+    }
+  }, [view, heatmap, graph, rfInstance]);
 
   useEffect(() => {
     if (!selectedNodeId) {
@@ -356,27 +450,44 @@ export default function DependencyMap() {
       .finally(() => setPathsLoading(false));
   }, [selectedNodeId]);
 
-  // Search highlight / dim
   useEffect(() => {
     if (!graph) return;
     const q = searchTerm.trim().toLowerCase();
+    let firstMatchId: string | null = null;
+
     setNodes((prev) =>
       prev.map((n) => {
         const gNode = graph.nodes.find((g) => g.id === n.id);
         const label = (gNode?.label ?? n.id).toLowerCase();
         const isSearchMatch = q.length >= 2 && label.includes(q);
+        if (isSearchMatch && !firstMatchId) {
+          firstMatchId = n.id;
+        }
         return {
           ...n,
           data: { ...n.data, isSearchMatch, dimmed: q.length >= 2 && !isSearchMatch },
         };
       }),
     );
-  }, [searchTerm, graph, setNodes]);
+
+    if (q.length >= 2 && firstMatchId && rfInstance) {
+      setNodes((currentNodes) => {
+        const node = currentNodes.find((n) => n.id === firstMatchId);
+        if (node) {
+          rfInstance.setCenter(node.position.x + 110, node.position.y + 40, { zoom: 1.2, duration: 800 });
+        }
+        return currentNodes;
+      });
+    }
+  }, [searchTerm, graph, setNodes, rfInstance]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     setNodePopupOpen(true);
-  }, []);
+    if (rfInstance) {
+      rfInstance.setCenter(node.position.x + 110, node.position.y + 40, { zoom: 1.2, duration: 800 });
+    }
+  }, [rfInstance]);
 
   const closePopup = useCallback(() => setNodePopupOpen(false), []);
 
@@ -575,10 +686,11 @@ export default function DependencyMap() {
             fitViewOptions={{ padding: 0.25 }}
             minZoom={0.15}
             maxZoom={2.5}
+            onInit={setRfInstance}
             attributionPosition="bottom-left"
           >
             <Background color="#334155" gap={24} />
-            <Controls showInteractive={false} />
+            <Controls showInteractive={true} showFitView={true} showZoom={true} />
             <MiniMap
               nodeColor={(n) => {
                 const d = n.data as { heatmapValue: number };
