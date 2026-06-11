@@ -76,12 +76,18 @@ const REGIONS = [
 ];
 
 const healthDot: Record<string, string> = {
-  healthy: 'fill-success',
-  warning: 'fill-warning',
-  critical: 'fill-critical',
+  healthy: 'bg-success',
+  warning: 'bg-warning',
+  critical: 'bg-critical',
 };
 
-export function RegionalHealthMap({ className }: { className?: string }) {
+export function RegionalHealthMap({
+  className,
+  onRegionClick,
+}: {
+  className?: string;
+  onRegionClick?: (region: typeof REGIONS[0]) => void;
+}) {
   return (
     <div className={cn('relative w-full', className)}>
       <svg viewBox="0 0 100 80" className="w-full h-full opacity-30">
@@ -93,10 +99,11 @@ export function RegionalHealthMap({ className }: { className?: string }) {
       {REGIONS.map((r) => (
         <div
           key={r.id}
-          className="absolute group"
+          className={cn('absolute group', onRegionClick && 'cursor-pointer hover:scale-110 z-10 transition-transform')}
           style={{ left: `${r.x}%`, top: `${r.y}%`, transform: 'translate(-50%, -50%)' }}
+          onClick={() => onRegionClick?.(r)}
         >
-          <div className={cn('h-3 w-3 rounded-full ring-2 ring-card', healthDot[r.health])} />
+          <div className={cn('h-3 w-3 rounded-full ring-2 ring-card shadow-sm', healthDot[r.health])} />
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
             <div className="whitespace-nowrap rounded-md border border-border bg-card px-2 py-1 text-[10px] text-text-primary shadow-sm">
               {r.label}

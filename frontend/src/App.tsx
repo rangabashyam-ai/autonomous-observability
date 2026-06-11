@@ -12,6 +12,7 @@ import EarlyDetectionDashboard from './pages/EarlyDetectionDashboard';
 import InvestigationWorkflow from './pages/InvestigationWorkflow';
 import DataAdminPage from './pages/DataAdminPage';
 import ServiceDetailPage from './pages/ServiceDetailPage';
+import CloudIntegrationsPage from './pages/CloudIntegrationsPage';
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="early-detection" element={<EarlyDetectionDashboard />} />
           <Route path="investigation" element={<InvestigationWorkflow />} />
           <Route path="admin" element={<DataAdminPage />} />
+          <Route path="integrations" element={<CloudIntegrationsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

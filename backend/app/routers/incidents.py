@@ -13,7 +13,10 @@ def _filter_incidents(
     service: Optional[str] = None,
     search: Optional[str] = None,
     state: Optional[str] = None,
+    active: Optional[bool] = None,
 ) -> list:
+    if active:
+        incidents = [i for i in incidents if i.get("state") in ("Open", "In Progress")]
     if severity:
         incidents = [i for i in incidents if i.get("severity") == severity]
     if service:
@@ -43,9 +46,10 @@ def get_incidents(
     service: Optional[str] = None,
     search: Optional[str] = None,
     state: Optional[str] = None,
+    active: Optional[bool] = None,
 ):
     data = read_json("incidents/service_now_incidents.json")
-    incidents = _filter_incidents(data.get("incidents", []), severity, service, search, state)
+    incidents = _filter_incidents(data.get("incidents", []), severity, service, search, state, active)
     total = len(incidents)
     return {
         "incidents": incidents[offset: offset + limit],

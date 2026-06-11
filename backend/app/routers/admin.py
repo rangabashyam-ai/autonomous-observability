@@ -24,6 +24,9 @@ def data_status():
         "dependencies/dependency_graph.json",
         "rca/knowledge_graph.json",
         "rca/incident_graph.json",
+        # Cloud integration data
+        "integrations/resources.json",
+        "integrations/connections.json",
     ]
     status = []
     for f in files:

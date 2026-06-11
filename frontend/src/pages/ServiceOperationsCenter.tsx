@@ -477,13 +477,20 @@ export default function ServiceOperationsCenter() {
         <Card>
           <div className="flex gap-1 overflow-x-auto pb-2">
             {Array.from({ length: 24 }, (_, h) => {
-              const hasIncident = overview.recent_incidents.some((_, i) => i === h % 4);
+              const matchingIncident = overview.recent_incidents.find((_, i) => i === h % 4);
+              const hasIncident = !!matchingIncident;
               return (
                 <div
                   key={h}
-                  onClick={() => navigate(`/incidents`)}
+                  onClick={() => {
+                    if (matchingIncident) {
+                      navigate(`/incidents?id=${matchingIncident.incident_id}`);
+                    } else {
+                      navigate(`/incidents`);
+                    }
+                  }}
                   className="flex flex-col items-center gap-1 min-w-[32px] cursor-pointer group"
-                  title={`${h}:00 — Click to view incidents`}
+                  title={matchingIncident ? `${h}:00 — Click to view ${matchingIncident.title}` : `${h}:00 — Click to view incidents`}
                 >
                   <div
                     className={`h-8 w-full rounded-sm transition-all duration-200 group-hover:scale-y-110 group-hover:shadow-md ${

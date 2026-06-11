@@ -42,6 +42,59 @@ def _load_alerts() -> list[dict]:
     return data.get("alerts", [])
 
 
+def get_service_for_entity(entity_id: str) -> str | None:
+    if not entity_id:
+        return None
+    entity_id_lower = entity_id.lower()
+    
+    # Exact / direct mappings first
+    mapping = {
+        'cassandra-cluster': 'fraud-detection',
+        'identity-service': 'payment-authorization',
+        'customer-service': 'partner-integrations',
+        'webhook-handler': 'partner-integrations',
+        'rate-limiter': 'payment-authorization',
+        'reconciliation-service': 'merchant-services',
+        'api-gateway-services': 'api-gateway-services',
+        'auth-service': 'payment-authorization',
+        'merchant-services': 'merchant-services',
+        'payment-authorization': 'payment-authorization',
+        'fraud-detection': 'fraud-detection',
+        'api-gateway': 'api-gateway-services',
+        'audit-service': 'fraud-detection',
+        'token-service': 'payment-authorization',
+        'partner-integrations': 'partner-integrations',
+        'ml-scoring-service': 'fraud-detection',
+        'notification-service': 'settlement-processing',
+        'settlement-processing': 'settlement-processing',
+        'fraud-service': 'fraud-detection',
+        'settlement-service': 'settlement-processing',
+        'partner-api': 'partner-integrations',
+        'merchant-api': 'merchant-services',
+        'postgres-cluster': 'payment-authorization',
+        'redis-cluster': 'payment-authorization',
+    }
+    
+    if entity_id_lower in mapping:
+        return mapping[entity_id_lower]
+        
+    # Keyword-based fallback mappings
+    if any(k in entity_id_lower for k in ['auth', 'token', 'identity', 'redis', 'postgres', 'payment']):
+        return 'payment-authorization'
+    if any(k in entity_id_lower for k in ['settlement', 'notification', 'kafka', 'rabbitmq']):
+        return 'settlement-processing'
+    if any(k in entity_id_lower for k in ['fraud', 'ml', 'cassandra', 'audit']):
+        return 'fraud-detection'
+    if any(k in entity_id_lower for k in ['merchant', 'reconciliation']):
+        return 'merchant-services'
+    if any(k in entity_id_lower for k in ['partner', 'webhook', 'customer']):
+        return 'partner-integrations'
+    if any(k in entity_id_lower for k in ['gateway', 'api-gateway']):
+        return 'api-gateway-services'
+        
+    return None
+
+
 class KnowledgeGraphService:
     def get_graph(self) -> dict:
         return _load_knowledge_graph()
@@ -609,9 +662,13 @@ def get_overview() -> dict:
     early = detect_early_failures()
     p1_count = sum(1 for i in incidents if i.get("severity") == "P1")
 
+    # Filter incidents to only active ones (Open or In Progress)
+    active_incidents = [i for i in incidents if i.get("state") in ("Open", "In Progress")]
+
     return {
         "summary": {
             "total_incidents": len(incidents),
+            "active_incidents": len(active_incidents),
             "open_alerts": len(open_alerts),
             "knowledge_graph_nodes": kg.get("stats", {}).get("node_count", 0),
             "knowledge_graph_edges": kg.get("stats", {}).get("edge_count", 0),
@@ -628,12 +685,25 @@ def get_overview() -> dict:
                 "root_cause": i["root_cause"],
                 "resolved_at": i.get("resolved_at", ""),
             }
-            for i in sorted(incidents, key=lambda x: x.get("start_time", ""), reverse=True)[:6]
+            for i in sorted(active_incidents, key=lambda x: x.get("start_time", ""), reverse=True)
         ],
         "top_root_causes": _top_root_causes(incidents),
         "early_detections": early.get("detections", [])[:3],
-        "open_alerts_preview": open_alerts[:5],
+        "open_alerts_preview": [
+            {
+                "id": a.get("id", ""),
+                "title": a.get("title", ""),
+                "severity": a.get("severity", "warning"),
+                "status": a.get("status", "open"),
+                "entity_id": a.get("entity_id", ""),
+                "triggered_at": a.get("triggered_at", ""),
+                "service": get_service_for_entity(a.get("entity_id", "")),
+            }
+            for a in open_alerts
+        ],
     }
+
+
 
 
 def _top_root_causes(incidents: list[dict], limit: int = 5) -> list[dict]:
@@ -701,7 +771,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         messages.append({"role": "user", "content": question})
         
         req_body = {
-            "model": "anthropic/claude-3.5-sonnet",
+            "model": "llama-3.3-70b-versatile",
             "messages": messages,
             "temperature": 0.2
         }
@@ -709,13 +779,13 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "User-Agent": "AutonomousObservability/1.0",
         }
         
         try:
             base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
             req = urllib.request.Request(
-                f"{base_url}/chat/completions",
+                "https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(req_body).encode("utf-8"),
                 headers=headers,
                 method="POST"
@@ -725,7 +795,7 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
                 answer = res_data["choices"][0]["message"]["content"]
                 return {
                     "answer": answer,
-                    "sources": ["groq.ai (anthropic/claude-3.5-sonnet)"],
+                    "sources": ["groq.com (llama-3.3-70b-versatile)"],
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
         except Exception as e:

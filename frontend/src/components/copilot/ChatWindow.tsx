@@ -18,9 +18,12 @@ export default function ChatWindow() {
   } = useCopilot();
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   }, [messages, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,7 +38,7 @@ export default function ChatWindow() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center py-8 space-y-3">
             <p className="text-sm text-text-secondary">

@@ -24,6 +24,48 @@ env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path, override=False)
 
 
+def _regex_lenient_parse(text: str) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "summary": "",
+        "findings": [],
+        "evidence": [],
+        "recommended_actions": [],
+        "confidence": "",
+    }
+    
+    summary_match = re.search(r'"summary"\s*:\s*"([\s\S]*?)"\s*(?:,|\n\s*"|\})', text)
+    if summary_match:
+        result["summary"] = summary_match.group(1).replace('\\"', '"').replace('\\n', '\n')
+    else:
+        summary_match = re.search(r'"summary"\s*:\s*([\s\S]*?)(?:,|\n\s*"|\n\s*\})', text)
+        if summary_match:
+            result["summary"] = summary_match.group(1).strip('"\' ')
+
+    for key in ["findings", "evidence", "recommended_actions"]:
+        match = re.search(rf'"{key}"\s*:\s*\[([\s\S]*?)\]', text)
+        if match:
+            items_raw = match.group(1)
+            items = re.findall(r'"([\s\S]*?)"', items_raw)
+            if not items and ":" in items_raw:
+                parts = items_raw.split(",")
+                for p in parts:
+                    if ":" in p:
+                        k_val = p.split(":", 1)[0].strip().strip('"\'')
+                        if k_val:
+                            items.append(k_val)
+                    else:
+                        val = p.strip().strip('"\'')
+                        if val:
+                            items.append(val)
+            result[key] = items
+
+    conf_match = re.search(r'"confidence"\s*:\s*"([^"]*)"', text)
+    if conf_match:
+        result["confidence"] = conf_match.group(1)
+        
+    return result
+
+
 def _parse_structured_response(raw: str) -> dict[str, Any]:
     """Extract structured JSON from LLM response."""
     text = raw.strip()
@@ -62,13 +104,30 @@ def _parse_structured_response(raw: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
+    # Regex-based lenient parse as a last resort
+    try:
+        parsed = _regex_lenient_parse(text)
+        if parsed.get("summary"):
+            return parsed
+    except Exception:
+        pass
+
+    # If it is totally invalid but contains some text, don't return raw JSON if possible
+    # Just return the text clean
+    clean_text = raw
+    if brace_start != -1 and brace_end > brace_start:
+        summary_match = re.search(r'"summary"\s*:\s*"([\s\S]*?)"', text)
+        if summary_match:
+            clean_text = summary_match.group(1).replace('\\"', '"').replace('\\n', '\n')
+
     return {
-        "summary": raw[:500],
+        "summary": clean_text[:800],
         "findings": [],
         "evidence": [],
         "recommended_actions": [],
         "confidence": "",
     }
+
 
 
 def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
@@ -272,8 +331,8 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
                 "findings": [],
                 "evidence": [],
                 "recommended_actions": [
-                  "Add credits to your GROQ account",
-                  "Configure a valid key in backend/.env"
+                  "Check your Groq API key and account",
+                  "Configure a valid GROQ_API_KEY in backend/.env"
                 ],
                 "confidence": "0%",
                 "model": "error-unresolved",

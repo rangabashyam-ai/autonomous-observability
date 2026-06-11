@@ -11,10 +11,10 @@ import { ReportChat } from '../components/ReportChat';
 // ---------------------------------------------------------------------------
 
 const STATE_CONFIG: Record<string, { label: string; cls: string }> = {
-  Resolved:      { label: 'Resolved',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' },
-  Closed:        { label: 'Closed',      cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600' },
+  Resolved: { label: 'Resolved', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' },
+  Closed: { label: 'Closed', cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600' },
   'In Progress': { label: 'In Progress', cls: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800' },
-  Open:          { label: 'Open',        cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800' },
+  Open: { label: 'Open', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800' },
 };
 
 function StateBadge({ state }: { state?: string }) {
@@ -41,11 +41,10 @@ const THRESHOLDS: Record<string, number> = {
 function MetricPill({ label, value, warn }: { label: string; value?: number; warn?: boolean }) {
   if (value == null) return null;
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-      warn
-        ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-    }`}>
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${warn
+      ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+      }`}>
       {label}&nbsp;{value.toFixed(1)}
     </span>
   );
@@ -62,9 +61,9 @@ function ComponentMetricRow({ name, metrics, anomalies }: {
       <span className={`text-[10px] font-medium w-40 truncate ${hasAnomaly ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
         {hasAnomaly ? '⚠ ' : ''}{name}
       </span>
-      <MetricPill label="CPU"  value={metrics.cpu}        warn={(metrics.cpu        ?? 0) > THRESHOLDS.cpu} />
-      <MetricPill label="MEM"  value={metrics.memory}     warn={(metrics.memory     ?? 0) > THRESHOLDS.memory} />
-      <MetricPill label="LAT"  value={metrics.latency}    warn={(metrics.latency    ?? 0) > THRESHOLDS.latency} />
+      <MetricPill label="CPU" value={metrics.cpu} warn={(metrics.cpu ?? 0) > THRESHOLDS.cpu} />
+      <MetricPill label="MEM" value={metrics.memory} warn={(metrics.memory ?? 0) > THRESHOLDS.memory} />
+      <MetricPill label="LAT" value={metrics.latency} warn={(metrics.latency ?? 0) > THRESHOLDS.latency} />
       <MetricPill label="ERR%" value={metrics.error_rate} warn={(metrics.error_rate ?? 0) > THRESHOLDS.error_rate} />
     </div>
   );
@@ -75,9 +74,9 @@ function ComponentMetricRow({ name, metrics, anomalies }: {
 // ---------------------------------------------------------------------------
 
 const CAUTION_CFG = {
-  high:   { label: 'HIGH ⚠',    cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800' },
+  high: { label: 'HIGH ⚠', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800' },
   medium: { label: 'MEDIUM ⚡', cls: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800' },
-  low:    { label: 'LOW ✓',     cls: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' },
+  low: { label: 'LOW ✓', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800' },
 };
 
 function CautionBadge({ level }: { level?: 'low' | 'medium' | 'high' }) {
@@ -112,7 +111,7 @@ function LLMAnalysisBlock({ content, model, error }: {
     <div className="mt-2 p-4 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
       <div className="flex items-center gap-2 mb-3">
         <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 9H5a1 1 0 0 1 0 2 6 6 0 0 0 6 6zM12 8a1 1 0 0 1 1 1v4a1 1 0 0 1-2 0V9a1 1 0 0 1 1-1zm0-3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 9H5a1 1 0 0 1 0 2 6 6 0 0 0 6 6zM12 8a1 1 0 0 1 1 1v4a1 1 0 0 1-2 0V9a1 1 0 0 1 1-1zm0-3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
         </svg>
         <span className="text-[10px] font-semibold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase">AI Deep Analysis</span>
         {model && <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500 font-mono">{model}</span>}
@@ -154,21 +153,21 @@ function buildIncidentContext(
   ];
 
   if (incident.root_cause) lines.push(`ROOT_CAUSE: ${incident.root_cause}`);
-  if (incident.fix)         lines.push(`APPLIED_FIX: ${incident.fix}`);
+  if (incident.fix) lines.push(`APPLIED_FIX: ${incident.fix}`);
   if (incident.similar_incidents?.length)
     lines.push(`SIMILAR_INCIDENTS: ${incident.similar_incidents.join(', ')}`);
 
   if (analysis.type === 'fix_summary') {
     if (analysis.root_cause && analysis.root_cause !== incident.root_cause)
       lines.push(`ANALYSIS_ROOT_CAUSE: ${analysis.root_cause}`);
-    if (analysis.applied_fix)      lines.push(`ANALYSIS_APPLIED_FIX: ${analysis.applied_fix}`);
+    if (analysis.applied_fix) lines.push(`ANALYSIS_APPLIED_FIX: ${analysis.applied_fix}`);
     if (analysis.resolution_notes) lines.push(`RESOLUTION_NOTES: ${analysis.resolution_notes}`);
-    if (analysis.resolved_at)      lines.push(`RESOLVED_AT: ${analysis.resolved_at}`);
+    if (analysis.resolved_at) lines.push(`RESOLVED_AT: ${analysis.resolved_at}`);
   }
 
-  const depPath   = analysis.dependency_path ?? [];
+  const depPath = analysis.dependency_path ?? [];
   const anomalous = analysis.anomalous_components ?? {};
-  const metrics   = analysis.component_metrics ?? {};
+  const metrics = analysis.component_metrics ?? {};
 
   if (depPath.length > 0) {
     lines.push(`DEPENDENCY_PATH: ${depPath.join(' → ')}`);
@@ -199,12 +198,12 @@ function buildIncidentContext(
       }
     }
     if (analysis.suggested_fix) lines.push(`SUGGESTED_FIX: ${analysis.suggested_fix}`);
-    if (analysis.reasoning)     lines.push(`REASONING: ${analysis.reasoning}`);
+    if (analysis.reasoning) lines.push(`REASONING: ${analysis.reasoning}`);
   }
 
   if (analysis.type === 'cautionary_rca') {
     if (analysis.caution_level) lines.push(`CAUTION_LEVEL: ${analysis.caution_level.toUpperCase()}`);
-    if (analysis.applied_fix)   lines.push(`APPLIED_FIX: ${analysis.applied_fix}`);
+    if (analysis.applied_fix) lines.push(`APPLIED_FIX: ${analysis.applied_fix}`);
     if (analysis.post_fix_incidents?.length)
       lines.push(`POST_FIX_INCIDENTS: ${analysis.post_fix_incidents.slice(0, 3).map((i) => `${i.incident_id}(${i.root_cause})`).join(', ')}`);
     if (analysis.path_alerts?.length)
@@ -258,8 +257,8 @@ function AnalysisSection({ analysis, loading }: {
   }
   if (!analysis) return null;
 
-  const depPath   = analysis.dependency_path ?? [];
-  const metrics   = analysis.component_metrics ?? {};
+  const depPath = analysis.dependency_path ?? [];
+  const metrics = analysis.component_metrics ?? {};
   const anomalous = analysis.anomalous_components ?? {};
 
   // ── Closed / fix_summary ─────────────────────────────────────────────────
@@ -343,11 +342,10 @@ function AnalysisSection({ analysis, loading }: {
             <div className="flex flex-wrap items-center gap-1">
               {depPath.map((node, i) => (
                 <span key={node} className="flex items-center gap-1">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-                    anomalous[node]
-                      ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                  }`}>{node}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${anomalous[node]
+                    ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    }`}>{node}</span>
                   {i < depPath.length - 1 && <span className="text-slate-400 text-[10px]">→</span>}
                 </span>
               ))}
@@ -429,11 +427,10 @@ function AnalysisSection({ analysis, loading }: {
             <div className="flex flex-wrap items-center gap-1">
               {depPath.map((node, i) => (
                 <span key={node} className="flex items-center gap-1">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-                    anomalous[node]
-                      ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                  }`}>{node}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${anomalous[node]
+                    ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    }`}>{node}</span>
                   {i < depPath.length - 1 && <span className="text-slate-400 text-[10px]">→</span>}
                 </span>
               ))}
@@ -460,11 +457,10 @@ function AnalysisSection({ analysis, loading }: {
                 <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-semibold text-slate-800 dark:text-white">{c.root_cause}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      c.confidence >= 75 ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
-                        : c.confidence >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${c.confidence >= 75 ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                      : c.confidence >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
                         : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                    }`}>{c.confidence}% confidence</span>
+                      }`}>{c.confidence}% confidence</span>
                   </div>
                   {c.suggested_fixes?.[0] && (
                     <p className="text-emerald-700 dark:text-emerald-400">→ {c.suggested_fixes[0]}</p>
@@ -501,12 +497,12 @@ function AnalysisSection({ analysis, loading }: {
 // ---------------------------------------------------------------------------
 
 const VERSION_STATUS_CFG: Record<string, string> = {
-  Open:        'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
-  'In Progress':'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+  Open: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800',
+  'In Progress': 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
   'In Review': 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
-  Resolved:    'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
-  Done:        'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600',
-  Closed:      'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600',
+  Resolved: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+  Done: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600',
+  Closed: 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600',
 };
 
 type TicketVersion = {
@@ -540,9 +536,9 @@ type TicketFlow = {
 // ---------------------------------------------------------------------------
 
 function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onClose: () => void }) {
-  const [tickets, setTickets]   = useState<TicketFlow[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+  const [tickets, setTickets] = useState<TicketFlow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -638,9 +634,8 @@ function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onCl
                     </div>
                   )}
                 </div>
-                <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium ${
-                  VERSION_STATUS_CFG[ticket.incident_state] ?? VERSION_STATUS_CFG['Done']
-                }`}>{ticket.incident_state}</span>
+                <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium ${VERSION_STATUS_CFG[ticket.incident_state] ?? VERSION_STATUS_CFG['Done']
+                  }`}>{ticket.incident_state}</span>
               </div>
 
               {/* Version timeline */}
@@ -652,20 +647,19 @@ function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onCl
                   const key = `${ticket.incident_id}-${ti}-v${v.version}`;
                   const isOpen = expanded[key];
                   const statusCls = VERSION_STATUS_CFG[v.status] ?? VERSION_STATUS_CFG['Done'];
-                  const hasFixes  = v.fixes_applied.length > 0;
+                  const hasFixes = v.fixes_applied.length > 0;
                   const hasIssues = v.issues_arised.length > 0;
 
                   return (
                     <div key={key} className="relative">
                       {/* Timeline dot */}
                       <div className="absolute -left-5 top-3 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 dark:bg-slate-600 flex items-center justify-center">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          v.status === 'Resolved' || v.status === 'Done' || v.status === 'Closed'
+                        <div className={`w-1.5 h-1.5 rounded-full ${v.status === 'Resolved' || v.status === 'Done' || v.status === 'Closed'
                             ? 'bg-emerald-500'
                             : v.status === 'In Progress' || v.status === 'In Review'
-                            ? 'bg-blue-500'
-                            : 'bg-red-400'
-                        }`} />
+                              ? 'bg-blue-500'
+                              : 'bg-red-400'
+                          }`} />
                       </div>
 
                       <div className="mb-3 ml-1">
@@ -903,20 +897,32 @@ export default function IncidentExplorer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [incidents, setIncidents]           = useState<Incident[]>([]);
-  const [total, setTotal]                   = useState(0);
-  const [offset, setOffset]                 = useState(0);
-  const [selected, setSelected]             = useState<Incident | null>(null);
-  const [analysis, setAnalysis]             = useState<IncidentClickAnalysis | null>(null);
-  const [analysisError, setAnalysisError]   = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<Incident | null>(null);
+  const [analysis, setAnalysis] = useState<IncidentClickAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [changeRequests, setChangeRequests] = useState<{ tickets: TicketFlow[] } | null>(null);
-  const [search, setSearch]                 = useState('');
-  const [severity, setSeverity]             = useState('');
-  const [loading, setLoading]               = useState(true);
-  const [loadingMore, setLoadingMore]       = useState(false);
+  const [search, setSearch] = useState('');
+  const [severity, setSeverity] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const isActiveFilter = searchParams.get('active') === 'true';
+
+  const handleSearchClick = () => {
+    if (search.trim()) {
+      if (search.trim().toUpperCase().startsWith('INC-')) {
+        navigate(`/incidents?id=${encodeURIComponent(search.trim().toUpperCase())}`);
+      } else {
+        navigate(`/incidents?search=${encodeURIComponent(search.trim())}`);
+      }
+    } else {
+      navigate('/incidents');
+    }
+  };
 
   const load = (resetOffset = true) => {
     const newOffset = resetOffset ? 0 : offset;
@@ -926,20 +932,20 @@ export default function IncidentExplorer() {
       setLoadingMore(true);
     }
 
+    const idParam = searchParams.get('id');
+    const searchParamVal = searchParams.get('search');
+    const activeSearch = idParam || searchParamVal || search;
+
     getIncidents({
       limit: PAGE_SIZE,
       offset: newOffset,
-      search: search || undefined,
+      search: activeSearch || undefined,
       severity: severity || undefined,
+      active: isActiveFilter || undefined,
     })
       .then((r) => {
         let displayIncidents = r.incidents;
         let displayTotal = r.total;
-
-        if (isActiveFilter) {
-          displayIncidents = r.incidents.slice(0, 2);
-          displayTotal = 2;
-        }
 
         if (resetOffset) {
           setIncidents(displayIncidents);
@@ -961,6 +967,7 @@ export default function IncidentExplorer() {
   // Handle ?id= deep-link: open popup for the given incident
   useEffect(() => {
     const id = searchParams.get('id');
+<<<<<<< HEAD
     if (!id) return;
 
     getIncident(id)
@@ -978,6 +985,19 @@ export default function IncidentExplorer() {
           .catch(() => setChangeRequests(null));
       })
       .catch((err) => setAnalysisError(err?.message ?? 'Failed to load incident'));
+=======
+    const q = searchParams.get('search');
+    if (id) {
+      setSearch(id);
+      getIncident(id).then(setSelected).catch(console.error);
+    } else if (q) {
+      setSearch(q);
+      setSelected(null);
+    } else {
+      setSearch('');
+      setSelected(null);
+    }
+>>>>>>> 71f249567e7ce494955f7773eb51e7c27d40fd13
   }, [searchParams]);
 
   const handleRowClick = (inc: Incident) => {
@@ -1002,9 +1022,9 @@ export default function IncidentExplorer() {
     setChangeRequests(null);
   };
 
-  const hasMore    = isActiveFilter ? false : incidents.length < total;
+  const hasMore = incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
-  const totalPages  = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const copilotContext = useMemo(() => {
     if (!selected) return null;
@@ -1012,19 +1032,19 @@ export default function IncidentExplorer() {
       pageType: 'incident' as const,
       selectedEntity: selected.incident_id,
       entityData: {
-        incident_id:         selected.incident_id,
-        title:               selected.title,
-        severity:            selected.severity,
-        service:             selected.service,
-        root_cause:          selected.root_cause,
-        fix:                 selected.fix,
-        alerts:              selected.alerts,
-        symptoms:            selected.symptoms,
-        resolution:          selected.resolution_notes,
-        duration_minutes:    selected.duration_minutes,
+        incident_id: selected.incident_id,
+        title: selected.title,
+        severity: selected.severity,
+        service: selected.service,
+        root_cause: selected.root_cause,
+        fix: selected.fix,
+        alerts: selected.alerts,
+        symptoms: selected.symptoms,
+        resolution: selected.resolution_notes,
+        duration_minutes: selected.duration_minutes,
         impacted_components: selected.impacted_components,
       },
-      relatedAlerts:    selected.alerts,
+      relatedAlerts: selected.alerts,
       relatedIncidents: [selected],
     };
   }, [selected]);
@@ -1044,14 +1064,14 @@ export default function IncidentExplorer() {
           placeholder="Search incidents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && load(true)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearchClick()}
           className={`flex-1 ${inputClass}`}
         />
         <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={inputClass}>
           <option value="">All severities</option>
           {['P1', 'P2', 'P3', 'P4'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button onClick={() => load(true)} className={btnPrimary}>Search</button>
+        <button onClick={handleSearchClick} className={btnPrimary}>Search</button>
       </div>
 
       {/* Results summary */}
@@ -1113,9 +1133,8 @@ export default function IncidentExplorer() {
               <tr
                 key={inc.incident_id}
                 onClick={() => handleRowClick(inc)}
-                className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
-                  selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                }`}
+                className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''
+                  }`}
               >
                 <td className="py-2.5 pr-3 font-mono text-xs text-blue-700 dark:text-blue-400">{inc.incident_id}</td>
                 <td className="py-2.5 pr-3 text-slate-900 dark:text-white max-w-[200px] truncate">{inc.title}</td>
