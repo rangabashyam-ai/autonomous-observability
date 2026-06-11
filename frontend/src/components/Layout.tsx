@@ -15,6 +15,7 @@ import {
   Network,
   Shield,
   FileSearch,
+  Cloud,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
@@ -38,6 +39,7 @@ const secondaryNav = [
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
+  { to: '/integrations', label: 'Integrations', icon: Cloud },
   { to: '/admin', label: 'Settings', icon: Settings },
 ];
 
@@ -155,7 +157,7 @@ export default function Layout() {
               </>
             )}
           </button>
-          <p className="text-[10px] text-text-secondary/60 text-center">Synthetic data · MVP</p>
+          <p className="text-[10px] text-text-secondary/60 text-center">Live cloud telemetry · v0.3</p>
         </div>
       </aside>
 

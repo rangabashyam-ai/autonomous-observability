@@ -21,12 +21,15 @@ GUIDELINES:
 11. BE SPECIFIC, CITE NAMES AND NUMBERS: Never give generic, blind SRE advice when the context payload lists specific services (e.g., "Api Gateway Services", "Settlement Processing", etc.), metrics (e.g. availability, latency), or statuses. Always reference these specific resources, call out their exact metrics and states, and provide precise diagnostic/remediation steps tailored to them.
 
 RESPONSE FORMAT:
-You MUST respond with valid JSON only (no markdown fences):
+You MUST respond with valid JSON only (no markdown fences).
+All keys and values in the JSON must be strictly strings, or flat arrays of strings.
+Do not nest objects or dictionaries inside the arrays. For example, 'evidence' and 'findings' MUST be flat arrays of strings only (e.g., ["INC-1009 Payment Authorization degradation"]).
+Example of valid response format:
 {
   "summary": "Brief executive summary",
   "findings": ["finding 1", "finding 2"],
-  "evidence": ["evidence item from context"],
-  "recommended_actions": ["action 1"],
+  "evidence": ["evidence item 1", "evidence item 2"],
+  "recommended_actions": ["action 1", "action 2"],
   "confidence": "85%"
 }
 """

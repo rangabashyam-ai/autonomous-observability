@@ -164,7 +164,61 @@ def execute_inv(inv_id: str):
 
 @router.post("/copilot/ask")
 def ask_copilot(req: CopilotRequest):
-    return copilot_query(req.question)
+    from app.services.intelligence import _load_incidents, _load_alerts, _load_changes, _load_deployments
+    from app.services.copilot_service import copilot_chat
+    
+    active_incidents = [i for i in _load_incidents() if i.get("state") in ("Open", "In Progress")]
+    open_alerts = [a for a in _load_alerts() if a.get("status") in ("open", "acknowledged")]
+    
+    context = {
+        "page_type": "early_detection",
+        "selected_entity": "Platform Overview",
+        "entity_data": {
+            "active_incident_count": len(active_incidents),
+            "open_alert_count": len(open_alerts),
+        },
+        "related_incidents": [
+            {
+                "incident_id": i["incident_id"],
+                "title": i["title"],
+                "severity": i["severity"],
+                "service": i["service"],
+                "root_cause": i["root_cause"],
+            }
+            for i in active_incidents
+        ],
+        "related_alerts": [
+            {
+                "id": a.get("id"),
+                "title": a.get("title"),
+                "severity": a.get("severity"),
+            }
+            for a in open_alerts
+        ],
+        "user_question": req.question
+    }
+    
+    messages = [{"role": "user", "content": req.question}]
+    result = copilot_chat(context, messages)
+    
+    answer_parts = []
+    if result.get("summary"):
+        answer_parts.append(result["summary"])
+    if result.get("findings"):
+        answer_parts.append("**Findings**:\n" + "\n".join(f"- {f}" for f in result["findings"]))
+    if result.get("evidence"):
+        answer_parts.append("**Evidence**:\n" + "\n".join(f"- {e}" for e in result["evidence"]))
+    if result.get("recommended_actions"):
+        answer_parts.append("**Recommended Actions**:\n" + "\n".join(f"- {a}" for a in result["recommended_actions"]))
+    if result.get("confidence"):
+        answer_parts.append(f"**Confidence**: {result['confidence']}")
+        
+    return {
+        "question": req.question,
+        "answer": "\n\n".join(answer_parts),
+        "sources": [result.get("model", "llama-3.3-70b-versatile")],
+        "suggested_actions": result.get("recommended_actions", [])
+    }
 
 
 @router.post("/copilot/scoped")
