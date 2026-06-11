@@ -3,3 +3,17 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 pydantic==2.10.4
 python-dotenv==1.0.1
+
+# Cloud Integration SDKs
+boto3>=1.34
+azure-identity>=1.16
+azure-mgmt-compute>=32.0
+azure-mgmt-containerservice>=28.0
+azure-mgmt-sql>=3.0
+azure-monitor-query>=1.2
+google-cloud-compute>=1.18
+google-cloud-container>=2.42
+google-cloud-monitoring>=2.19
+kubernetes>=28.1
+apscheduler>=3.10
+cryptography>=42.0

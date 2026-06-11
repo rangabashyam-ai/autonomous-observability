@@ -98,6 +98,7 @@ export async function getIncidents(params?: {
   service?: string;
   search?: string;
   state?: string;
+  active?: boolean;
 }): Promise<{ incidents: Incident[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit', String(params.limit));
@@ -106,6 +107,7 @@ export async function getIncidents(params?: {
   if (params?.service) q.set('service', params.service);
   if (params?.search) q.set('search', params.search);
   if (params?.state) q.set('state', params.state);
+  if (params?.active !== undefined) q.set('active', String(params.active));
   return fetchJson(`${BASE}/incidents/?${q}`);
 }
 

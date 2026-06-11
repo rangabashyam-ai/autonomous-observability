@@ -105,6 +105,7 @@ export interface Investigation {
 export interface Overview {
   summary: {
     total_incidents: number;
+    active_incidents: number;
     open_alerts: number;
     knowledge_graph_nodes: number;
     knowledge_graph_edges: number;

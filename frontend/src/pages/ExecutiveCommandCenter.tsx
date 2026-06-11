@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
 import { generateDualTrend, generateTrend, TrendChart, MiniAreaChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
-import { Sparkles, Activity, ShieldAlert, AlertTriangle, TrendingUp, Users, Zap, ExternalLink } from 'lucide-react';
+import { Sparkles, Activity, ShieldAlert, AlertTriangle, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
@@ -19,6 +19,7 @@ export default function ExecutiveCommandCenter() {
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<'health' | 'revenue' | 'incidents' | 'sla' | 'customers' | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<{ id: string; label: string; x: number; y: number; health: 'healthy' | 'warning' | 'critical' } | null>(null);
 
   useEffect(() => {
     Promise.all([getMonitoringDashboard(), getOverview()])
@@ -103,7 +104,7 @@ export default function ExecutiveCommandCenter() {
       />
 
       <Grid12 className="mb-4">
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Business Health Score"
             value={`${businessHealth}%`}
@@ -113,17 +114,7 @@ export default function ExecutiveCommandCenter() {
             onClick={() => setActiveDrawer('health')}
           />
         </div>
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-          <MetricCard
-            label="Revenue at Risk"
-            value={`$${exec!.revenue_impact_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-            variant="critical"
-            sub="Estimated 24h exposure"
-            trend={-3.4}
-            onClick={() => setActiveDrawer('revenue')}
-          />
-        </div>
-        <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Active Incidents"
             value={exec!.active_incidents}
@@ -155,7 +146,7 @@ export default function ExecutiveCommandCenter() {
 
       <CollapsibleSection title="Executive Intelligence" description="AI summary and business impact trends">
         <Grid12>
-          <div className="col-span-12 lg:col-span-5">
+          <div className="col-span-12 lg:col-span-6">
             <Card hover className="h-full">
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -175,7 +166,7 @@ export default function ExecutiveCommandCenter() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-4" id="business-impact-trends-section">
+          <div className="col-span-12 lg:col-span-6" id="business-impact-trends-section">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>Business Impact Trends</CardTitle>
@@ -189,17 +180,6 @@ export default function ExecutiveCommandCenter() {
                   <span className="h-2 w-2 rounded-full bg-success" /> Success Rate
                 </span>
               </div>
-            </Card>
-          </div>
-          <div className="col-span-12 lg:col-span-3" id="revenue-risk-section">
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle>Revenue Risk Timeline</CardTitle>
-              </CardHeader>
-              <MiniAreaChart data={revenueTrend} height={120} color="#EF4444" />
-              <p className="text-xs text-text-secondary mt-2">
-                Peak exposure: ${Math.max(...revenueTrend.map((d) => d.value)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </p>
             </Card>
           </div>
         </Grid12>
@@ -220,15 +200,22 @@ export default function ExecutiveCommandCenter() {
                     Details →
                   </Link>
                 </CardHeader>
-                <div className="space-y-3">
+                <div className="space-y-1">
                   {services.slice(0, 6).map((svc) => (
-                    <div key={svc.id} className="flex items-center justify-between gap-2">
+                    <Link
+                      key={svc.id}
+                      to={`/services/${svc.id}`}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-card-hover transition-all duration-200 cursor-pointer group"
+                    >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-text-primary truncate">{svc.name}</p>
+                        <p className="text-sm text-text-primary group-hover:text-primary transition-colors truncate">{svc.name}</p>
                         <UtilizationBar label="" value={svc.availability} max={100} />
                       </div>
-                      <HealthBadge health={svc.health} />
-                    </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <HealthBadge health={svc.health} />
+                        <ChevronRight className="h-3.5 w-3.5 text-text-secondary/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </Link>
                   ))}
                 </div>
               </Card>
@@ -238,7 +225,10 @@ export default function ExecutiveCommandCenter() {
                 <CardHeader>
                   <CardTitle>Regional Health Map</CardTitle>
                 </CardHeader>
-                <RegionalHealthMap className="h-[180px]" />
+                <RegionalHealthMap
+                  className="h-[180px]"
+                  onRegionClick={(r) => setSelectedRegion(r)}
+                />
                 <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
                   <span className="flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-success" /> Healthy
@@ -259,14 +249,33 @@ export default function ExecutiveCommandCenter() {
                 </CardHeader>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Transaction Volume', value: services.reduce((a, s) => a + s.transaction_volume, 0) },
-                    { label: 'Success Rate', value: `${exec!.transaction_success_rate.toFixed(1)}%` },
-                    { label: 'Services at Risk', value: exec!.services_at_risk, alert: true },
-                    { label: 'Early Warnings', value: overview.summary.early_warnings, alert: overview.summary.early_warnings > 0 },
+                    {
+                      label: 'Transaction Volume',
+                      value: services.reduce((a, s) => a + s.transaction_volume, 0),
+                      onClick: () => setActiveDrawer('health')
+                    },
+                    {
+                      label: 'Success Rate',
+                      value: `${exec!.transaction_success_rate.toFixed(1)}%`,
+                      onClick: () => setActiveDrawer('health')
+                    },
+                    {
+                      label: 'Services at Risk',
+                      value: exec!.services_at_risk,
+                      alert: true,
+                      onClick: () => setActiveDrawer('health')
+                    },
+                    {
+                      label: 'Early Warnings',
+                      value: overview.summary.early_warnings,
+                      alert: overview.summary.early_warnings > 0,
+                      onClick: () => navigate('/early-detection')
+                    },
                   ].map((kpi) => (
                     <div
                       key={kpi.label}
-                      className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-card-hover"
+                      onClick={kpi.onClick}
+                      className="rounded-lg border border-border bg-background p-3 transition-all duration-200 hover:bg-card-hover hover:border-primary/30 hover:shadow-sm cursor-pointer"
                     >
                       <p className="text-[10px] text-text-secondary">{kpi.label}</p>
                       <p className={`text-lg font-semibold mt-1 ${kpi.alert ? 'text-critical' : 'text-text-primary'}`}>
@@ -311,6 +320,7 @@ export default function ExecutiveCommandCenter() {
           activeDrawer === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
         }
       >
+
         {activeDrawer === 'health' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
@@ -694,6 +704,136 @@ export default function ExecutiveCommandCenter() {
                   "Which incident affects the largest number of users?",
                   "How is user impact calculated?",
                   "What is the status of the Payment Authorization mitigation?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </DrilldownDrawer>
+
+      {/* Drilldown Drawer for Regional Operations */}
+      <DrilldownDrawer
+        isOpen={selectedRegion !== null}
+        onClose={() => setSelectedRegion(null)}
+        title={selectedRegion ? `${selectedRegion.label} Regional Operations` : ''}
+        subtitle="Regional metrics, service status, and active incidents"
+        type="node"
+        health={selectedRegion?.health}
+      >
+        {selectedRegion && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Regional SLA / Availability"
+                value={selectedRegion.health === 'critical' ? '98.54%' : selectedRegion.health === 'warning' ? '99.41%' : '99.98%'}
+                status={selectedRegion.health === 'critical' ? 'critical' : selectedRegion.health === 'warning' ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Average P99 Latency"
+                value={selectedRegion.health === 'critical' ? '242.5ms' : selectedRegion.health === 'warning' ? '184.2ms' : '88.1ms'}
+                status={selectedRegion.health === 'critical' ? 'critical' : selectedRegion.health === 'warning' ? 'warning' : 'good'}
+              />
+            </div>
+
+            <DrilldownSection title="Active Incidents in Region" icon={<ShieldAlert className="w-4 h-4" />}>
+              {selectedRegion.health === 'healthy' ? (
+                <p className="text-xs text-text-secondary">No active incidents in this region.</p>
+              ) : (
+                <div className="space-y-3">
+                  {overview.recent_incidents
+                    .filter(inc => {
+                      if (selectedRegion.id === 'ap-northeast') {
+                        return inc.service.includes('Settlement') || inc.service.includes('Partner');
+                      }
+                      if (selectedRegion.id === 'eu-west') {
+                        return inc.service.includes('Payment') || inc.service.includes('Merchant');
+                      }
+                      return false;
+                    })
+                    .slice(0, 1)
+                    .map(inc => (
+                      <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-critical/30 bg-critical/10 text-critical">
+                            {inc.severity}
+                          </span>
+                          <span className="text-[10px] text-text-secondary">{inc.service}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
+                        <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
+                        <div className="flex gap-2">
+                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
+                            View RCA
+                          </DrilldownButton>
+                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
+                            Blast Radius
+                          </DrilldownButton>
+                        </div>
+                      </div>
+                    ))}
+                  {overview.recent_incidents.filter(inc => {
+                    if (selectedRegion.id === 'ap-northeast') return inc.service.includes('Settlement') || inc.service.includes('Partner');
+                    if (selectedRegion.id === 'eu-west') return inc.service.includes('Payment') || inc.service.includes('Merchant');
+                    return false;
+                  }).length === 0 && (
+                    <p className="text-xs text-text-secondary">Incident details currently compiling. Review overall incidents explorer.</p>
+                  )}
+                </div>
+              )}
+            </DrilldownSection>
+
+            <DrilldownSection title="Regional Services Status" icon={<Activity className="w-4 h-4" />}>
+              <div className="space-y-3">
+                {services
+                  .filter(s => {
+                    if (selectedRegion.id === 'ap-northeast') return s.id === 'settlement-processing' || s.id === 'partner-integrations' || s.id === 'fraud-detection';
+                    if (selectedRegion.id === 'eu-west') return s.id === 'payment-authorization' || s.id === 'merchant-services';
+                    if (selectedRegion.id === 'us-east' || selectedRegion.id === 'us-west') return s.id === 'api-gateway-services' || s.id === 'fraud-detection';
+                    return s.health !== 'healthy';
+                  })
+                  .map(s => (
+                    <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+                      <div>
+                        <p className="text-sm font-semibold text-text-primary">{s.name}</p>
+                        <p className="text-[10px] text-text-secondary">Availability: {s.availability.toFixed(2)}% · Latency: {s.latency_p99_ms.toFixed(1)}ms</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <HealthBadge health={s.health} />
+                        <Link to={`/services/${s.id}`} className="p-1 hover:bg-card-hover rounded font-semibold text-primary" title="View details">
+                          <ExternalLink className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                {services.filter(s => {
+                  if (selectedRegion.id === 'ap-northeast') return s.id === 'settlement-processing' || s.id === 'partner-integrations' || s.id === 'fraud-detection';
+                  if (selectedRegion.id === 'eu-west') return s.id === 'payment-authorization' || s.id === 'merchant-services';
+                  if (selectedRegion.id === 'us-east' || selectedRegion.id === 'us-west') return s.id === 'api-gateway-services' || s.id === 'fraud-detection';
+                  return s.health !== 'healthy';
+                }).length === 0 && (
+                  <p className="text-xs text-text-secondary">No regional microservice constraints active. Standard gateway routing healthy.</p>
+                )}
+              </div>
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="executive"
+                selectedEntity={`${selectedRegion.label} Region`}
+                entityData={{
+                  region_id: selectedRegion.id,
+                  region_name: selectedRegion.label,
+                  health: selectedRegion.health,
+                  incidents: overview.recent_incidents.filter(inc => {
+                    if (selectedRegion.id === 'ap-northeast') return inc.service.includes('Settlement') || inc.service.includes('Partner');
+                    if (selectedRegion.id === 'eu-west') return inc.service.includes('Payment') || inc.service.includes('Merchant');
+                    return false;
+                  })
+                }}
+                suggestedQuestions={[
+                  `Why is the ${selectedRegion.label} region in a ${selectedRegion.health} state?`,
+                  "What services run in this region?",
+                  "Is there a network degradation affecting regional latency?"
                 ]}
               />
             </div>
