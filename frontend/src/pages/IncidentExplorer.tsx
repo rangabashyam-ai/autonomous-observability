@@ -655,10 +655,10 @@ function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onCl
                       {/* Timeline dot */}
                       <div className="absolute -left-5 top-3 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 dark:bg-slate-600 flex items-center justify-center">
                         <div className={`w-1.5 h-1.5 rounded-full ${v.status === 'Resolved' || v.status === 'Done' || v.status === 'Closed'
-                            ? 'bg-emerald-500'
-                            : v.status === 'In Progress' || v.status === 'In Review'
-                              ? 'bg-blue-500'
-                              : 'bg-red-400'
+                          ? 'bg-emerald-500'
+                          : v.status === 'In Progress' || v.status === 'In Review'
+                            ? 'bg-blue-500'
+                            : 'bg-red-400'
                           }`} />
                       </div>
 
@@ -967,25 +967,6 @@ export default function IncidentExplorer() {
   // Handle ?id= deep-link: open popup for the given incident
   useEffect(() => {
     const id = searchParams.get('id');
-<<<<<<< HEAD
-    if (!id) return;
-
-    getIncident(id)
-      .then((inc) => {
-        setSelected(inc);
-        setAnalysisError(null);
-        setAnalysisLoading(true);
-        setChangeRequests(null);
-        getIncidentClickAnalysis(inc.incident_id)
-          .then(setAnalysis)
-          .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
-          .finally(() => setAnalysisLoading(false));
-        getIncidentChangeRequests(inc.incident_id)
-          .then((r) => setChangeRequests({ tickets: r.tickets }))
-          .catch(() => setChangeRequests(null));
-      })
-      .catch((err) => setAnalysisError(err?.message ?? 'Failed to load incident'));
-=======
     const q = searchParams.get('search');
     if (id) {
       setSearch(id);
@@ -997,7 +978,6 @@ export default function IncidentExplorer() {
       setSearch('');
       setSelected(null);
     }
->>>>>>> 71f249567e7ce494955f7773eb51e7c27d40fd13
   }, [searchParams]);
 
   const handleRowClick = (inc: Incident) => {
