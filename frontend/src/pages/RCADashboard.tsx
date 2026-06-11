@@ -207,9 +207,6 @@ function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs">
 
-          {/* LLM output at the top */}
-          <AgentLLMBlock content={result.llm_analysis} model={result.llm_model} error={result.llm_error} />
-
           {/* Dependency path */}
           {depPath.length > 0 && (
             <div>
@@ -282,10 +279,16 @@ function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
             </div>
           )}
 
+          {/* LLM output moved to the bottom */}
+          <AgentLLMBlock content={result.llm_analysis} model={result.llm_model} error={result.llm_error} />
+
           {/* Chat */}
           <ReportChat
             reportContext={buildAgentContext(result, service, alerts, symptoms)}
             reportType="incident_rca"
+            subtitle="Scoped to RCA"
+            entityName={`${service} RCA`}
+            suggestedQuestions={['Why was this identified as the root cause?', 'Suggest alternative hypotheses', 'Explain the confidence score']}
           />
         </div>
       </div>

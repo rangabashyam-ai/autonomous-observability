@@ -631,10 +631,12 @@ function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onCl
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{ticket.service}</span>
                   </div>
                   <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">{ticket.summary}</p>
-                  <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                    <span>Root cause: <span className="text-red-600 dark:text-red-400 font-medium">{ticket.root_cause}</span></span>
-                    <span>Fix: <span className="text-emerald-600 dark:text-emerald-400 font-medium">{ticket.fix}</span></span>
-                  </div>
+                  {isResolved(ticket.incident_state) && (
+                    <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span>Root cause: <span className="text-red-600 dark:text-red-400 font-medium">{ticket.root_cause}</span></span>
+                      <span>Fix: <span className="text-emerald-600 dark:text-emerald-400 font-medium">{ticket.fix}</span></span>
+                    </div>
+                  )}
                 </div>
                 <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium ${
                   VERSION_STATUS_CFG[ticket.incident_state] ?? VERSION_STATUS_CFG['Done']
@@ -872,6 +874,9 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
             <ReportChat
               reportContext={buildIncidentContext(incident, analysis, changeRequests)}
               reportType={analysis.type}
+              subtitle="Scoped to Incidents"
+              entityName={`Incident ${incident.incident_id}`}
+              suggestedQuestions={['Summarize this incident', 'What is the root cause?', 'How can I resolve this?']}
             />
           )}
         </div>

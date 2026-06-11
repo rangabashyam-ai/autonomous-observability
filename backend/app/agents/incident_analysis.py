@@ -68,11 +68,68 @@ def _load_changes() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# BFS helpers
+# Correlation & Path Tracing Helpers
 # ---------------------------------------------------------------------------
 
 
-def _bfs_up(start: str, edges: list[dict], max_depth: int = 3) -> list[str]:
+def _get_node_info(node_id: str) -> dict:
+    for s in _load_services():
+        if s["id"] == node_id:
+            return s
+    for n in _load_infra_nodes():
+        if n["id"] == node_id:
+            return n
+    return {"id": node_id, "type": "unknown", "layer": "unknown"}
+
+
+def _is_correlated(source_id: str, target_id: str, comp_metrics: dict) -> bool:
+    source_metrics = comp_metrics.get(source_id, {})
+    target_metrics = comp_metrics.get(target_id, {})
+    src_anomalies = _detect_metric_anomalies(source_metrics)
+    tgt_anomalies = _detect_metric_anomalies(target_metrics)
+
+    # If neither is anomalous, there's no failure correlation to trace.
+    if not src_anomalies and not tgt_anomalies:
+        return False
+    # If one is anomalous and the other isn't, we might still trace if it's the edge of the failure,
+    # but strictly speaking, correlation requires understanding propagation.
+    # Let's loosely say an edge is correlated if AT LEAST ONE is anomalous (so we reach the boundary),
+    # or BOTH are anomalous and it makes logical sense based on jobs.
+    
+    src_node = _get_node_info(source_id)
+    tgt_node = _get_node_info(target_id)
+    
+    src_type = src_node.get("type", "").lower()
+    tgt_type = tgt_node.get("type", "").lower()
+
+    def has_metric(anomalies: list[str], metric: str) -> bool:
+        return any(metric in a for a in anomalies)
+
+    # Example job correlation rules:
+    # 1. Database/Storage anomalies (latency/storage) propagate to upstream (source) latency/errors.
+    if tgt_type in ["database", "storage"]:
+        if has_metric(tgt_anomalies, "latency") or has_metric(tgt_anomalies, "storage"):
+            if has_metric(src_anomalies, "latency") or has_metric(src_anomalies, "error_rate"):
+                return True
+    
+    # 2. Queue/Broker anomalies (latency) propagate to downstream timeouts/latency or upstream errors.
+    if tgt_type in ["queue", "broker", "kafka", "rabbitmq"]:
+        if has_metric(tgt_anomalies, "latency") or has_metric(tgt_anomalies, "memory"):
+            if has_metric(src_anomalies, "latency") or has_metric(src_anomalies, "error_rate"):
+                return True
+
+    # 3. Compute/Service (Microservice, Application) CPU/Memory propagates to latency/errors
+    if tgt_type in ["microservice", "application", "server"]:
+        if has_metric(tgt_anomalies, "cpu") or has_metric(tgt_anomalies, "memory"):
+            if has_metric(src_anomalies, "latency") or has_metric(src_anomalies, "error_rate"):
+                return True
+
+    # Fallback: if both have anomalies, we assume some correlation exists,
+    # or if we are at the boundary of a failure, we trace it to show the edge.
+    return True
+
+
+def _bfs_correlated_up(start: str, edges: list[dict], comp_metrics: dict, max_depth: int = 3) -> list[str]:
     result, visited, queue = [], {start}, deque([(start, 0)])
     while queue:
         node, depth = queue.popleft()
@@ -82,12 +139,14 @@ def _bfs_up(start: str, edges: list[dict], max_depth: int = 3) -> list[str]:
             continue
         for e in edges:
             if e["target"] == node and e["source"] not in visited:
-                visited.add(e["source"])
-                queue.append((e["source"], depth + 1))
+                # Target is 'node' (downstream), Source is 'e["source"]' (upstream)
+                if _is_correlated(e["source"], node, comp_metrics):
+                    visited.add(e["source"])
+                    queue.append((e["source"], depth + 1))
     return result
 
 
-def _bfs_down(start: str, edges: list[dict], max_depth: int = 3) -> list[str]:
+def _bfs_correlated_down(start: str, edges: list[dict], comp_metrics: dict, max_depth: int = 3) -> list[str]:
     result, visited, queue = [], {start}, deque([(start, 0)])
     while queue:
         node, depth = queue.popleft()
@@ -97,25 +156,66 @@ def _bfs_down(start: str, edges: list[dict], max_depth: int = 3) -> list[str]:
             continue
         for e in edges:
             if e["source"] == node and e["target"] not in visited:
-                visited.add(e["target"])
-                queue.append((e["target"], depth + 1))
+                # Source is 'node' (upstream), Target is 'e["target"]' (downstream)
+                if _is_correlated(node, e["target"], comp_metrics):
+                    visited.add(e["target"])
+                    queue.append((e["target"], depth + 1))
     return result
 
 
-# ---------------------------------------------------------------------------
-# Public helpers
-# ---------------------------------------------------------------------------
-
-
 def _trace_full_dependency_path(component: str, edges: list[dict], max_depth: int = 3) -> list[str]:
-    upstream = list(reversed(_bfs_up(component, edges, max_depth)))
-    downstream = _bfs_down(component, edges, max_depth)
+    # First, get metrics for all possible connected components up to max_depth (unfiltered)
+    # to evaluate correlation.
+    raw_upstream, raw_downstream = [], []
+    q_up, v_up = deque([(component, 0)]), {component}
+    while q_up:
+        n, d = q_up.popleft()
+        raw_upstream.append(n)
+        if d < max_depth:
+            for e in edges:
+                if e["target"] == n and e["source"] not in v_up:
+                    v_up.add(e["source"])
+                    q_up.append((e["source"], d + 1))
+                    
+    q_down, v_down = deque([(component, 0)]), {component}
+    while q_down:
+        n, d = q_down.popleft()
+        raw_downstream.append(n)
+        if d < max_depth:
+            for e in edges:
+                if e["source"] == n and e["target"] not in v_down:
+                    v_down.add(e["target"])
+                    q_down.append((e["target"], d + 1))
+                    
+    all_reachable = list(set(raw_upstream + raw_downstream))
+    comp_metrics = _get_metrics_snapshot(all_reachable)
+
+    upstream = list(reversed(_bfs_correlated_up(component, edges, comp_metrics, max_depth)))
+    downstream = _bfs_correlated_down(component, edges, comp_metrics, max_depth)
+    
     seen: set[str] = set()
     path: list[str] = []
+    # Always include the primary component
     for node in upstream + [component] + downstream:
         if node not in seen:
             seen.add(node)
             path.append(node)
+    
+    # If the correlated path is only the primary component itself (no anomalous edges),
+    # fallback to the raw raw_upstream and raw_downstream to at least provide context.
+    if len(path) <= 1:
+        fallback_seen = set()
+        fallback_path = []
+        for node in reversed(raw_upstream):
+            if node not in fallback_seen:
+                fallback_seen.add(node)
+                fallback_path.append(node)
+        for node in raw_downstream:
+            if node not in fallback_seen:
+                fallback_seen.add(node)
+                fallback_path.append(node)
+        return fallback_path
+        
     return path
 
 
