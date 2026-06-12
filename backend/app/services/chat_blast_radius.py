@@ -6,6 +6,29 @@ from datetime import datetime, timezone
 from app.data_store import read_json
 from app.services.intelligence import analyze_blast_radius, analyze_rca
 
+def is_casual_message(question: str) -> bool:
+    q = question.strip().lower().rstrip("?").rstrip("!").rstrip(".").strip()
+    
+    greetings = {
+        "hi", "hello", "hey", "how are you", "how's it going", "yo", "greetings", "good morning", "good afternoon", "good evening",
+        "help", "what can you do", "what do you do", "how do you work", "help me", "who are you", "what is this", "what is your name"
+    }
+    
+    if q in greetings:
+        return True
+        
+    for prefix in ["hi ", "hello ", "hey ", "yo ", "help ", "greetings "]:
+        if q.startswith(prefix):
+            return True
+            
+    tech_words = {"blast", "radius", "rca", "root", "cause", "fail", "alert", "service", "propagation", "impact", "customer", "downstream", "upstream", "infrastructure", "incident", "status", "payment", "network", "spine", "telemetry"}
+    words = [w.strip() for w in q.split() if w.strip()]
+    if len(words) <= 4:
+        if not any(any(tw in w for tw in tech_words) for w in words):
+            return True
+            
+    return False
+
 def chat_blast_radius_query(service: str, question: str, history: list[dict] = None) -> dict:
     if history is None:
         history = []
@@ -19,6 +42,16 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
         symptoms=default_symptoms,
         service=service
     )
+
+    if is_casual_message(question):
+        return {
+            "service": service,
+            "currently_impacted": blast.get('currently_impacted_services', []),
+            "likely_downstream": blast.get('likely_downstream_services', []),
+            "impacted_infrastructure": blast.get('impacted_infrastructure', []),
+            "impacted_regions": blast.get('impacted_regions', []),
+            "answer": "Hey! 👋 I'm your AI incident analyst. I can help you understand this blast radius, identify root causes, track impact propagation, and recommend next steps. What would you like to know?"
+        }
     rca = analyze_rca(
         alerts=default_alerts,
         symptoms=default_symptoms,
@@ -89,6 +122,7 @@ Rules for your response:
 1. Provide a clear, structured analysis. Use headers, bullet points, or paragraphs where appropriate. Keep it professional, highly technical, and actionable.
 2. Limit the response to a maximum of 500 words.
 3. Be concise and prioritize high-risk signals.
+4. If the user query is a greeting or casual message (e.g. "hi", "hello", "hey", "how are you", "help", "what can you do"), respond in a warm, friendly, non-technical human manner: "Hey! 👋 I'm your AI incident analyst. I can help you understand this blast radius, identify root causes, track impact propagation, and recommend next steps. What would you like to know?". Do NOT use any markdown for casual responses. Use relevant emoji sparingly.
 
 === INCIDENT INVESTIGATION CONTEXT ===
 Target Service / Analysis Origin: {service}

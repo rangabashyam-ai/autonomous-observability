@@ -47,6 +47,7 @@ export default function BlastRadiusDashboard() {
   const [selectedRegionHighlight, setSelectedRegionHighlight] = useState<string | null>(null);
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<string | null>(null);
   const [activeRegionModal, setActiveRegionModal] = useState<string | null>(null);
+  const [expandedPanel, setExpandedPanel] = useState<'dynamic' | 'component' | 'chat' | null>(null);
 
   const baseServiceImpact = useMemo(() => {
     const serviceImpactMap: Record<string, number> = {
@@ -189,7 +190,8 @@ export default function BlastRadiusDashboard() {
 
   const selectNode = useCallback((nodeId: string) => {
     setSelection({ type: 'node', id: nodeId });
-  }, []);
+    setExpandedPanel('component');
+  }, [setExpandedPanel]);
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     selectNode(node.id);
@@ -937,7 +939,7 @@ export default function BlastRadiusDashboard() {
             </div>
 
             {/* Right side Investigation Workflow Panel: Adjusted height h-[780px] */}
-            <div className="xl:col-span-4 h-[780px] flex flex-col gap-3 overflow-y-auto pr-1">
+            <div className="xl:col-span-4 h-[780px] flex flex-col gap-2 pr-1">
               <div className="shrink-0">
                 <IncidentPropagationSummary
                   result={result}
@@ -945,10 +947,12 @@ export default function BlastRadiusDashboard() {
                   selection={selectionDetail}
                   alerts={alerts}
                   symptoms={symptoms}
+                  isExpanded={expandedPanel === 'dynamic'}
+                  onToggle={() => setExpandedPanel(prev => prev === 'dynamic' ? null : 'dynamic')}
                 />
               </div>
               
-              <div className="flex-1 min-h-0">
+              <div className="shrink-0">
                 <BlastRadiusDetailPanel
                   rootId={service}
                   rootLabel={rootLabel}
@@ -957,6 +961,8 @@ export default function BlastRadiusDashboard() {
                   onSetRootCause={handleSetRootCause}
                   result={result}
                   graph={graph}
+                  isExpanded={expandedPanel === 'component'}
+                  onToggle={() => setExpandedPanel(prev => prev === 'component' ? null : 'component')}
                 />
               </div>
 
@@ -965,6 +971,8 @@ export default function BlastRadiusDashboard() {
                   service={service}
                   selection={selectionDetail}
                   rootLabel={rootLabel}
+                  isExpanded={expandedPanel === 'chat'}
+                  onToggle={() => setExpandedPanel(prev => prev === 'chat' ? null : 'chat')}
                 />
               </div>
             </div>

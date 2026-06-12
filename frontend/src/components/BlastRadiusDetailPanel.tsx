@@ -31,6 +31,8 @@ interface Props {
   onSetRootCause: (nodeId: string) => void;
   result?: BlastRadiusResult | null;
   graph?: DependencyGraph | null;
+  isExpanded?: boolean;
+  onToggle?: () => void;
 }
 
 const ROLE_BADGE: Record<BlastImpactRole, string> = {
@@ -95,15 +97,21 @@ export function IncidentPropagationSummary({
   selection,
   alerts: _alerts = ['CPU Saturation', 'API Error Spike'],
   symptoms: _symptoms = ['Latency Increase', 'Retry Storm'],
+  isExpanded: controlledExpanded,
+  onToggle,
 }: {
   result: BlastRadiusResult;
   rootLabel: string;
   selection: Selection;
   alerts?: string[];
   symptoms?: string[];
+  isExpanded?: boolean;
+  onToggle?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(14 * 60 + 32);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -137,25 +145,24 @@ export function IncidentPropagationSummary({
     propagationFillWidth = "15%";
     newServicesCount = 0;
   }
-
   return (
-    <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm text-sm overflow-hidden transition-all duration-300 ease-in-out">
+    <div className="bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out">
       {/* COLLAPSED STATE DESIGN / SUMMARY BAR */}
       <div 
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center justify-between p-3 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-750/30 h-[58px]"
+        onClick={toggleExpanded}
+        className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 h-[48px] gap-2"
       >
         {/* Left Side: Warning Icon + "{rootLabel} failed" */}
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-red-500 shrink-0 text-base" role="img" aria-label="warning">⚠</span>
-          <span className="font-bold text-red-655 dark:text-red-450 truncate text-xs sm:text-sm">
+          <span className="font-bold text-red-655 dark:text-red-455 truncate text-xs sm:text-sm">
             {rootLabel} failed
           </span>
         </div>
 
         {/* Middle: Badges */}
         <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-955/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
             {result.severity_recommendation}
           </span>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
@@ -187,10 +194,10 @@ export function IncidentPropagationSummary({
       {/* EXPANDED STATE */}
       <div 
         className={`transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[600px] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
+          isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
         }`}
       >
-        <div className="p-3 pt-2 space-y-2 text-slate-655 dark:text-slate-300">
+        <div className="p-4 space-y-2 text-slate-655 dark:text-slate-300 rounded-b-lg">
           <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100 dark:border-slate-700/60">
             <svg className="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -411,42 +418,129 @@ export default function BlastRadiusDetailPanel({
   onSetRootCause,
   result,
   graph,
+  isExpanded: controlledExpanded,
+  onToggle,
 }: Props) {
+  const [internalExpanded, setInternalExpanded] = useState(true);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
+
+  const selectedNode = selection?.type === 'node' ? selection.detail : null;
+  const selectedEdge = selection?.type === 'edge' ? selection.detail : null;
+
+  // Colors for collapsed node pill
+  let pillBg = "bg-green-50 dark:bg-green-955/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/50";
+  let dotColor = "text-green-500";
+  if (selectedNode) {
+    if (selectedNode.id === rootId || selectedNode.impactRole === 'root') {
+      pillBg = "bg-red-50 dark:bg-red-955/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50";
+      dotColor = "text-red-500";
+    } else if (selectedNode.impactRole === 'impacted' || selectedNode.health === 'critical' || selectedNode.health === 'warning') {
+      pillBg = "bg-orange-50 dark:bg-orange-955/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50";
+      dotColor = "text-orange-500";
+    }
+  }
+
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 shrink-0">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">Component Inspector</h3>
-        <p className={`text-xs ${mutedText} mt-0.5`}>
-          Root: <span className="text-red-600 dark:text-red-400 font-semibold">{rootLabel}</span>
-        </p>
+    <div className="bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out">
+      {/* COLLAPSED STATE DESIGN / SUMMARY BAR */}
+      <div 
+        onClick={toggleExpanded}
+        className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 h-[48px] gap-2"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0 text-base">🔧</span>
+          <span className="font-bold text-slate-850 dark:text-slate-250 truncate text-xs sm:text-sm">
+            Component Inspector
+          </span>
+        </div>
+
+        {selectedNode ? (
+          <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pillBg}`}>
+              <span className={`${dotColor} mr-1`}>●</span>{selectedNode.label}
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              selectedNode.health === 'healthy' 
+                ? 'bg-green-50 dark:bg-green-955/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/50' 
+                : selectedNode.health === 'warning' 
+                  ? 'bg-yellow-50 dark:bg-yellow-955/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-900/50' 
+                  : 'bg-red-50 dark:bg-red-955/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50'
+            }`}>
+              {selectedNode.health}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
+              {selectedNode.riskScore.toFixed(0)}% risk
+            </span>
+          </div>
+        ) : selectedEdge ? (
+          <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-955/20 text-violet-750 dark:text-violet-400 border border-violet-250 dark:border-violet-900/50">
+              <span className="text-violet-500 mr-1">●</span>{selectedEdge.sourceLabel} → {selectedEdge.targetLabel}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
+              {selectedEdge.kindLabel}
+            </span>
+          </div>
+        ) : (
+          <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              No component selected
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
+            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          >
+            ▼
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 min-h-0">
-        {!selection ? (
-          <div className="h-full flex flex-col items-center justify-center text-center px-2 py-8">
-            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-              </svg>
+      {/* EXPANDED CONTENT WRAPPER */}
+      <div 
+        className={`transition-all duration-300 ease-in-out ${
+          isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
+        }`}
+      >
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 shrink-0">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Component Inspector</h3>
+          <p className={`text-xs ${mutedText} mt-0.5`}>
+            Root: <span className="text-red-600 dark:text-red-400 font-semibold">{rootLabel}</span>
+          </p>
+        </div>
+
+        <div className="p-4">
+          {!selection ? (
+            <div className="h-full flex flex-col items-center justify-center text-center px-2 py-8">
+              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Nothing selected</p>
+              <p className={`text-xs ${mutedText} mt-1 max-w-[200px]`}>
+                Click a node or dependency arrow to inspect its role in the incident.
+              </p>
             </div>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Nothing selected</p>
-            <p className={`text-xs ${mutedText} mt-1 max-w-[200px]`}>
-              Click a node or dependency arrow to inspect its role in the incident.
-            </p>
-          </div>
-        ) : selection.type === 'node' ? (
-          <NodeDetail
-            detail={selection.detail}
-            rootId={rootId}
-            rootLabel={rootLabel}
-            onSelectNode={onSelectNode}
-            onSetRootCause={onSetRootCause}
-            result={result}
-            graph={graph}
-          />
-        ) : (
-          <EdgeDetail detail={selection.detail} rootLabel={rootLabel} onSelectNode={onSelectNode} />
-        )}
+          ) : selection.type === 'node' ? (
+            <NodeDetail
+              detail={selection.detail}
+              rootId={rootId}
+              rootLabel={rootLabel}
+              onSelectNode={onSelectNode}
+              onSetRootCause={onSetRootCause}
+              result={result}
+              graph={graph}
+            />
+          ) : (
+            <EdgeDetail detail={selection.detail} rootLabel={rootLabel} onSelectNode={onSelectNode} />
+          )}
+        </div>
       </div>
     </div>
   );
