@@ -181,6 +181,31 @@ export function buildBlastFlowEdges(
   const upstreamSet = computeUpstreamSet(rootId, graphEdges);
   const downstreamSet = computeDownstreamSet(rootId, graphEdges);
 
+  // Trace BFS sequence of failure propagation for 'impact' edges
+  const propagationEdges: GraphEdge[] = [];
+  const queue = [rootId];
+  const visitedNodes = new Set<string>([rootId]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const outgoing = graphEdges
+      .filter(e => e.source === current)
+      .map(e => {
+        const kind = classifyEdgeKind(e, blast, rootId, upstreamSet, downstreamSet);
+        return { edge: e, kind };
+      })
+      .filter(x => x.kind === 'impact' && !visitedNodes.has(x.edge.target));
+    
+    // Sort outgoing edges deterministically by target ID
+    outgoing.sort((a, b) => a.edge.target.localeCompare(b.edge.target));
+
+    for (const x of outgoing) {
+      visitedNodes.add(x.edge.target);
+      propagationEdges.push(x.edge);
+      queue.push(x.edge.target);
+    }
+  }
+
   const impactColor = theme === 'light' ? '#dc2626' : '#f87171';
   const upstreamColor = theme === 'light' ? '#4f46e5' : '#818cf8';
   const dependencyColor = theme === 'light' ? '#94a3b8' : '#64748b';
@@ -205,10 +230,17 @@ export function buildBlastFlowEdges(
     const edgeId = `be-${i}`;
     const isSelected = selectedEdgeId === edgeId;
 
+    // Find sequence index
+    const seqIndex = propagationEdges.findIndex(
+      pe => pe.source === edge.source && pe.target === edge.target
+    );
+    const seqNumber = seqIndex !== -1 ? seqIndex + 1 : undefined;
+
     const flowEdge: Edge = {
       id: edgeId,
       source: edge.source,
       target: edge.target,
+      type: 'blastRadiusEdge',
       animated: palette.animated,
       selected: isSelected,
       interactionWidth: 20,
@@ -225,7 +257,7 @@ export function buildBlastFlowEdges(
         width: 16,
         height: 16,
       },
-      data: { kind, relationship: edge.relationship },
+      data: { kind, relationship: edge.relationship, seqNumber },
     };
 
     if (kind !== 'context') {

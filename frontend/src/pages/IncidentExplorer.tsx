@@ -979,7 +979,6 @@ export default function IncidentExplorer() {
       setSelected(null);
     }
   }, [searchParams]);
-
   const handleRowClick = (inc: Incident) => {
     setSelected(inc);
     setAnalysis(null);
@@ -1005,7 +1004,6 @@ export default function IncidentExplorer() {
   const hasMore = incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
   const totalPages = Math.ceil(total / PAGE_SIZE);
-
   const copilotContext = useMemo(() => {
     if (!selected) return null;
     return {
@@ -1078,7 +1076,6 @@ export default function IncidentExplorer() {
             </div>
           )}
         </div>
-
         {hasMore && !loading && (
           <button
             onClick={() => load(false)}
