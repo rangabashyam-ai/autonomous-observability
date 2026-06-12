@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  Cloud, Plus, Trash2, RefreshCw, CheckCircle2, XCircle,
-  AlertTriangle, ChevronDown, ChevronUp, Server, Database,
+  Cloud, Trash2, RefreshCw, CheckCircle2, XCircle,
+  AlertTriangle, ChevronDown, ChevronUp, Server,
   Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff
 } from 'lucide-react';
 

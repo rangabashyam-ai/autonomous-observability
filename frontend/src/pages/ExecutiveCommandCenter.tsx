@@ -8,9 +8,9 @@ import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
-import { generateDualTrend, generateTrend, TrendChart, MiniAreaChart } from '../components/charts/charts';
+import { generateDualTrend, TrendChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
-import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink } from 'lucide-react';
+import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
@@ -56,11 +56,6 @@ export default function ExecutiveCommandCenter() {
     }
     return 'All business services operating within SLA targets. No critical revenue impact detected in the last 24 hours.';
   }, [exec, overview]);
-
-  const revenueTrend = useMemo(
-    () => generateTrend(exec?.revenue_impact_usd ?? 1000, 12, 0.15),
-    [exec?.revenue_impact_usd]
-  );
   const kpiTrend = useMemo(
     () => generateDualTrend(exec?.service_availability ?? 99, exec?.transaction_success_rate ?? 98),
     [exec?.service_availability, exec?.transaction_success_rate]
