@@ -17,10 +17,7 @@ const SYMPTOM_OPTIONS = [
   'Connection Refused', 'Throughput Drop', 'Error Rate Spike',
 ];
 
-const SERVICES = [
-  'payment-authorization', 'settlement-processing', 'fraud-detection',
-  'merchant-services', 'api-gateway-services', 'partner-integrations',
-];
+import { SERVICES } from '../constants/services';
 
 interface RCAHistory {
   timestamp: string;
