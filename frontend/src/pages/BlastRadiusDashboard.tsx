@@ -23,7 +23,10 @@ import BlastRadiusDetailPanel, {
 import BlastRadiusClickableTags from '../components/BlastRadiusClickableTags';
 import BlastRadiusPathChat from '../components/BlastRadiusPathChat';
 
+import BlastRadiusEdge from '../components/BlastRadiusEdge';
+
 const nodeTypes = { blastRadius: BlastRadiusNode };
+const edgeTypes = { blastRadiusEdge: BlastRadiusEdge };
 
 type GraphSelection =
   | { type: 'node'; id: string }
@@ -608,6 +611,137 @@ export default function BlastRadiusDashboard() {
     );
   };
 
+
+  const neighborsOfSelected = useMemo(() => {
+    if (!selectedNodeId || !graph) return new Set<string>();
+    const neighbors = new Set<string>();
+    for (const edge of graph.edges) {
+      if (edge.source === selectedNodeId) {
+        neighbors.add(edge.target);
+      } else if (edge.target === selectedNodeId) {
+        neighbors.add(edge.source);
+      }
+    }
+    return neighbors;
+  }, [selectedNodeId, graph]);
+
+  const activeNodes = useMemo(() => {
+    const selectedNodeObj = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+    const isSelectedRed = selectedNodeObj
+      ? (selectedNodeObj.data?.impactRole === 'root' || selectedNodeObj.data?.impactRole === 'impacted')
+      : false;
+
+    return nodes.map((node) => {
+      const isRed = node.data?.impactRole === 'root' || node.data?.impactRole === 'impacted';
+      
+      let targetOpacity = 1.0;
+      let isGlowing = false;
+      let isPulsing = false;
+      const isFocusMode = selectedNodeId !== null;
+
+      if (selectedNodeId !== null) {
+        if (isSelectedRed) {
+          // Rule 1: WHEN RED node is clicked:
+          // - Red path nodes = 100% opacity + red glow border
+          // - Non-red nodes = 70% opacity
+          if (isRed) {
+            targetOpacity = 1.0;
+            isPulsing = true;
+          } else {
+            targetOpacity = 0.7;
+          }
+        } else {
+          // Rule 2: WHEN NON-RED node is clicked:
+          // - Clicked node = 100% opacity + color glow
+          // - Its direct neighbors = 85% opacity
+          // - Everything else = 60% opacity
+          if (node.id === selectedNodeId) {
+            targetOpacity = 1.0;
+            isGlowing = true;
+          } else if (neighborsOfSelected.has(node.id)) {
+            targetOpacity = 0.85;
+          } else {
+            targetOpacity = 0.60;
+          }
+        }
+      } else {
+        // Rule 3: NO click (default state):
+        // - Everything = 100% opacity
+        targetOpacity = 1.0;
+      }
+
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity: targetOpacity,
+          transition: 'opacity 200ms ease',
+        },
+        data: {
+          ...node.data,
+          isFocusMode,
+          isGlowing,
+          isPulsing,
+        },
+      };
+    });
+  }, [nodes, selectedNodeId, neighborsOfSelected]);
+
+  const activeEdges = useMemo(() => {
+    const selectedNodeObj = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+    const isSelectedRed = selectedNodeObj
+      ? (selectedNodeObj.data?.impactRole === 'root' || selectedNodeObj.data?.impactRole === 'impacted')
+      : false;
+
+    return edges.map((edge) => {
+      const isRed = edge.data?.kind === 'impact';
+      
+      let targetOpacity = 1.0;
+      let filterStyle: string | undefined = undefined;
+
+      if (selectedNodeId !== null) {
+        if (isSelectedRed) {
+          // Rule 1: WHEN RED node is clicked:
+          // - Red arrows = 100% opacity + glowing
+          // - Non-red arrows/edges = 40% opacity
+          if (isRed) {
+            targetOpacity = 1.0;
+            filterStyle = 'drop-shadow(0 0 5px rgba(220, 60, 60, 0.85)) drop-shadow(0 0 3px rgba(220, 60, 60, 0.5))'; // glow red!
+          } else {
+            targetOpacity = 0.40;
+          }
+        } else {
+          // Rule 2: WHEN NON-RED node is clicked:
+          // - Its direct edges = 100% opacity
+          // - Red arrows = 50% opacity
+          // - Everything else = 60% opacity
+          const isConnected = edge.source === selectedNodeId || edge.target === selectedNodeId;
+          if (isConnected) {
+            targetOpacity = 1.0;
+          } else if (isRed) {
+            targetOpacity = 0.50;
+          } else {
+            targetOpacity = 0.60;
+          }
+        }
+      } else {
+        // Rule 3: NO click (default state):
+        // - Everything = 100% opacity
+        targetOpacity = 1.0;
+      }
+
+      return {
+        ...edge,
+        style: {
+          ...edge.style,
+          opacity: targetOpacity,
+          filter: filterStyle,
+          transition: 'opacity 200ms ease, filter 200ms ease, stroke-width 200ms ease',
+        },
+      };
+    });
+  }, [edges, nodes, selectedNodeId]);
+
   return (
     <div>
       <PageHeader
@@ -773,9 +907,10 @@ export default function BlastRadiusDashboard() {
               <div className="flex-1 min-h-0 w-full relative">
                 <ReactFlow
                   className="w-full h-full"
-                  nodes={nodes}
-                  edges={edges}
+                  nodes={activeNodes}
+                  edges={activeEdges}
                   nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
                   fitView
                   fitViewOptions={{ padding: 0.15 }}
                   minZoom={0.25}
@@ -813,18 +948,24 @@ export default function BlastRadiusDashboard() {
                 />
               </div>
               
-              <div className="h-[320px] shrink-0">
+              <div className="flex-1 min-h-0">
                 <BlastRadiusDetailPanel
                   rootId={service}
                   rootLabel={rootLabel}
                   selection={selectionDetail}
                   onSelectNode={selectNode}
                   onSetRootCause={handleSetRootCause}
+                  result={result}
+                  graph={graph}
                 />
               </div>
 
               <div className="shrink-0">
-                <BlastRadiusPathChat service={service} />
+                <BlastRadiusPathChat
+                  service={service}
+                  selection={selectionDetail}
+                  rootLabel={rootLabel}
+                />
               </div>
             </div>
           </div>

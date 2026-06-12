@@ -14,6 +14,11 @@ export interface BlastRadiusNodeData {
   isSelected: boolean;
   riskScore: number;
   isRegionHighlighted?: boolean;
+  isHovered?: boolean;
+  isNeighbor?: boolean;
+  isFocusMode?: boolean;
+  isGlowing?: boolean;
+  isPulsing?: boolean;
 }
 
 const BADGE_COLORS: Record<BlastImpactRole, string> = {
@@ -61,19 +66,33 @@ function BlastRadiusNode({ data }: NodeProps<BlastRadiusNodeData>) {
     ? '#3b82f6' 
     : nodeStyle.border;
 
-  const boxShadowStyle = data.isSelected
-    ? '0 0 0 2px #3b82f640, 0 4px 12px rgba(0,0,0,0.15)'
-    : data.health === 'healthy' && !dimmed
-      ? '0 0 8px rgba(16, 185, 129, 0.25)'
-      : undefined;
+  const { 
+    isFocusMode = false, 
+    isGlowing = false, 
+    isPulsing = false 
+  } = data;
+
+  let boxShadowStyle: string | undefined = undefined;
+  if (isGlowing) {
+    boxShadowStyle = `0 0 12px 3px ${borderStyle}bf, 0 4px 12px rgba(0,0,0,0.25)`;
+  } else if (isPulsing) {
+    boxShadowStyle = `0 0 12px 3px #dc2626b0, 0 4px 12px rgba(0,0,0,0.2)`;
+  } else if (data.isSelected) {
+    boxShadowStyle = '0 0 0 2px #3b82f640, 0 4px 12px rgba(0,0,0,0.15)';
+  } else if (data.health === 'healthy' && !dimmed) {
+    boxShadowStyle = '0 0 8px rgba(16, 185, 129, 0.25)';
+  }
+
+  const shouldPulse = isPulsing || (data.impactRole === 'root' && !isFocusMode);
 
   return (
     <div
-      className={`rounded-lg min-w-[150px] max-w-[190px] transition-all ${dimmed ? 'opacity-45' : 'opacity-100'} ${data.impactRole === 'root' ? 'animate-pulse-root' : ''}`}
+      className={`rounded-lg min-w-[150px] max-w-[190px] transition-all duration-200 ease-in-out ${shouldPulse ? 'animate-pulse-root' : ''}`}
       style={{
         border: `2px solid ${borderStyle}`,
         background: nodeStyle.background,
         boxShadow: boxShadowStyle,
+        transition: 'opacity 200ms ease, border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease',
       }}
     >
       <Handle type="target" position={Position.Left} className="!bg-slate-400 !w-1.5 !h-1.5 !border-0" />
