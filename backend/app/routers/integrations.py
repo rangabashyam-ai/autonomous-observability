@@ -56,6 +56,8 @@ class GCPConnectRequest(BaseModel):
     connection_name: str
     project_id: str
     service_account_json: dict = Field(default_factory=dict)
+    services: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)  # empty = all regions
 
 
 class KubernetesConnectRequest(BaseModel):
@@ -164,6 +166,8 @@ def connect_gcp(req: GCPConnectRequest, background_tasks: BackgroundTasks):
         "connection_name": req.connection_name,
         "project_id": req.project_id,
         "service_account_json": req.service_account_json,
+        "services": req.services,
+        "regions": req.regions,
     }
 
     ok, message = validate_credentials(config)

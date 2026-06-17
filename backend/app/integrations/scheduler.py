@@ -111,7 +111,7 @@ def sync_resources() -> None:
                 from app.integrations.gcp.auth import get_credentials
                 from app.integrations.gcp.discovery import discover_all
                 credentials, project_id = get_credentials(conn_id, conn)
-                resources = discover_all(credentials, project_id)
+                resources = discover_all(credentials, project_id, conn.get("services"), conn.get("regions"))
                 all_resources.extend(resources)
 
             elif provider == "kubernetes":
@@ -260,6 +260,89 @@ def sync_alerts() -> None:
         logger.info(f"[Scheduler] Alert sync complete — {len(all_alerts)} new cloud alerts.")
 
 
+def sync_logs() -> None:
+    """Collect logs from all configured connections."""
+    logger.info("[Scheduler] Starting logs sync...")
+    connections = _get_all_connections()
+    if not connections:
+        return
+
+    all_logs: list[dict] = []
+
+    for conn in connections:
+        provider = conn.get("provider")
+        conn_id = conn.get("connection_id", "")
+        services = conn.get("services", [])
+        
+        try:
+            if provider == "gcp" and (not services or "logging" in services):
+                from app.integrations.gcp.auth import get_credentials
+                from app.integrations.gcp.logs import collect_logs
+                credentials, project_id = get_credentials(conn_id, conn)
+                logs = collect_logs(credentials, project_id)
+                all_logs.extend(logs)
+            # Future: add aws, azure, k8s logs
+        except Exception as exc:
+            logger.error(f"[Scheduler] Logs collection failed for {provider}/{conn_id}: {exc}")
+
+    if all_logs:
+        logs_path = _DATA_DIR / "monitoring" / "logs.json"
+        existing = _read_json(logs_path)
+        # Simple merge, taking the latest logs
+        merged = all_logs + existing.get("logs", [])
+        # Deduplicate by id and sort by timestamp
+        seen = set()
+        deduped = []
+        for log in merged:
+            if log.get("id") not in seen:
+                seen.add(log.get("id"))
+                deduped.append(log)
+        deduped.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        # Keep top 1000
+        _write_json(logs_path, {"logs": deduped[:1000], "updated_at": datetime.now(timezone.utc).isoformat()})
+        logger.info(f"[Scheduler] Logs sync complete — {len(all_logs)} new logs.")
+
+
+def sync_traces() -> None:
+    """Collect traces from all configured connections."""
+    logger.info("[Scheduler] Starting traces sync...")
+    connections = _get_all_connections()
+    if not connections:
+        return
+
+    all_traces: list[dict] = []
+
+    for conn in connections:
+        provider = conn.get("provider")
+        conn_id = conn.get("connection_id", "")
+        services = conn.get("services", [])
+        
+        try:
+            if provider == "gcp" and (not services or "trace" in services):
+                from app.integrations.gcp.auth import get_credentials
+                from app.integrations.gcp.traces import collect_traces
+                credentials, project_id = get_credentials(conn_id, conn)
+                traces = collect_traces(credentials, project_id)
+                all_traces.extend(traces)
+            # Future: add aws, azure traces
+        except Exception as exc:
+            logger.error(f"[Scheduler] Traces collection failed for {provider}/{conn_id}: {exc}")
+
+    if all_traces:
+        traces_path = _DATA_DIR / "monitoring" / "traces.json"
+        existing = _read_json(traces_path)
+        merged = all_traces + existing.get("traces", [])
+        seen = set()
+        deduped = []
+        for trace in merged:
+            if trace.get("trace_id") not in seen:
+                seen.add(trace.get("trace_id"))
+                deduped.append(trace)
+        deduped.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        _write_json(traces_path, {"traces": deduped[:1000], "updated_at": datetime.now(timezone.utc).isoformat()})
+        logger.info(f"[Scheduler] Traces sync complete — {len(all_traces)} new traces.")
+
+
 # ---------------------------------------------------------------------------
 # Scheduler lifecycle
 # ---------------------------------------------------------------------------
@@ -307,8 +390,30 @@ def start_scheduler() -> None:
             coalesce=True,
         )
 
+        # Logs — every 1 minute
+        _scheduler.add_job(
+            sync_logs,
+            trigger="interval",
+            minutes=1,
+            id="sync_logs",
+            name="Cloud Logs Collection",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # Traces — every 1 minute
+        _scheduler.add_job(
+            sync_traces,
+            trigger="interval",
+            minutes=1,
+            id="sync_traces",
+            name="Cloud Trace Collection",
+            max_instances=1,
+            coalesce=True,
+        )
+
         _scheduler.start()
-        logger.info("[Scheduler] APScheduler started — resource:30m, metrics:1m, alerts:30s")
+        logger.info("[Scheduler] APScheduler started — resource:30m, metrics:1m, alerts:30s, logs:1m, traces:1m")
     except ImportError:
         logger.warning("[Scheduler] APScheduler not installed — background sync disabled. Run: pip install apscheduler")
     except Exception as exc:
@@ -324,9 +429,9 @@ def stop_scheduler() -> None:
 
 
 def trigger_full_sync() -> dict:
-    """Trigger an immediate sync of all three jobs synchronously."""
+    """Trigger an immediate sync of all jobs synchronously."""
     results = {}
-    for name, fn in [("resources", sync_resources), ("metrics", sync_metrics), ("alerts", sync_alerts)]:
+    for name, fn in [("resources", sync_resources), ("metrics", sync_metrics), ("alerts", sync_alerts), ("logs", sync_logs), ("traces", sync_traces)]:
         try:
             fn()
             results[name] = "ok"
