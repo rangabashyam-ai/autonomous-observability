@@ -106,7 +106,7 @@ export default function ServiceOperationsCenter() {
       .slice(0, 4);
   }, [services]);
 
-  const handleServiceClick = useCallback((serviceId: string, label: string) => {
+  const handleServiceClick = useCallback((serviceId: string, _label: string) => {
     let graphNode = rawGraphNodes.find((n) => n.id === serviceId);
     if (!graphNode) {
       const matched = services.find((s) => s.id === serviceId);

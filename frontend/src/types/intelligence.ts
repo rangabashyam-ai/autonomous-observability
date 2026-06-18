@@ -67,6 +67,7 @@ export interface BlastRadiusResult {
   severity_recommendation: string;
   blast_radius_nodes: string[];
   highlight_edges: { source: string; target: string }[];
+  input?: { alerts?: string[]; symptoms?: string[]; source_component?: string };
 }
 
 export interface EarlyDetection {

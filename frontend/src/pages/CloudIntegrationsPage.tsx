@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  Cloud, Plus, Trash2, RefreshCw, CheckCircle2, XCircle,
-  AlertTriangle, ChevronDown, ChevronUp, Server, Database,
+  Cloud, Trash2, RefreshCw, CheckCircle2, XCircle,
+  AlertTriangle, ChevronDown, ChevronUp, Server,
   Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff
 } from 'lucide-react';
 
@@ -148,37 +148,11 @@ function AzureForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-const GCP_SERVICES = [
-  { id: 'gke', name: 'GKE', desc: 'Google Kubernetes Engine' },
-  { id: 'compute', name: 'Compute Engine', desc: 'VMs + instances' },
-  { id: 'monitoring', name: 'Cloud Monitoring', desc: 'Metrics + alerts' },
-  { id: 'sql', name: 'Cloud SQL', desc: 'Managed databases' },
-  { id: 'logging', name: 'Cloud Logging', desc: 'App + system logs' },
-  { id: 'pubsub', name: 'Pub/Sub', desc: 'Real-time events' },
-  { id: 'trace', name: 'Cloud Trace', desc: 'Distributed traces' },
-  { id: 'lb', name: 'Cloud LB', desc: 'Load balancing' },
-];
-
 function GCPForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({
-    connection_name: '',
-    project_id: '',
-    regions: '',
-    service_account_json: '',
-    services: ['gke', 'compute', 'monitoring', 'sql', 'logging', 'pubsub', 'trace', 'lb']
-  });
+  const [form, setForm] = useState({ connection_name: '', project_id: '', service_account_json: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [jsonError, setJsonError] = useState('');
-
-  const toggleService = (id: string) => {
-    setForm(p => ({
-      ...p,
-      services: p.services.includes(id) 
-        ? p.services.filter(s => s !== id)
-        : [...p.services, id]
-    }));
-  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -201,13 +175,7 @@ function GCPForm({ onSuccess }: { onSuccess: () => void }) {
       await apiFetch('/api/integrations/gcp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          connection_name: form.connection_name,
-          project_id: form.project_id || parsed.project_id,
-          service_account_json: parsed,
-          services: form.services,
-          regions: form.regions ? form.regions.split(',').map(r => r.trim()).filter(Boolean) : [],
-        }),
+        body: JSON.stringify({ connection_name: form.connection_name, project_id: form.project_id || parsed.project_id, service_account_json: parsed }),
       });
       onSuccess();
     } catch (err: any) { setError(err.message); }
@@ -215,82 +183,22 @@ function GCPForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div className="space-y-3">
-        <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-gcp" required />
-        <div>
-          <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected from JSON)" />
-          <p className="text-[10px] text-[var(--color-text-secondary)]/70 mt-1">
-            Leave blank to auto-detect. Only required for cross-project monitoring.
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Region Filter (optional)</label>
-          <div className="relative">
-            <select
-              value={form.regions}
-              onChange={e => setForm(p => ({ ...p, regions: e.target.value }))}
-              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors appearance-none"
-            >
-              <option value="">All Regions</option>
-              <option value="us-central1">us-central1 (Iowa)</option>
-              <option value="us-east1">us-east1 (South Carolina)</option>
-              <option value="us-east4">us-east4 (Northern Virginia)</option>
-              <option value="us-west1">us-west1 (Oregon)</option>
-              <option value="us-west2">us-west2 (Los Angeles)</option>
-              <option value="us-west3">us-west3 (Salt Lake City)</option>
-              <option value="us-west4">us-west4 (Las Vegas)</option>
-              <option value="europe-west1">europe-west1 (Belgium)</option>
-              <option value="europe-west2">europe-west2 (London)</option>
-              <option value="europe-west3">europe-west3 (Frankfurt)</option>
-              <option value="europe-west4">europe-west4 (Netherlands)</option>
-              <option value="asia-east1">asia-east1 (Taiwan)</option>
-              <option value="asia-northeast1">asia-northeast1 (Tokyo)</option>
-              <option value="asia-south1">asia-south1 (Mumbai)</option>
-              <option value="asia-southeast1">asia-southeast1 (Singapore)</option>
-              <option value="australia-southeast1">australia-southeast1 (Sydney)</option>
-              <option value="southamerica-east1">southamerica-east1 (São Paulo)</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-secondary)] pointer-events-none" />
-          </div>
-          <p className="text-[10px] text-[var(--color-text-secondary)]/70 mt-1">
-            Select a specific region, or leave as 'All Regions' to discover resources globally.
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Service Account JSON *</label>
-          <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
-            <input type="file" accept=".json" onChange={handleFile} className="hidden" id="gcp-json-upload" />
-            <label htmlFor="gcp-json-upload" className="cursor-pointer">
-              <Box className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                {form.service_account_json ? <span className="text-green-500 font-medium">✓ JSON loaded</span> : 'Click to upload service-account.json'}
-              </p>
-            </label>
-          </div>
-          {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
-        </div>
-      </div>
-      
+    <form onSubmit={submit} className="space-y-3">
+      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-gcp" required />
+      <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected from JSON)" />
       <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-2">Services to Monitor</label>
-        <div className="grid grid-cols-2 gap-2">
-          {GCP_SERVICES.map(svc => (
-            <div 
-              key={svc.id} 
-              onClick={() => toggleService(svc.id)}
-              className={`cursor-pointer p-2.5 rounded-lg border flex flex-col gap-0.5 transition-colors ${form.services.includes(svc.id) ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)] bg-[var(--color-background)] hover:border-[var(--color-primary)]/50'}`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-semibold ${form.services.includes(svc.id) ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-primary)]'}`}>{svc.name}</span>
-                {form.services.includes(svc.id) && <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-primary)]" />}
-              </div>
-              <span className="text-[10px] text-[var(--color-text-secondary)]">{svc.desc}</span>
-            </div>
-          ))}
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Service Account JSON *</label>
+        <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
+          <input type="file" accept=".json" onChange={handleFile} className="hidden" id="gcp-json-upload" />
+          <label htmlFor="gcp-json-upload" className="cursor-pointer">
+            <Box className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              {form.service_account_json ? <span className="text-green-500 font-medium">✓ JSON loaded</span> : 'Click to upload service-account.json'}
+            </p>
+          </label>
         </div>
+        {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
       </div>
-
       <FormActions loading={loading} error={error} label="Connect GCP" />
     </form>
   );
@@ -450,18 +358,9 @@ function ProviderCard({ provider, connections, onRefresh }: {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {connections.length > 0 ? (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
-              CONNECTED
-            </span>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">
-                NOT SET UP
-              </span>
-              <span className="text-[11px] font-bold text-[var(--color-primary)]">Connect</span>
-            </div>
-          )}
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${connections.length > 0 ? 'bg-green-500/15 text-green-400' : 'bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]'}`}>
+            {connections.length > 0 ? 'CONNECTED' : 'NOT SET UP'}
+          </span>
           {expanded ? <ChevronUp className="h-4 w-4 text-[var(--color-text-secondary)]" /> : <ChevronDown className="h-4 w-4 text-[var(--color-text-secondary)]" />}
         </div>
       </button>
@@ -514,14 +413,10 @@ function ProviderCard({ provider, connections, onRefresh }: {
 
 // ─── Resources Panel ──────────────────────────────────────────────────────────
 
-function ResourcesPanel({ selectedProvider }: { selectedProvider: Provider | 'all' }) {
+function ResourcesPanel() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Provider | 'all'>(selectedProvider);
-
-  useEffect(() => {
-    setFilter(selectedProvider);
-  }, [selectedProvider]);
+  const [filter, setFilter] = useState<Provider | 'all'>('all');
 
   useEffect(() => {
     setLoading(true);
@@ -624,9 +519,8 @@ export default function CloudIntegrationsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('connect');
+  const [activeTab, setActiveTab] = useState<'connect' | 'resources'>('connect');
   const [lastSync, setLastSync] = useState<string>('');
-  const [selectedProvider, setSelectedProvider] = useState<Provider | 'all'>('all');
 
   const loadConnections = async () => {
     try {
@@ -681,35 +575,12 @@ export default function CloudIntegrationsPage() {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-5 gap-3">
-        {/* All Clouds Card */}
-        <div 
-          onClick={() => { setSelectedProvider('all'); setActiveTab('connect'); }}
-          className={`cursor-pointer rounded-xl p-4 border transition-all ${selectedProvider === 'all' ? 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)] bg-[var(--color-card)] hover:border-[var(--color-primary)]/50'}`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-lg">🌐</span>
-            <Wifi className="h-3.5 w-3.5 text-blue-400" />
-          </div>
-          <p className="text-lg font-bold text-[var(--color-text-primary)]">{totalConnections}</p>
-          <p className="text-[10px] text-[var(--color-text-secondary)]">All Clouds</p>
-        </div>
-
+      <div className="grid grid-cols-4 gap-3">
         {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => {
           const count = byProvider(p).length;
           const cfg = PROVIDER_CONFIG[p];
-          const isSelected = selectedProvider === p;
           return (
-            <div 
-              key={p} 
-              onClick={() => { setSelectedProvider(p); setActiveTab('connect'); }}
-              className={`cursor-pointer rounded-xl p-4 border transition-all ${isSelected ? 'ring-1' : 'hover:opacity-80'}`} 
-              style={{ 
-                borderColor: isSelected ? cfg.color : cfg.border, 
-                backgroundColor: isSelected ? cfg.bg : 'var(--color-card)',
-                boxShadow: isSelected ? `0 0 0 1px ${cfg.color}` : 'none'
-              }}
-            >
+            <div key={p} className="rounded-xl p-4 border" style={{ borderColor: cfg.border, background: cfg.bg }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-lg">{p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : '⎈'}</span>
                 {count > 0
@@ -722,53 +593,6 @@ export default function CloudIntegrationsPage() {
           );
         })}
       </div>
-
-      {/* Filter Banner */}
-      {selectedProvider !== 'all' && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20">
-          <div className="flex items-center gap-2">
-            <Cloud className="h-4 w-4 text-[var(--color-primary)]" />
-            <span className="text-xs font-medium text-[var(--color-text-primary)]">
-              Showing <strong style={{ color: PROVIDER_CONFIG[selectedProvider].color }}>{PROVIDER_CONFIG[selectedProvider].label}</strong> data only — all tabs filtered to this cloud
-            </span>
-          </div>
-          <button 
-            onClick={() => setSelectedProvider('all')}
-            className="text-xs font-semibold flex items-center gap-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors"
-          >
-            <XCircle className="h-3 w-3" /> Clear filter
-          </button>
-        </div>
-      )}
-
-      {/* Data Sources Grid (GCP Only for now, easily extendable) */}
-      {selectedProvider === 'gcp' && (
-        <div className="p-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-card-hover)]/30 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Google Cloud Account — Data Sources</h3>
-            {byProvider('gcp').length > 0 ? (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
-                CONNECTED
-              </span>
-            ) : (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">
-                NOT CONNECTED
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            {GCP_SERVICES.map(svc => (
-              <div key={svc.id} className="p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] flex items-start gap-3">
-                <div className="mt-0.5 text-lg opacity-80">{RESOURCE_TYPE_ICON[`${svc.id}`] || '☁'}</div>
-                <div>
-                  <p className="text-xs font-semibold text-[var(--color-text-primary)]">{svc.name}</p>
-                  <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">{svc.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Sync result */}
       {syncResult && (
@@ -787,16 +611,11 @@ export default function CloudIntegrationsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto hide-scrollbar pb-px">
-        {['connect', 'resources', 'logs', 'traces', 'audit', 'compliance'].map(tab => (
+      <div className="flex gap-1 border-b border-[var(--color-border)]">
+        {(['connect', 'resources'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
-            {tab === 'connect' ? 'Connect' : tab === 'resources' ? 'Resources' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-            {selectedProvider !== 'all' && tab !== 'connect' && tab !== 'resources' && (
-              <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5 rounded bg-[var(--color-border)]/50 text-[var(--color-text-secondary)]">
-                {selectedProvider === 'aws' ? 'AWS' : selectedProvider === 'azure' ? 'AZURE' : selectedProvider === 'gcp' ? 'GCP' : 'K8S'}
-              </span>
-            )}
+            className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === tab ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+            {tab === 'connect' ? 'Connect Providers' : 'Discovered Resources'}
             {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] rounded-full" />}
           </button>
         ))}
@@ -805,19 +624,12 @@ export default function CloudIntegrationsPage() {
       {/* Tab content */}
       {activeTab === 'connect' ? (
         <div className="grid gap-4">
-          {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[])
-            .filter(p => selectedProvider === 'all' || p === selectedProvider)
-            .map(p => (
-              <ProviderCard key={p} provider={p} connections={byProvider(p)} onRefresh={loadConnections} />
+          {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => (
+            <ProviderCard key={p} provider={p} connections={byProvider(p)} onRefresh={loadConnections} />
           ))}
         </div>
-      ) : activeTab === 'resources' ? (
-        <ResourcesPanel selectedProvider={selectedProvider} />
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl border-dashed border-[var(--color-border)]">
-          <p className="text-sm font-medium text-[var(--color-text-secondary)] capitalize">{activeTab} View</p>
-          <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1">This panel shows {activeTab} specifically for {selectedProvider === 'all' ? 'all clouds' : PROVIDER_CONFIG[selectedProvider].label}.</p>
-        </div>
+        <ResourcesPanel />
       )}
 
       {/* Info footer */}

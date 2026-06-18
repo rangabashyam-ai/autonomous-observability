@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import { SERVICES } from '../constants/services';
 import {
   copilotChat,
   startInvestigation,
@@ -192,14 +193,14 @@ async function generateWorkflowAiRecommendations(investigation: Investigation): 
       current_step: investigation.current_step,
     },
     user_question:
-      'Generate one concise remediation recommendation and a practical three-step fix playbook based on this investigation workflow, including root cause and blast radius context.',
+      'Generate one concise remediation recommendation based on this investigation workflow, including root cause and blast radius context.',
   };
 
   return copilotChat(context, [
     {
       role: 'user',
       content:
-        'Provide a single AI-generated remediation recommendation and a short fix playbook for this investigation workflow. Use the analysis and workflow context to keep it actionable and concrete.',
+        'Provide a single AI-generated remediation recommendation for this investigation workflow. Use the analysis and workflow context to keep it actionable and concrete.',
     },
   ]);
 }
@@ -219,22 +220,34 @@ export default function InvestigationWorkflow() {
   const totalCount = inv ? inv.steps.length : 0;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+  // Custom investigation state
+  const [showCustom, setShowCustom] = useState(false);
+  const [customDesc, setCustomDesc] = useState('');
+  const [customSvc, setCustomSvc] = useState('');
+  const [fetchedInvId, setFetchedInvId] = useState<string | null>(null);
+
   const recommendFixStep = useMemo(
     () => inv?.steps.find((s) => s.label.toLowerCase().includes('recommend')),
     [inv?.steps]
   );
-  const showLeftRecommendedFix = !!recommendFixStep && recommendFixStep.status !== 'completed';
+  const showLeftRecommendedFix = !!recommendFixStep && recommendFixStep.status !== 'pending';
   const isRecommendFixActive = !!recommendFixStep && (recommendFixStep.status === 'in_progress' || inv?.current_step?.toLowerCase().includes('recommend'));
 
   useEffect(() => {
-    if (isRecommendFixActive) {
+    if (showLeftRecommendedFix) {
       setLeftFixExpanded(true);
     }
-  }, [isRecommendFixActive]);
+  }, [showLeftRecommendedFix]);
 
-  const start = async (preset: (typeof PRESETS)[0], idx: number) => {
+  const start = async (preset: { alerts: string[]; symptoms: string[]; service: string }, idx: number) => {
     setActivePreset(idx);
+    setShowCustom(false);
     setLoading(true);
+    // Reset AI states immediately when starting a new scenario
+    setAiResponse(null);
+    setAiLoading(true);
+    setAiUnavailable(false);
+    setFetchedInvId(null);
     try {
       const result = await startInvestigation(preset);
       setInv(result);
@@ -262,12 +275,20 @@ export default function InvestigationWorkflow() {
     if (!inv) {
       setAiResponse(null);
       setAiUnavailable(false);
+      setAiLoading(false);
+      setFetchedInvId(null);
+      return;
+    }
+
+    if (inv.id === fetchedInvId) {
       return;
     }
 
     let mounted = true;
     setAiLoading(true);
     setAiUnavailable(false);
+    setAiResponse(null);
+    setFetchedInvId(inv.id);
 
     generateWorkflowAiRecommendations(inv)
       .then((response) => {
@@ -298,7 +319,7 @@ export default function InvestigationWorkflow() {
     return () => {
       mounted = false;
     };
-  }, [inv]);
+  }, [inv?.id, fetchedInvId]);
 
   const copilotContext = useMemo(() => {
     if (!inv) return null;
@@ -319,10 +340,22 @@ export default function InvestigationWorkflow() {
     };
   }, [inv]);
 
-  const aiRecommendedFix = aiResponse?.summary ?? inv?.recommended_fix;
-  const aiFixPlaybook = aiResponse?.recommended_actions?.length ? aiResponse.recommended_actions : inv?.rca_result?.suggested_fix_playbook ?? [];
-  const showAiGeneratedPlaybook = !!aiResponse?.recommended_actions?.length && !aiUnavailable;
+  const aiRecommendedFix = aiResponse?.summary
+    ? aiResponse.summary
+    : (aiUnavailable ? inv?.recommended_fix : undefined);
+
   const isShowingBaseline = !aiLoading && aiUnavailable;
+
+  // Gate the Recommended Fix panel: only reveal it once all upstream analysis
+  // steps (dependency path, RCA graph, root cause, blast radius, recommend fix)
+  // have reached a completed state.
+  const allAnalysisStepsComplete = useMemo(() => {
+    if (!inv) return false;
+    const keywords = ['dependency', 'rca', 'root cause', 'blast', 'recommend'];
+    return keywords.every((kw) =>
+      inv.steps.some((s) => s.label.toLowerCase().includes(kw) && s.status === 'completed')
+    );
+  }, [inv]);
 
   useRegisterCopilotContext(copilotContext);
 
@@ -342,7 +375,7 @@ export default function InvestigationWorkflow() {
       </div>
 
       {/* ── Preset cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {PRESETS.map((p, i) => (
           <motion.button
             key={i}
@@ -350,11 +383,10 @@ export default function InvestigationWorkflow() {
             disabled={loading}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
-            className={`relative overflow-hidden rounded-2xl p-5 text-left transition-all border shadow-lg ${
-              activePreset === i
-                ? `border-white/30 ${p.glowColor} shadow-xl`
-                : 'border-border hover:border-border/80'
-            } bg-card/80 backdrop-blur-sm hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`relative overflow-hidden rounded-2xl p-5 text-left transition-all border shadow-lg ${activePreset === i
+              ? `border-white/30 ${p.glowColor} shadow-xl`
+              : 'border-border hover:border-border/80'
+              } bg-card/80 backdrop-blur-sm hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {/* gradient background strip */}
             <div className={`absolute inset-0 opacity-10 bg-gradient-to-br ${p.color}`} />
@@ -370,7 +402,118 @@ export default function InvestigationWorkflow() {
             )}
           </motion.button>
         ))}
+
+        {/* Custom Scenario Card */}
+        <motion.button
+          onClick={() => {
+            setActivePreset(3);
+            setShowCustom(true);
+            setInv(null);
+          }}
+          disabled={loading}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          className={`relative overflow-hidden rounded-2xl p-5 text-left transition-all border shadow-lg ${activePreset === 3
+            ? `border-white/30 shadow-slate-500/25 shadow-xl`
+            : 'border-border hover:border-border/80'
+            } bg-card/80 backdrop-blur-sm hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          <div className={`absolute inset-0 opacity-10 bg-gradient-to-br from-slate-400 to-slate-600`} />
+          <span className="text-2xl block mb-2">✏️</span>
+          <p className="font-semibold text-sm text-text-primary capitalize">
+            Custom Investigation
+          </p>
+          <p className="text-[11px] text-text-secondary mt-1">
+            Define your own scenario
+          </p>
+        </motion.button>
       </div>
+
+      {/* ── Custom Investigation Form ── */}
+      <AnimatePresence>
+        {showCustom && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <GlassCard className="border-slate-500/20 bg-slate-500/5 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✏️</span>
+                  <h3 className="font-semibold text-text-primary">Configure Custom Investigation</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCustom(false);
+                    if (activePreset === 3) setActivePreset(null);
+                  }}
+                  className="text-text-secondary hover:text-text-primary text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary uppercase mb-1">
+                    What would you like to investigate?
+                  </label>
+                  <textarea
+                    value={customDesc}
+                    onChange={(e) => setCustomDesc(e.target.value)}
+                    placeholder="e.g. CPU Saturation, API Error Spike, Latency Increase"
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm rounded-xl border border-border bg-background/50 text-text-primary focus:outline-none focus:ring-1 focus:ring-violet-500 placeholder:text-text-secondary/60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary uppercase mb-1">
+                    Target Service (Optional)
+                  </label>
+                  <select
+                    value={customSvc}
+                    onChange={(e) => setCustomSvc(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-xl border border-border bg-background/50 text-text-primary focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  >
+                    <option value="">Select a service...</option>
+                    {SERVICES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/-/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={!customDesc.trim() || loading}
+                    onClick={async () => {
+                      const parts = customDesc.split(',').map(s => s.trim()).filter(Boolean);
+                      const alerts = parts.length > 0 ? [parts[0]] : [customDesc];
+                      const symptoms = parts.length > 1 ? parts.slice(1) : [];
+
+                      await start({
+                        alerts,
+                        symptoms,
+                        service: customSvc || 'custom-service',
+                      }, 3);
+                    }}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-violet-500/20"
+                  >
+                    🚀 Launch Investigation
+                  </motion.button>
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Empty state ── */}
       <AnimatePresence>
@@ -395,19 +538,47 @@ export default function InvestigationWorkflow() {
             animate={{ opacity: 1, y: 0 }}
             className="grid grid-cols-1 lg:grid-cols-5 gap-5"
           >
+            {/* ── Summary / Context Header ── */}
+            <GlassCard className="lg:col-span-5 bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border-indigo-500/20 !p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-widest block mb-1">
+                  Active Investigation: {inv.id}
+                </span>
+                <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+                  <span>🔍</span>
+                  {activePreset === 3 ? (
+                    <span>Custom Scenario: <span className="text-indigo-300">{customDesc || inv.input.alerts.concat(inv.input.symptoms).join(', ')}</span></span>
+                  ) : (
+                    <span>Preset Scenario: <span className="text-violet-300 capitalize">{inv.input.service?.replace(/-/g, ' ')}</span></span>
+                  )}
+                </h2>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="px-2.5 py-1 rounded-lg bg-card/60 border border-border text-text-secondary">
+                  <span className="font-semibold text-text-primary">Service:</span> {inv.input.service || 'custom-service'}
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-card/60 border border-border text-text-secondary">
+                  <span className="font-semibold text-text-primary">Alerts:</span> {inv.input.alerts.join(', ')}
+                </div>
+                {inv.input.symptoms?.length > 0 && (
+                  <div className="px-2.5 py-1 rounded-lg bg-card/60 border border-border text-text-secondary">
+                    <span className="font-semibold text-text-primary">Symptoms:</span> {inv.input.symptoms.join(', ')}
+                  </div>
+                )}
+              </div>
+            </GlassCard>
             {/* ── Left: Step timeline (3 cols) ── */}
             <div className="lg:col-span-3 space-y-4">
               {/* Progress bar */}
               <GlassCard className="!p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-text-secondary uppercase tracking-widest">Pipeline Progress</p>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    inv.status === 'awaiting_approval'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : inv.status === 'completed'
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${inv.status === 'awaiting_approval'
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : inv.status === 'completed'
                       ? 'bg-emerald-500/20 text-emerald-400'
                       : 'bg-blue-500/20 text-blue-400'
-                  }`}>
+                    }`}>
                     {inv.status.replace(/_/g, ' ').toUpperCase()}
                   </span>
                 </div>
@@ -522,33 +693,35 @@ export default function InvestigationWorkflow() {
                 );
               })()}
 
-              {/* Recommended Fix */}
-              <GlassCard className="border-emerald-500/20 bg-emerald-500/5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🔧</span>
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">AI Recommended Fix</p>
-                      {aiLoading ? (
-                        <p className="text-[10px] text-text-secondary">Generating AI recommendation…</p>
-                      ) : isShowingBaseline ? (
-                        <p className="text-[10px] text-text-secondary">Showing investigation fallback guidance</p>
-                      ) : (
-                        <p className="text-[10px] text-text-secondary">Powered by contextual investigation analysis</p>
-                      )}
+              {/* Recommended Fix — only shown after all analysis steps complete */}
+              {allAnalysisStepsComplete && (
+                <GlassCard className="border-emerald-500/20 bg-emerald-500/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🔧</span>
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">AI Recommended Fix</p>
+                        {aiLoading ? (
+                          <p className="text-[10px] text-text-secondary">Generating AI recommendation…</p>
+                        ) : isShowingBaseline ? (
+                          <p className="text-[10px] text-text-secondary">Showing investigation fallback guidance</p>
+                        ) : (
+                          <p className="text-[10px] text-text-secondary">Powered by contextual investigation analysis</p>
+                        )}
+                      </div>
                     </div>
+                    <CopyBtn text={aiRecommendedFix ?? inv.recommended_fix} />
                   </div>
-                  <CopyBtn text={aiRecommendedFix ?? inv.recommended_fix} />
-                </div>
-                <p className="text-sm text-text-primary leading-relaxed">
-                  {aiLoading
-                    ? 'Working on Recommended Fix...'
-                    : aiRecommendedFix ?? inv?.recommended_fix}
-                </p>
-                {aiResponse?.confidence && !aiLoading && !aiUnavailable && (
-                  <p className="text-[11px] text-text-secondary mt-3">AI confidence: {aiResponse.confidence}</p>
-                )}
-              </GlassCard>
+                  <p className="text-sm text-text-primary leading-relaxed">
+                    {aiLoading
+                      ? 'Generating AI recommendation…'
+                      : aiRecommendedFix ?? inv?.recommended_fix}
+                  </p>
+                  {aiResponse?.confidence && !aiLoading && !aiUnavailable && (
+                    <p className="text-[11px] text-text-secondary mt-3">AI confidence: {aiResponse.confidence}</p>
+                  )}
+                </GlassCard>
+              )}
 
               {/* Blast Radius */}
               {inv.blast_result && (
@@ -600,41 +773,7 @@ export default function InvestigationWorkflow() {
                 </GlassCard>
               )}
 
-              {/* Suggested fixes from RCA / AI */}
-              {(aiFixPlaybook.length > 0 || (inv.rca_result?.suggested_fix_playbook && inv.rca_result.suggested_fix_playbook.length > 0)) && (
-                <GlassCard>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">📋</span>
-                      <div>
-                        <p className="text-xs font-semibold text-text-secondary uppercase tracking-widest">Fix Playbook</p>
-                        {aiLoading ? (
-                          <p className="text-[10px] text-text-secondary">AI is generating a playbook…</p>
-                        ) : isShowingBaseline ? (
-                          <p className="text-[10px] text-text-secondary">Showing investigation fallback playbook</p>
-                        ) : (
-                          <p className="text-[10px] text-text-secondary">AI recommended steps based on investigation context</p>
-                        )}
-                      </div>
-                    </div>
-                    {showAiGeneratedPlaybook && (
-                      <span className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-200 border border-violet-500/20">
-                        AI Generated
-                      </span>
-                    )}
-                  </div>
-                  <ol className="space-y-1.5">
-                    {aiFixPlaybook.slice(0, 5).map((step, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-text-secondary">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-400 flex items-center justify-center font-bold text-[10px]">
-                          {i + 1}
-                        </span>
-                        {step}
-                      </li>
-                    ))}
-                  </ol>
-                </GlassCard>
-              )}
+
             </div>
           </motion.div>
         )}

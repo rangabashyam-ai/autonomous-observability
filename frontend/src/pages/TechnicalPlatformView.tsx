@@ -10,7 +10,6 @@ import { generateTrend, MiniAreaChart, MiniLineChart } from '../components/chart
 import { UtilizationBar } from '../components/dashboard/visualizations';
 import { DrilldownHeatmap } from '../components/dashboard/drilldown-heatmap';
 import { Modal } from '../components/ui/modal';
-import InlineCopilot from '../components/copilot/InlineCopilot';
 
 export default function TechnicalPlatformView() {
   const [data, setData] = useState<MonitoringDashboard | null>(null);

@@ -8,9 +8,9 @@ import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
-import { generateDualTrend, generateTrend, TrendChart, MiniAreaChart } from '../components/charts/charts';
+import { generateDualTrend, TrendChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
-import { Sparkles, Activity, ShieldAlert, AlertTriangle, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
+import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
@@ -39,8 +39,8 @@ export default function ExecutiveCommandCenter() {
       (exec.service_availability * 0.35 +
         exec.transaction_success_rate * 0.25 +
         exec.sla_compliance * 0.4) /
-        100 *
-        100
+      100 *
+      100
     );
   }, [exec]);
 
@@ -56,11 +56,6 @@ export default function ExecutiveCommandCenter() {
     }
     return 'All business services operating within SLA targets. No critical revenue impact detected in the last 24 hours.';
   }, [exec, overview]);
-
-  const revenueTrend = useMemo(
-    () => generateTrend(exec?.revenue_impact_usd ?? 1000, 12, 0.15),
-    [exec?.revenue_impact_usd]
-  );
   const kpiTrend = useMemo(
     () => generateDualTrend(exec?.service_availability ?? 99, exec?.transaction_success_rate ?? 98),
     [exec?.service_availability, exec?.transaction_success_rate]
@@ -296,28 +291,28 @@ export default function ExecutiveCommandCenter() {
         onClose={() => setActiveDrawer(null)}
         title={
           activeDrawer === 'health' ? 'Business Health Score' :
-          activeDrawer === 'revenue' ? 'Revenue at Risk' :
-          activeDrawer === 'incidents' ? 'Active Incidents' :
-          activeDrawer === 'sla' ? 'SLA Compliance' :
-          activeDrawer === 'customers' ? 'Customers Impacted' : ''
+            activeDrawer === 'revenue' ? 'Revenue at Risk' :
+              activeDrawer === 'incidents' ? 'Active Incidents' :
+                activeDrawer === 'sla' ? 'SLA Compliance' :
+                  activeDrawer === 'customers' ? 'Customers Impacted' : ''
         }
         subtitle={
           activeDrawer === 'health' ? 'Overall operational health score' :
-          activeDrawer === 'revenue' ? 'Estimated financial exposure due to operational issues' :
-          activeDrawer === 'incidents' ? 'Current operational incidents requiring mitigation' :
-          activeDrawer === 'sla' ? 'Rolling 30-day compliance targets and trends' :
-          activeDrawer === 'customers' ? 'Estimated users affected by active incidents' : ''
+            activeDrawer === 'revenue' ? 'Estimated financial exposure due to operational issues' :
+              activeDrawer === 'incidents' ? 'Current operational incidents requiring mitigation' :
+                activeDrawer === 'sla' ? 'Rolling 30-day compliance targets and trends' :
+                  activeDrawer === 'customers' ? 'Estimated users affected by active incidents' : ''
         }
         type={
           activeDrawer === 'incidents' || activeDrawer === 'customers' ? 'incident' :
-          activeDrawer === 'revenue' || activeDrawer === 'sla' ? 'api' : 'service'
+            activeDrawer === 'revenue' || activeDrawer === 'sla' ? 'api' : 'service'
         }
         health={
           activeDrawer === 'health' ? (businessHealth >= 95 ? 'healthy' : businessHealth >= 85 ? 'warning' : 'critical') :
-          activeDrawer === 'revenue' ? (exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'healthy') :
-          activeDrawer === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') :
-          activeDrawer === 'sla' ? (exec!.sla_compliance >= 99.5 ? 'healthy' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical') :
-          activeDrawer === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
+            activeDrawer === 'revenue' ? (exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'healthy') :
+              activeDrawer === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') :
+                activeDrawer === 'sla' ? (exec!.sla_compliance >= 99.5 ? 'healthy' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical') :
+                  activeDrawer === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
         }
       >
 
@@ -348,7 +343,7 @@ export default function ExecutiveCommandCenter() {
                 }}
               />
             </div>
-            
+
             <div id="health-degraded-section">
               <DrilldownSection title="Degraded Services" icon={<Activity className="w-4 h-4" />}>
                 {services.filter(s => s.health !== 'healthy').length === 0 ? (
@@ -776,8 +771,8 @@ export default function ExecutiveCommandCenter() {
                     if (selectedRegion.id === 'eu-west') return inc.service.includes('Payment') || inc.service.includes('Merchant');
                     return false;
                   }).length === 0 && (
-                    <p className="text-xs text-text-secondary">Incident details currently compiling. Review overall incidents explorer.</p>
-                  )}
+                      <p className="text-xs text-text-secondary">Incident details currently compiling. Review overall incidents explorer.</p>
+                    )}
                 </div>
               )}
             </DrilldownSection>
@@ -811,8 +806,8 @@ export default function ExecutiveCommandCenter() {
                   if (selectedRegion.id === 'us-east' || selectedRegion.id === 'us-west') return s.id === 'api-gateway-services' || s.id === 'fraud-detection';
                   return s.health !== 'healthy';
                 }).length === 0 && (
-                  <p className="text-xs text-text-secondary">No regional microservice constraints active. Standard gateway routing healthy.</p>
-                )}
+                    <p className="text-xs text-text-secondary">No regional microservice constraints active. Standard gateway routing healthy.</p>
+                  )}
               </div>
             </DrilldownSection>
 

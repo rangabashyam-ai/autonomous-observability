@@ -6,7 +6,7 @@ export const BlastRadiusAgent: AgentConfig = {
   role: 'Impact Analysis Specialist',
   suggestedQuestions: [
     'How is the incident propagating?',
-    'Explain the blast radius from the root cause',
+    'Explain the cascade chain and blast radius',
     'Why are downstream services affected?',
     'What is the business impact?',
     'Recommend containment strategy',
