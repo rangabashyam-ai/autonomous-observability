@@ -233,7 +233,21 @@
       "target": "storage-cluster-2",
       "relationship": "uses",
       "type": "dependency"
+    },
+    {
+      "source": "frontend-app",
+      "target": "backend-service",
+      "relationship": "CALLS",
+      "type": "cloud_dependency",
+      "provider": "opentelemetry"
+    },
+    {
+      "source": "backend-service",
+      "target": "users-db.postgresql",
+      "relationship": "READS_WRITES",
+      "type": "cloud_dependency",
+      "provider": "opentelemetry"
     }
   ],
-  "generated_at": "2026-06-10T05:02:15.851789Z"
+  "generated_at": "2026-06-16T11:03:28.801684+00:00"
 }

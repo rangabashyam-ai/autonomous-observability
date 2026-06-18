@@ -19,9 +19,9 @@ from dotenv import load_dotenv
 # Load environment variables from the project's root .env file.
 # This ensures GROQ_API_KEY and related settings are available regardless of
 # the current working directory when the server starts.
-project_root = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[2]
 env_path = project_root / ".env"
-load_dotenv(dotenv_path=env_path, override=False)
+load_dotenv(dotenv_path=env_path, override=True)
 
 _MAX_RELATED_ALERTS = 20
 _MAX_DETECTIONS = 8

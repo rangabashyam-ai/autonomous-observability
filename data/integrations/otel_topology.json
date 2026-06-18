@@ -1,0 +1,34 @@
+{
+  "edges": [
+    {
+      "source": "frontend-app",
+      "source_type": "service",
+      "target": "backend-service",
+      "target_type": "service",
+      "relationship": "CALLS",
+      "tier": 1,
+      "confidence": "high",
+      "source_standard": "opentelemetry",
+      "via": "trace_parent_child"
+    },
+    {
+      "source": "backend-service",
+      "source_type": "service",
+      "target": "users-db.postgresql",
+      "target_type": "database_postgresql",
+      "relationship": "READS_WRITES",
+      "tier": 1,
+      "confidence": "high",
+      "source_standard": "opentelemetry",
+      "via": "db.name"
+    }
+  ],
+  "services": [
+    "users-db.postgresql",
+    "backend-service",
+    "frontend-app"
+  ],
+  "total_edges": 2,
+  "total_services": 3,
+  "updated_at": "2026-06-16T11:03:28.743163+00:00"
+}

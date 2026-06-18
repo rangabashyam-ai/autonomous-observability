@@ -11820,6 +11820,39 @@
       "id": "change-change-5b94882b",
       "type": "change",
       "label": "Config update"
+    },
+    {
+      "id": "cloud-opentelemetry-backend-service",
+      "name": "backend-service",
+      "type": "cloud_resource",
+      "layer": "service",
+      "provider": "opentelemetry",
+      "region": "",
+      "health": "healthy",
+      "metrics": {},
+      "discovered_at": "2026-06-16T11:03:28.852433+00:00"
+    },
+    {
+      "id": "cloud-opentelemetry-users-db.postgresql",
+      "name": "users-db.postgresql",
+      "type": "cloud_resource",
+      "layer": "database_postgresql",
+      "provider": "opentelemetry",
+      "region": "",
+      "health": "healthy",
+      "metrics": {},
+      "discovered_at": "2026-06-16T11:03:28.852433+00:00"
+    },
+    {
+      "id": "cloud-opentelemetry-frontend-app",
+      "name": "frontend-app",
+      "type": "cloud_resource",
+      "layer": "service",
+      "provider": "opentelemetry",
+      "region": "",
+      "health": "healthy",
+      "metrics": {},
+      "discovered_at": "2026-06-16T11:03:28.852433+00:00"
     }
   ],
   "edges": [
@@ -72900,6 +72933,20 @@
       "incident_refs": [
         "synthetic"
       ]
+    },
+    {
+      "source": "cloud-opentelemetry-frontend-app",
+      "target": "cloud-opentelemetry-backend-service",
+      "relationship": "CALLS",
+      "type": "cloud_dependency",
+      "provider": "opentelemetry"
+    },
+    {
+      "source": "cloud-opentelemetry-backend-service",
+      "target": "cloud-opentelemetry-users-db.postgresql",
+      "relationship": "READS_WRITES",
+      "type": "cloud_dependency",
+      "provider": "opentelemetry"
     }
   ],
   "pattern_library": [
@@ -73085,11 +73132,12 @@
     }
   ],
   "stats": {
-    "node_count": 1563,
-    "edge_count": 4288,
-    "incident_count": 500,
-    "alert_types": 10,
-    "root_cause_types": 10
+    "node_count": 1566,
+    "edge_count": 4290,
+    "pattern_count": 12,
+    "last_cloud_sync": "2026-06-16T11:03:28.852433+00:00",
+    "cloud_nodes_added": 3,
+    "cloud_edges_added": 2
   },
   "generated_at": "2026-06-10T05:02:17.087351+00:00"
 }
