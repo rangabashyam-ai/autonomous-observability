@@ -53,10 +53,7 @@ def _resolve_groq_base_urls() -> list[str]:
     urls = []
     if env_url:
         urls.append(env_url)
-    urls.extend([
-        "https://api.groq.com/openai/v1",
-        "https://api.groq.com/v1",
-    ])
+    urls.append("https://api.groq.com/openai/v1")
     return list(dict.fromkeys(urls))
 
 
@@ -75,7 +72,7 @@ def chat_completion(
     temperature: float = 0.2,
     response_format: dict | None = None,
     max_tokens: int = 2048,
-    timeout: int = 20,
+    timeout: int = 45,
 ) -> dict[str, Any]:
     """Call GROQ chat completions API. Raises on failure."""
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
@@ -137,7 +134,7 @@ def chat_with_fallback(
     model: str,
     temperature: float = 0.2,
     max_tokens: int = 2048,
-    timeout: int = 20,
+    timeout: int = 45,
 ) -> tuple[str, str]:
     """Try primary model, then fallback. Returns (content, model_used)."""
     models = [model]
