@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import {
   Cloud, Trash2, RefreshCw, CheckCircle2, XCircle,
   AlertTriangle, ChevronDown, ChevronUp, Server,
-  Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff
+  Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff,
+  Database, Archive, Zap, Play, BarChart2, Radio,
+  Activity, Network, GitBranch, Share2, Folder, Globe,
+  HardDrive, Cpu,
 } from 'lucide-react';
 
 const API = 'http://localhost:8000';
@@ -63,10 +66,159 @@ async function apiFetch(path: string, options?: RequestInit) {
   return res.json();
 }
 
+// ─── Resources per provider ────────────────────────────────────────────────────
+
+type ResourceDef = { id: string; label: string; Icon: React.FC<{ className?: string }> };
+
+const PROVIDER_RESOURCES: Record<Provider, ResourceDef[]> = {
+  aws: [
+    { id: 'ec2',        label: 'EC2 Instances',  Icon: Server    },
+    { id: 'eks',        label: 'EKS Clusters',   Icon: Layers    },
+    { id: 'rds',        label: 'RDS Databases',  Icon: Database  },
+    { id: 's3',         label: 'S3 Buckets',     Icon: Archive   },
+    { id: 'lambda',     label: 'Lambda',         Icon: Zap       },
+    { id: 'elb',        label: 'Load Balancers', Icon: Network   },
+    { id: 'ecs',        label: 'ECS Services',   Icon: Box       },
+    { id: 'cloudwatch', label: 'CloudWatch',     Icon: Activity  },
+  ],
+  azure: [
+    { id: 'vm',        label: 'Virtual Machines', Icon: Server   },
+    { id: 'aks',       label: 'AKS Clusters',     Icon: Layers   },
+    { id: 'sql',       label: 'Azure SQL',        Icon: Database },
+    { id: 'storage',   label: 'Blob Storage',     Icon: Archive  },
+    { id: 'functions', label: 'Functions',        Icon: Zap      },
+    { id: 'lb',        label: 'Load Balancers',   Icon: Network  },
+    { id: 'cosmos',    label: 'Cosmos DB',        Icon: Globe    },
+    { id: 'monitor',   label: 'Azure Monitor',    Icon: Activity },
+  ],
+  gcp: [
+    { id: 'gce',        label: 'Compute Engine',  Icon: Server   },
+    { id: 'gke',        label: 'GKE Clusters',    Icon: Layers   },
+    { id: 'cloud_sql',  label: 'Cloud SQL',       Icon: Database },
+    { id: 'gcs',        label: 'Cloud Storage',   Icon: Archive  },
+    { id: 'functions',  label: 'Cloud Functions', Icon: Zap      },
+    { id: 'cloud_run',  label: 'Cloud Run',       Icon: Play     },
+    { id: 'bigquery',   label: 'BigQuery',        Icon: BarChart2},
+    { id: 'pubsub',     label: 'Pub/Sub',         Icon: Radio    },
+    { id: 'monitoring', label: 'Monitoring',      Icon: Activity },
+  ],
+  kubernetes: [
+    { id: 'pods',         label: 'Pods',         Icon: Box       },
+    { id: 'nodes',        label: 'Nodes',        Icon: Server    },
+    { id: 'deployments',  label: 'Deployments',  Icon: GitBranch },
+    { id: 'services',     label: 'Services',     Icon: Share2    },
+    { id: 'namespaces',   label: 'Namespaces',   Icon: Folder    },
+    { id: 'ingresses',    label: 'Ingresses',    Icon: Globe     },
+    { id: 'daemonsets',   label: 'DaemonSets',   Icon: Cpu       },
+    { id: 'statefulsets', label: 'StatefulSets', Icon: HardDrive },
+  ],
+};
+
+// ─── GCP regions ──────────────────────────────────────────────────────────────
+
+const GCP_REGIONS = [
+  { value: 'us-central1',            label: 'us-central1 — Iowa, USA'            },
+  { value: 'us-east1',               label: 'us-east1 — South Carolina, USA'     },
+  { value: 'us-east4',               label: 'us-east4 — N. Virginia, USA'        },
+  { value: 'us-east5',               label: 'us-east5 — Columbus, USA'           },
+  { value: 'us-south1',              label: 'us-south1 — Dallas, USA'            },
+  { value: 'us-west1',               label: 'us-west1 — Oregon, USA'             },
+  { value: 'us-west2',               label: 'us-west2 — Los Angeles, USA'        },
+  { value: 'us-west3',               label: 'us-west3 — Salt Lake City, USA'     },
+  { value: 'us-west4',               label: 'us-west4 — Las Vegas, USA'          },
+  { value: 'northamerica-northeast1', label: 'northamerica-northeast1 — Montréal' },
+  { value: 'northamerica-northeast2', label: 'northamerica-northeast2 — Toronto'  },
+  { value: 'southamerica-east1',     label: 'southamerica-east1 — São Paulo'     },
+  { value: 'southamerica-west1',     label: 'southamerica-west1 — Santiago'      },
+  { value: 'europe-west1',           label: 'europe-west1 — Belgium'             },
+  { value: 'europe-west2',           label: 'europe-west2 — London, UK'          },
+  { value: 'europe-west3',           label: 'europe-west3 — Frankfurt, Germany'  },
+  { value: 'europe-west4',           label: 'europe-west4 — Netherlands'         },
+  { value: 'europe-west6',           label: 'europe-west6 — Zurich, Switzerland' },
+  { value: 'europe-west8',           label: 'europe-west8 — Milan, Italy'        },
+  { value: 'europe-west9',           label: 'europe-west9 — Paris, France'       },
+  { value: 'europe-west10',          label: 'europe-west10 — Berlin, Germany'    },
+  { value: 'europe-west12',          label: 'europe-west12 — Turin, Italy'       },
+  { value: 'europe-north1',          label: 'europe-north1 — Finland'            },
+  { value: 'europe-central2',        label: 'europe-central2 — Warsaw, Poland'   },
+  { value: 'europe-southwest1',      label: 'europe-southwest1 — Madrid, Spain'  },
+  { value: 'asia-east1',             label: 'asia-east1 — Taiwan'                },
+  { value: 'asia-east2',             label: 'asia-east2 — Hong Kong'             },
+  { value: 'asia-northeast1',        label: 'asia-northeast1 — Tokyo, Japan'     },
+  { value: 'asia-northeast2',        label: 'asia-northeast2 — Osaka, Japan'     },
+  { value: 'asia-northeast3',        label: 'asia-northeast3 — Seoul, Korea'     },
+  { value: 'asia-south1',            label: 'asia-south1 — Mumbai, India'        },
+  { value: 'asia-south2',            label: 'asia-south2 — Delhi, India'         },
+  { value: 'asia-southeast1',        label: 'asia-southeast1 — Singapore'        },
+  { value: 'asia-southeast2',        label: 'asia-southeast2 — Jakarta, Indonesia'},
+  { value: 'australia-southeast1',   label: 'australia-southeast1 — Sydney'      },
+  { value: 'australia-southeast2',   label: 'australia-southeast2 — Melbourne'   },
+  { value: 'me-west1',               label: 'me-west1 — Tel Aviv, Israel'        },
+  { value: 'me-central1',            label: 'me-central1 — Doha, Qatar'          },
+  { value: 'me-central2',            label: 'me-central2 — Dammam, Saudi Arabia' },
+  { value: 'africa-south1',          label: 'africa-south1 — Johannesburg'       },
+];
+
+// ─── Resource selector component ──────────────────────────────────────────────
+
+function ResourceSelector({ provider, selected, onChange }: {
+  provider: Provider;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const resources = PROVIDER_RESOURCES[provider];
+  const allSelected = selected.length === resources.length;
+
+  const toggle = (id: string) =>
+    onChange(selected.includes(id) ? selected.filter(s => s !== id) : [...selected, id]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)]">
+          Resources to Observe
+        </label>
+        <button
+          type="button"
+          onClick={() => onChange(allSelected ? [] : resources.map(r => r.id))}
+          className="text-[10px] text-[var(--color-primary)] hover:underline"
+        >
+          {allSelected ? 'Deselect all' : 'Select all'}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {resources.map(r => {
+          const active = selected.includes(r.id);
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => toggle(r.id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                active
+                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
+                  : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-card-hover)]'
+              }`}
+            >
+              <r.Icon className="h-3 w-3 shrink-0" />
+              {r.label}
+            </button>
+          );
+        })}
+      </div>
+      {selected.length === 0 && (
+        <p className="text-[10px] text-yellow-400 mt-1">Select at least one resource type to observe.</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Form fields per provider ─────────────────────────────────────────────────
 
 function AWSForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ connection_name: '', role_arn: '', region: 'us-east-1', external_id: '' });
+  const allAwsIds = PROVIDER_RESOURCES.aws.map(r => r.id);
+  const [form, setForm] = useState({ connection_name: '', role_arn: '', region: 'us-east-1', external_id: '', account_alias: '' });
+  const [resources, setResources] = useState<string[]>(allAwsIds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -77,7 +229,7 @@ function AWSForm({ onSuccess }: { onSuccess: () => void }) {
       await apiFetch('/api/integrations/aws/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, resources_to_observe: resources }),
       });
       onSuccess();
     } catch (err: any) { setError(err.message); }
@@ -87,18 +239,22 @@ function AWSForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-aws" required />
+      <FormField label="Account Alias (optional)" value={form.account_alias} onChange={v => setForm(p => ({ ...p, account_alias: v }))} placeholder="e.g. my-org-prod" />
       <FormField label="IAM Role ARN" value={form.role_arn} onChange={v => setForm(p => ({ ...p, role_arn: v }))} placeholder="arn:aws:iam::123456789012:role/MyRole" />
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Region" value={form.region} onChange={v => setForm(p => ({ ...p, region: v }))} placeholder="us-east-1" />
         <FormField label="External ID (optional)" value={form.external_id} onChange={v => setForm(p => ({ ...p, external_id: v }))} placeholder="optional" />
       </div>
+      <ResourceSelector provider="aws" selected={resources} onChange={setResources} />
       <FormActions loading={loading} error={error} label="Connect AWS" />
     </form>
   );
 }
 
 function AzureForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ connection_name: '', tenant_id: '', client_id: '', client_secret: '', subscription_id: '' });
+  const allAzureIds = PROVIDER_RESOURCES.azure.map(r => r.id);
+  const [form, setForm] = useState({ connection_name: '', tenant_id: '', client_id: '', client_secret: '', subscription_id: '', resource_group: '' });
+  const [resources, setResources] = useState<string[]>(allAzureIds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showSecret, setShowSecret] = useState(false);
@@ -110,7 +266,7 @@ function AzureForm({ onSuccess }: { onSuccess: () => void }) {
       await apiFetch('/api/integrations/azure/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, resources_to_observe: resources }),
       });
       onSuccess();
     } catch (err: any) { setError(err.message); }
@@ -143,13 +299,21 @@ function AzureForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </div>
       </div>
+      <FormField label="Resource Group (optional)" value={form.resource_group} onChange={v => setForm(p => ({ ...p, resource_group: v }))} placeholder="e.g. my-rg (leave blank to observe all)" />
+      <ResourceSelector provider="azure" selected={resources} onChange={setResources} />
+      <div className="mt-2 text-[10px] text-[var(--color-text-secondary)]/80 flex items-center gap-1.5 bg-blue-500/5 p-2 rounded border border-blue-500/10">
+        <span className="text-blue-400">ℹ</span>
+        Uses modern Azure Monitor Agent (AMA) & DCRs under the hood. No manual endpoint config required.
+      </div>
       <FormActions loading={loading} error={error} label="Connect Azure" />
     </form>
   );
 }
 
 function GCPForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ connection_name: '', project_id: '', service_account_json: '' });
+  const allGcpIds = PROVIDER_RESOURCES.gcp.map(r => r.id);
+  const [form, setForm] = useState({ connection_name: '', project_id: '', region: '', service_account_json: '' });
+  const [resources, setResources] = useState<string[]>(allGcpIds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [jsonError, setJsonError] = useState('');
@@ -175,7 +339,13 @@ function GCPForm({ onSuccess }: { onSuccess: () => void }) {
       await apiFetch('/api/integrations/gcp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connection_name: form.connection_name, project_id: form.project_id || parsed.project_id, service_account_json: parsed }),
+        body: JSON.stringify({
+          connection_name: form.connection_name,
+          project_id: form.project_id || parsed.project_id,
+          region: form.region || undefined,
+          service_account_json: parsed,
+          resources_to_observe: resources,
+        }),
       });
       onSuccess();
     } catch (err: any) { setError(err.message); }
@@ -185,7 +355,22 @@ function GCPForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-gcp" required />
-      <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected from JSON)" />
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected)" />
+        <div>
+          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Region (optional)</label>
+          <select
+            value={form.region}
+            onChange={e => setForm(p => ({ ...p, region: e.target.value }))}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+          >
+            <option value="">All regions</option>
+            {GCP_REGIONS.map(r => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div>
         <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Service Account JSON *</label>
         <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
@@ -199,14 +384,17 @@ function GCPForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
         {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
       </div>
+      <ResourceSelector provider="gcp" selected={resources} onChange={setResources} />
       <FormActions loading={loading} error={error} label="Connect GCP" />
     </form>
   );
 }
 
 function K8sForm({ onSuccess }: { onSuccess: () => void }) {
+  const allK8sIds = PROVIDER_RESOURCES.kubernetes.map(r => r.id);
   const [mode, setMode] = useState<'kubeconfig' | 'token'>('kubeconfig');
-  const [form, setForm] = useState({ connection_name: '', kubeconfig: '', endpoint: '', token: '', ca_cert: '' });
+  const [form, setForm] = useState({ connection_name: '', kubeconfig: '', endpoint: '', token: '', ca_cert: '', namespaces: '' });
+  const [resources, setResources] = useState<string[]>(allK8sIds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -225,9 +413,11 @@ function K8sForm({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault();
     setLoading(true); setError('');
     try {
+      const namespacesArr = form.namespaces ? form.namespaces.split(',').map(n => n.trim()).filter(Boolean) : [];
+      const base = { connection_name: form.connection_name, resources_to_observe: resources, namespaces: namespacesArr };
       const body = mode === 'kubeconfig'
-        ? { connection_name: form.connection_name, kubeconfig: form.kubeconfig }
-        : { connection_name: form.connection_name, endpoint: form.endpoint, token: form.token, ca_cert: form.ca_cert };
+        ? { ...base, kubeconfig: form.kubeconfig }
+        : { ...base, endpoint: form.endpoint, token: form.token, ca_cert: form.ca_cert };
       await apiFetch('/api/integrations/kubernetes/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,6 +456,8 @@ function K8sForm({ onSuccess }: { onSuccess: () => void }) {
           <FormField label="CA Certificate (optional, base64)" value={form.ca_cert} onChange={v => setForm(p => ({ ...p, ca_cert: v }))} placeholder="LS0tLS1CRUdJTi..." />
         </>
       )}
+      <FormField label="Namespaces (optional)" value={form.namespaces} onChange={v => setForm(p => ({ ...p, namespaces: v }))} placeholder="default, kube-system (comma-separated, blank = all)" />
+      <ResourceSelector provider="kubernetes" selected={resources} onChange={setResources} />
       <FormActions loading={loading} error={error} label="Connect Kubernetes" />
     </form>
   );

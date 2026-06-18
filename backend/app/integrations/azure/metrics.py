@@ -41,6 +41,8 @@ def _query_metric(metrics_client, resource_id: str, metric_names: list[str],
 def collect_vm_metrics(credential, resource_id: str, region: str = "eastus") -> NormalizedMetric:
     try:
         from azure.monitor.query import MetricsQueryClient
+        # We explicitly use MetricsQueryClient which queries the native Azure Monitor Metrics store,
+        # populated directly by the modern Azure Monitor Agent (AMA) and DCRs, bypassing deprecated Log Analytics Agents.
         client = MetricsQueryClient(credential)
         values = _query_metric(client, resource_id, ["Percentage CPU", "Available Memory Bytes"])
         return normalize_azure_metrics(

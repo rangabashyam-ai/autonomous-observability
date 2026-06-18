@@ -42,10 +42,19 @@ def discover_vms(credential, subscription_id: str) -> list[dict]:
         for vm in client.virtual_machines.list_all():
             location = vm.location or "unknown"
             power_state = "unknown"
+            has_ama = False
             try:
-                # Get instance view for power state (may require extra API call)
+                # Get instance view for power state and extensions
                 rg = vm.id.split("/resourceGroups/")[1].split("/")[0] if vm.id else ""
                 iv = client.virtual_machines.get(rg, vm.name, expand="instanceView")
+                
+                # Check for AMA Extension
+                extensions = iv.instance_view.extensions if iv.instance_view else []
+                for ext in extensions:
+                    if ext.name in ("AzureMonitorWindowsAgent", "AzureMonitorLinuxAgent"):
+                        has_ama = True
+                        break
+                        
                 statuses = iv.instance_view.statuses if iv.instance_view else []
                 for s in statuses:
                     if s.code and s.code.startswith("PowerState/"):
@@ -53,7 +62,12 @@ def discover_vms(credential, subscription_id: str) -> list[dict]:
                         break
             except Exception:
                 pass
-            health = "healthy" if power_state == "running" else "critical" if power_state in ("stopped", "deallocated") else "warning"
+            
+            # Warn if AMA is missing, as we no longer support Log Analytics Agent
+            if not has_ama and power_state == "running":
+                health = "warning"
+                
+            health = "healthy" if power_state == "running" and has_ama else "critical" if power_state in ("stopped", "deallocated") else "warning"
             resources.append(_make_resource(
                 id=vm.id or vm.name,
                 name=vm.name,
@@ -64,6 +78,7 @@ def discover_vms(credential, subscription_id: str) -> list[dict]:
                     "vm_size": vm.hardware_profile.vm_size if vm.hardware_profile else "",
                     "power_state": power_state,
                     "os_type": str(vm.storage_profile.os_disk.os_type) if vm.storage_profile and vm.storage_profile.os_disk else "",
+                    "agent_type": "Azure Monitor Agent (AMA)" if has_ama else "Missing AMA (Legacy agents unsupported)",
                 },
             ))
         logger.info(f"[Azure] Discovered {len(resources)} VMs")

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "variables": {},
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2021-09-01-preview",
+      "name": "dcr-schema-example",
+      "location": "eastus",
+      "properties": {
+        "description": "DCR to map Azure Availability Zone into standard Syslog tables.",
+        "streamDeclarations": {
+          "Custom-Syslog_CL": {
+            "columns": [
+              { "name": "TimeGenerated", "type": "datetime" },
+              { "name": "Computer", "type": "string" },
+              { "name": "Facility", "type": "string" },
+              { "name": "SyslogMessage", "type": "string" },
+              { "name": "SeverityLevel", "type": "string" },
+              { "name": "Region", "type": "string" },
+              { "name": "AvailabilityZone", "type": "string" }
+            ]
+          }
+        },
+        "dataFlows": [
+          {
+            "streams": ["Microsoft-Syslog"],
+            "destinations": ["logAnalyticsWorkspace"],
+            "transformKql": "source | extend Region = tostring(parse_json(Type).Region), AvailabilityZone = tostring(parse_json(Type).AvailabilityZone) | project TimeGenerated, Computer, Facility, SyslogMessage, SeverityLevel, Region, AvailabilityZone"
+          }
+        ]
+      }
+    }
+  ]
+}
