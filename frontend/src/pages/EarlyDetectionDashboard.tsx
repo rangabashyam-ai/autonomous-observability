@@ -147,6 +147,7 @@ const RISK_VARIANT: Record<string, 'critical' | 'warning' | 'default' | 'success
   Healthy: 'success',
 };
 
+/*
 function WarRoomBanner({
   detections,
   onStartInvestigation,
@@ -214,6 +215,7 @@ function WarRoomBanner({
     </div>
   );
 }
+*/
 
 function riskBarColor(confidence: number): string {
   if (confidence >= 85) return 'bg-red-500';
@@ -732,7 +734,7 @@ export default function EarlyDetectionDashboard() {
 
     if (panel === 'active-alerts') {
       entityData = { drilldown: panel, critical_count: criticalFeed.length, total_active: alertsFeed.length };
-      relatedAlerts = criticalFeed.length > 0 ? criticalFeed : alertsFeed.slice(0, 15);
+      relatedAlerts = criticalFeed.length > 0 ? criticalFeed.slice(0, 20) : alertsFeed.slice(0, 15);
     } else if (panel === 'patterns') {
       entityData = { drilldown: panel, count: detections.length };
       relatedAlerts = detections;
@@ -904,7 +906,11 @@ export default function EarlyDetectionDashboard() {
             related_alerts: ctx.relatedAlerts,
             related_incidents: [],
             dependency_data: {},
-            analysis_results: { detections, clearance_plan: clearancePlan },
+            analysis_results: {
+              detections: detections.slice(0, 8),
+              detections_total: detections.length,
+              clearance_plan: clearancePlan,
+            },
             investigation_results: {},
             user_question: question,
           },
@@ -1057,431 +1063,430 @@ export default function EarlyDetectionDashboard() {
       )}
 
       {(loading || hasData) && !apiError && (
-        <>
-          {/* Service risk heatmap */}
-          <Card>
-            <CardHeader className="pb-3">
-              <button
-                type="button"
-                onClick={() => openDrill({ panel: 'service-risk-overview' })}
-                className="w-full text-left group"
-              >
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Target className="h-4 w-4 text-primary" />
-                  Service Risk Overview
-                  <span className="text-[10px] font-normal text-primary ml-auto opacity-70 group-hover:opacity-100">
-                    View all →
-                  </span>
-                </CardTitle>
-              </button>
-            </CardHeader>
-            <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {loading
-                ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-20 rounded-lg bg-card-hover animate-pulse" />
-                ))
-                : serviceRisks.map((svc) => {
-                  const stage = STAGE_META[svc.progression_stage] ?? STAGE_META.watch;
-                  return (
-                    <button
-                      key={svc.service_id}
-                      type="button"
-                      onClick={() => openDrill({ panel: 'service-risk', serviceId: svc.service_id })}
-                      className={cn(
-                        'text-left p-3 rounded-lg border transition-all hover:shadow-sm hover:ring-1 hover:ring-primary/30 cursor-pointer',
-                        stage.bg,
-                        drill?.serviceId === svc.service_id && 'ring-2 ring-primary/50',
-                        selected?.expected_impacted_service_id === svc.service_id &&
-                        'ring-2 ring-primary/50'
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-sm font-medium text-text-primary truncate">
-                          {svc.service_name}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Detail Panel and Live Alert Conditions */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Detail panel (Probable Incident Forming card) */}
+            {!loading && detections.length === 0 ? (
+              <div className="p-12 text-center rounded-xl border border-dashed border-border bg-card">
+                <ShieldAlert className="h-10 w-10 text-success mx-auto mb-3 opacity-70" />
+                <p className="text-text-primary font-medium">No early failure patterns matched</p>
+                <p className="text-sm text-text-secondary mt-1">
+                  Active alerts do not yet align with known incident precursors
+                </p>
+              </div>
+            ) : selected ? (
+              <Card className="overflow-hidden">
+                <div className="p-6 border-b border-border bg-gradient-to-r from-red-500/5 via-transparent to-transparent">
+                  <div className="flex flex-col sm:flex-row gap-6">
+                    <ConfidenceRing value={selected.confidence} selectedDetection={selected} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4 text-critical" />
+                        <span className="text-xs font-semibold text-critical uppercase tracking-wide">
+                          Probable incident forming
                         </span>
-                        <Badge variant={RISK_VARIANT[svc.risk_level] ?? 'secondary'}>
-                          {svc.risk_level}
-                        </Badge>
+                        {selected.risk_level && (
+                          <Badge variant={RISK_VARIANT[selected.risk_level] ?? 'critical'}>
+                            {selected.risk_level} risk
+                          </Badge>
+                        )}
                       </div>
-                      <div className="h-1.5 rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden mb-2">
-                        <div
-                          className={cn('h-full rounded-full transition-all', riskBarColor(svc.confidence))}
-                          style={{ width: `${Math.max(svc.confidence, 4)}%` }}
-                        />
+                      <h2 className="text-xl font-bold text-text-primary">
+                        {selected.expected_impacted_service}
+                      </h2>
+                      <p className="text-sm text-text-secondary mt-1">
+                        {selected.pattern_label ?? selected.pattern_id}
+                      </p>
+                      <div className="flex flex-wrap gap-4 mt-4 text-sm">
+                        <div className="flex items-center gap-1.5 text-text-secondary">
+                          <Clock className="h-4 w-4" />
+                          <span>
+                            ETA{' '}
+                            <strong className="text-text-primary">
+                              {formatEta(selected.estimated_time_to_incident_minutes)}
+                            </strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-text-secondary">
+                          <TrendingUp className="h-4 w-4" />
+                          <span>
+                            Seen{' '}
+                            <strong className="text-text-primary">
+                              {selected.occurrence_count_historical ?? 0}×
+                            </strong>{' '}
+                            historically
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-[11px] text-text-secondary">
-                        <span>{svc.active_threats} signal{svc.active_threats !== 1 ? 's' : ''}</span>
-                        <span>{svc.eta_minutes > 0 ? `ETA ${formatEta(svc.eta_minutes)}` : 'Stable'}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-            </div>
-          </Card>
-
-          {/* Active conditions strip */}
-          <Card>
-            <CardHeader className="pb-2">
-              <button
-                type="button"
-                onClick={() => openDrill({ panel: 'live-conditions' })}
-                className="w-full text-left group"
-              >
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-warning" />
-                  Live Alert Conditions
-                  <span className="text-[10px] font-normal text-primary opacity-70 group-hover:opacity-100">
-                    View all →
-                  </span>
-                  {analyzedAt && (
-                    <span className="text-[11px] font-normal text-text-secondary ml-auto">
-                      Analyzed {analyzedAt}
-                    </span>
-                  )}
-                </CardTitle>
-              </button>
-            </CardHeader>
-            <div className="px-5 pb-4">
-              {loading ? (
-                <div className="h-8 bg-card-hover rounded animate-pulse" />
-              ) : activeConditions.length === 0 ? (
-                <p className="text-sm text-text-secondary">No active alert conditions</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {activeConditions.map((c) => (
-                    <button
-                      key={c.title}
-                      type="button"
-                      onClick={() => openDrill({ panel: 'live-conditions', conditionTitle: c.title })}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card-hover text-xs hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
-                    >
-                      {severityBadge(c.severity)}
-                      <span className="font-medium text-text-primary">{c.title}</span>
-                      {c.count > 1 && (
-                        <span className="text-text-secondary">×{c.count}</span>
+                    </div>
+                  </div>
+                  {selected.match_coverage && (
+                    <div className="mt-5">
+                      <PatternCoverageBar
+                        matched={selected.match_coverage.matched}
+                        total={selected.match_coverage.total}
+                      />
+                      {selected.match_coverage.unmatched_alerts.length > 0 && (
+                        <p className="text-xs text-text-secondary mt-2">
+                          Still watching for:{' '}
+                          {selected.match_coverage.unmatched_alerts.join(', ')}
+                        </p>
                       )}
-                      <span className="text-text-secondary hidden sm:inline">
-                        · {c.entities.slice(0, 2).join(', ')}
-                        {c.entities.length > 2 ? ` +${c.entities.length - 2}` : ''}
-                      </span>
-                    </button>
-                  ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Card>
 
-          {/* Main threat panel */}
-          {!loading && detections.length === 0 ? (
-            <div className="p-12 text-center rounded-xl border border-dashed border-border">
-              <ShieldAlert className="h-10 w-10 text-success mx-auto mb-3 opacity-70" />
-              <p className="text-text-primary font-medium">No early failure patterns matched</p>
-              <p className="text-sm text-text-secondary mt-1">
-                Active alerts do not yet align with known incident precursors
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-              {/* Threat list */}
-              <div className="xl:col-span-4 space-y-2">
+                <div className="p-6 space-y-6">
+                  {/* Matched alerts table */}
+                  {selected.matched_alerts_details && selected.matched_alerts_details.length > 0 && (
+                    <section>
+                      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                        Matched Active Alerts
+                      </h4>
+                      <div className="rounded-lg border border-border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-card-hover text-left text-xs text-text-secondary">
+                              <th className="px-4 py-2 font-medium">Alert</th>
+                              <th className="px-4 py-2 font-medium hidden sm:table-cell">Entity</th>
+                              <th className="px-4 py-2 font-medium">Severity</th>
+                              <th className="px-4 py-2 font-medium hidden md:table-cell">Age</th>
+                              <th className="px-4 py-2 font-medium text-right">Match</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {selected.matched_alerts_details.map((a) => (
+                              <tr key={a.id} className="hover:bg-card-hover/50">
+                                <td className="px-4 py-2.5">
+                                  <p className="font-medium text-text-primary">{a.title}</p>
+                                  {a.pattern_alert !== a.title && (
+                                    <p className="text-[11px] text-text-secondary">
+                                      Pattern: {a.pattern_alert}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-text-secondary hidden sm:table-cell font-mono text-xs">
+                                  {a.entity_id}
+                                </td>
+                                <td className="px-4 py-2.5">{severityBadge(a.severity)}</td>
+                                <td className="px-4 py-2.5 text-text-secondary hidden md:table-cell text-xs">
+                                  {formatAge(a.minutes_ago)}
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-mono text-xs text-text-primary">
+                                  {a.match_score}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Propagation paths */}
+                  {selected.propagation_paths &&
+                    Object.keys(selected.propagation_paths).length > 0 && (
+                      <section>
+                        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                          Blast Propagation Paths
+                        </h4>
+                        <div className="space-y-2">
+                          {Object.entries(selected.propagation_paths).map(([entity, path]) => (
+                            <div
+                              key={entity}
+                              className="flex flex-wrap items-center gap-1.5 text-xs p-3 rounded-lg bg-card-hover border border-border"
+                            >
+                              <span className="font-mono text-text-primary">{entity}</span>
+                              {path.map((node, i) => (
+                                <span key={`${entity}-${i}`} className="flex items-center gap-1.5">
+                                  <ArrowRight className="h-3 w-3 text-text-secondary" />
+                                  <span className="font-mono text-text-secondary">{node}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                  {/* Expected symptoms + correlated changes */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <section>
+                      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                        Expected Next Symptoms
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {selected.expected_symptoms.map((s) => (
+                          <li
+                            key={s}
+                            className="flex items-center gap-2 text-sm text-text-secondary"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+
+                    {selected.correlated_changes && selected.correlated_changes.length > 0 && (
+                      <section>
+                        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                          Correlated Changes (24h)
+                        </h4>
+                        <ul className="space-y-2">
+                          {selected.correlated_changes.map((c) => (
+                            <li
+                              key={c.id}
+                              className="p-2.5 rounded-lg border border-border bg-card-hover text-sm"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-text-primary truncate">
+                                  {c.title}
+                                </span>
+                                {severityBadge(c.severity)}
+                              </div>
+                              <p className="text-xs text-text-secondary mt-1">
+                                {c.type.replace('_', ' ')} · {c.status}
+                                {c.hours_ago != null && ` · ${c.hours_ago}h ago`}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-border">
+                    <section>
+                      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                        Recommended Proactive Actions
+                      </h4>
+                      <ol className="space-y-2">
+                        {selected.recommended_actions.map((a, i) => (
+                          <li key={a} className="flex gap-2 text-sm text-text-secondary">
+                            <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">
+                              {i + 1}
+                            </span>
+                            {a}
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                    <section>
+                      <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                        Evidence Collection Plan
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {selected.evidence_collection_plan.map((e) => (
+                          <li key={e} className="text-sm text-text-secondary flex gap-2">
+                            <span className="text-primary">•</span>
+                            {e}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <div className="h-full min-h-[320px] flex items-center justify-center rounded-xl border border-dashed border-border text-text-secondary text-sm bg-card">
+                Select a threat to view details
+              </div>
+            )}
+
+            {/* Live Alert Conditions */}
+            <Card>
+              <CardHeader className="pb-2">
                 <button
                   type="button"
-                  onClick={() => openDrill({ panel: 'ranked-threats' })}
-                  className="text-xs font-semibold text-text-secondary uppercase tracking-wide px-1 hover:text-primary transition-colors flex items-center gap-1"
+                  onClick={() => openDrill({ panel: 'live-conditions' })}
+                  className="w-full text-left group"
                 >
-                  Ranked Threats ({detections.length})
-                  <span className="text-[10px] normal-case text-primary">· view all</span>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-warning" />
+                    Live Alert Conditions
+                    <span className="text-[10px] font-normal text-primary ml-auto opacity-70 group-hover:opacity-100">
+                      View all →
+                    </span>
+                    {analyzedAt && (
+                      <span className="text-[11px] font-normal text-text-secondary ml-auto">
+                        Analyzed {analyzedAt}
+                      </span>
+                    )}
+                  </CardTitle>
                 </button>
+              </CardHeader>
+              <div className="px-5 pb-4">
+                {loading ? (
+                  <div className="h-8 bg-card-hover rounded animate-pulse" />
+                ) : activeConditions.length === 0 ? (
+                  <p className="text-sm text-text-secondary">No active alert conditions</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {activeConditions.map((c) => (
+                      <button
+                        key={c.title}
+                        type="button"
+                        onClick={() => openDrill({ panel: 'live-conditions', conditionTitle: c.title })}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card-hover text-xs hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                      >
+                        {severityBadge(c.severity)}
+                        <span className="font-medium text-text-primary">{c.title}</span>
+                        {c.count > 1 && (
+                          <span className="text-text-secondary">×{c.count}</span>
+                        )}
+                        <span className="text-text-secondary hidden sm:inline">
+                          · {c.entities.slice(0, 2).join(', ')}
+                          {c.entities.length > 2 ? ` +${c.entities.length - 2}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Right Column: Service Risk Overview and Ranked Threats */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* Service Risk Overview */}
+            <Card>
+              <CardHeader className="pb-3">
+                <button
+                  type="button"
+                  onClick={() => openDrill({ panel: 'service-risk-overview' })}
+                  className="w-full text-left group"
+                >
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    Service Risk Overview
+                    <span className="text-[10px] font-normal text-primary ml-auto opacity-70 group-hover:opacity-100">
+                      View all →
+                    </span>
+                  </CardTitle>
+                </button>
+              </CardHeader>
+              <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading
-                  ? Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="h-24 rounded-xl bg-card-hover animate-pulse" />
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-20 rounded-lg bg-card-hover animate-pulse" />
                   ))
-                  : detections.map((d) => {
-                    const stage = STAGE_META[d.progression_stage ?? 'watch'] ?? STAGE_META.watch;
-                    const isSelected = selected?.pattern_id === d.pattern_id;
+                  : serviceRisks.map((svc) => {
+                    const stage = STAGE_META[svc.progression_stage] ?? STAGE_META.watch;
                     return (
                       <button
-                        key={d.pattern_id}
+                        key={svc.service_id}
                         type="button"
-                        onClick={() => openDrill({ panel: 'ranked-threat', patternId: d.pattern_id })}
+                        onClick={() => openDrill({ panel: 'service-risk', serviceId: svc.service_id })}
                         className={cn(
-                          'w-full text-left p-4 rounded-xl border transition-all cursor-pointer',
-                          isSelected || drill?.patternId === d.pattern_id
-                            ? 'border-primary/50 bg-primary/5 shadow-sm'
-                            : 'border-border bg-card hover:bg-card-hover hover:border-primary/30'
+                          'text-left p-3 rounded-lg border transition-all hover:shadow-sm hover:ring-1 hover:ring-primary/30 cursor-pointer',
+                          stage.bg,
+                          drill?.serviceId === svc.service_id && 'ring-2 ring-primary/50',
+                          selected?.expected_impacted_service_id === svc.service_id &&
+                          'ring-2 ring-primary/50'
                         )}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={cn('text-[10px] font-semibold uppercase', stage.color)}>
-                                {stage.label}
-                              </span>
-                              {d.risk_level && (
-                                <Badge variant={RISK_VARIANT[d.risk_level] ?? 'secondary'}>
-                                  {d.risk_level}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="font-semibold text-text-primary truncate">
-                              {d.expected_impacted_service}
-                            </p>
-                            <p className="text-xs text-text-secondary mt-0.5 truncate">
-                              {d.pattern_label ?? d.matched_alerts.join(' + ')}
-                            </p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-critical">{d.confidence}%</p>
-                            <p className="text-[10px] text-text-secondary flex items-center justify-end gap-0.5">
-                              <Clock className="h-3 w-3" />
-                              {formatEta(d.estimated_time_to_incident_minutes)}
-                            </p>
-                          </div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-sm font-medium text-text-primary truncate">
+                            {svc.service_name}
+                          </span>
+                          <Badge variant={RISK_VARIANT[svc.risk_level] ?? 'secondary'}>
+                            {svc.risk_level}
+                          </Badge>
                         </div>
-                        {d.match_coverage && (
-                          <div className="mt-3 flex gap-1">
-                            {Array.from({ length: d.match_coverage.total }).map((_, i) => (
-                              <div
-                                key={i}
-                                className={cn(
-                                  'h-1 flex-1 rounded-full',
-                                  i < d.match_coverage!.matched ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700'
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
+                        <div className="h-1.5 rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden mb-2">
+                          <div
+                            className={cn('h-full rounded-full transition-all', riskBarColor(svc.confidence))}
+                            style={{ width: `${Math.max(svc.confidence, 4)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[11px] text-text-secondary">
+                          <span>{svc.active_threats} signal{svc.active_threats !== 1 ? 's' : ''}</span>
+                          <span>{svc.eta_minutes > 0 ? `ETA ${formatEta(svc.eta_minutes)}` : 'Stable'}</span>
+                        </div>
                       </button>
                     );
                   })}
               </div>
+            </Card>
 
-              {/* Detail panel */}
-              <div className="xl:col-span-8">
-                {selected ? (
-                  <Card className="overflow-hidden">
-                    <div className="p-6 border-b border-border bg-gradient-to-r from-red-500/5 via-transparent to-transparent">
-                      <div className="flex flex-col sm:flex-row gap-6">
-                        <ConfidenceRing value={selected.confidence} selectedDetection={selected} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-critical" />
-                            <span className="text-xs font-semibold text-critical uppercase tracking-wide">
-                              Probable incident forming
+            {/* Ranked Threats */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => openDrill({ panel: 'ranked-threats' })}
+                className="text-xs font-semibold text-text-secondary uppercase tracking-wide px-1 hover:text-primary transition-colors flex items-center gap-1"
+              >
+                Ranked Threats ({detections.length})
+                <span className="text-[10px] normal-case text-primary">· view all</span>
+              </button>
+              {loading
+                ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-xl bg-card-hover animate-pulse" />
+                ))
+                : detections.map((d) => {
+                  const stage = STAGE_META[d.progression_stage ?? 'watch'] ?? STAGE_META.watch;
+                  const isSelected = selected?.pattern_id === d.pattern_id;
+                  return (
+                    <button
+                      key={d.pattern_id}
+                      type="button"
+                      onClick={() => openDrill({ panel: 'ranked-threat', patternId: d.pattern_id })}
+                      className={cn(
+                        'w-full text-left p-4 rounded-xl border transition-all cursor-pointer',
+                        isSelected || drill?.patternId === d.pattern_id
+                          ? 'border-primary/50 bg-primary/5 shadow-sm'
+                          : 'border-border bg-card hover:bg-card-hover hover:border-primary/30'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cn('text-[10px] font-semibold uppercase', stage.color)}>
+                              {stage.label}
                             </span>
-                            {selected.risk_level && (
-                              <Badge variant={RISK_VARIANT[selected.risk_level] ?? 'critical'}>
-                                {selected.risk_level} risk
+                            {d.risk_level && (
+                              <Badge variant={RISK_VARIANT[d.risk_level] ?? 'secondary'}>
+                                {d.risk_level}
                               </Badge>
                             )}
                           </div>
-                          <h2 className="text-xl font-bold text-text-primary">
-                            {selected.expected_impacted_service}
-                          </h2>
-                          <p className="text-sm text-text-secondary mt-1">
-                            {selected.pattern_label ?? selected.pattern_id}
+                          <p className="font-semibold text-text-primary truncate">
+                            {d.expected_impacted_service}
                           </p>
-                          <div className="flex flex-wrap gap-4 mt-4 text-sm">
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                ETA{' '}
-                                <strong className="text-text-primary">
-                                  {formatEta(selected.estimated_time_to_incident_minutes)}
-                                </strong>
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-text-secondary">
-                              <TrendingUp className="h-4 w-4" />
-                              <span>
-                                Seen{' '}
-                                <strong className="text-text-primary">
-                                  {selected.occurrence_count_historical ?? 0}×
-                                </strong>{' '}
-                                historically
-                              </span>
-                            </div>
-                          </div>
+                          <p className="text-xs text-text-secondary mt-0.5 truncate">
+                            {d.pattern_label ?? d.matched_alerts.join(' + ')}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-lg font-bold text-critical">{d.confidence}%</p>
+                          <p className="text-[10px] text-text-secondary flex items-center justify-end gap-0.5">
+                            <Clock className="h-3 w-3" />
+                            {formatEta(d.estimated_time_to_incident_minutes)}
+                          </p>
                         </div>
                       </div>
-                      {selected.match_coverage && (
-                        <div className="mt-5">
-                          <PatternCoverageBar
-                            matched={selected.match_coverage.matched}
-                            total={selected.match_coverage.total}
-                          />
-                          {selected.match_coverage.unmatched_alerts.length > 0 && (
-                            <p className="text-xs text-text-secondary mt-2">
-                              Still watching for:{' '}
-                              {selected.match_coverage.unmatched_alerts.join(', ')}
-                            </p>
-                          )}
+                      {d.match_coverage && (
+                        <div className="mt-3 flex gap-1">
+                          {Array.from({ length: d.match_coverage.total }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                'h-1 flex-1 rounded-full',
+                                i < d.match_coverage!.matched ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700'
+                              )}
+                            />
+                          ))}
                         </div>
                       )}
-                    </div>
-
-                    <div className="p-6 space-y-6">
-                      {/* Matched alerts table */}
-                      {selected.matched_alerts_details && selected.matched_alerts_details.length > 0 && (
-                        <section>
-                          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                            Matched Active Alerts
-                          </h4>
-                          <div className="rounded-lg border border-border overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="bg-card-hover text-left text-xs text-text-secondary">
-                                  <th className="px-4 py-2 font-medium">Alert</th>
-                                  <th className="px-4 py-2 font-medium hidden sm:table-cell">Entity</th>
-                                  <th className="px-4 py-2 font-medium">Severity</th>
-                                  <th className="px-4 py-2 font-medium hidden md:table-cell">Age</th>
-                                  <th className="px-4 py-2 font-medium text-right">Match</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
-                                {selected.matched_alerts_details.map((a) => (
-                                  <tr key={a.id} className="hover:bg-card-hover/50">
-                                    <td className="px-4 py-2.5">
-                                      <p className="font-medium text-text-primary">{a.title}</p>
-                                      {a.pattern_alert !== a.title && (
-                                        <p className="text-[11px] text-text-secondary">
-                                          Pattern: {a.pattern_alert}
-                                        </p>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-text-secondary hidden sm:table-cell font-mono text-xs">
-                                      {a.entity_id}
-                                    </td>
-                                    <td className="px-4 py-2.5">{severityBadge(a.severity)}</td>
-                                    <td className="px-4 py-2.5 text-text-secondary hidden md:table-cell text-xs">
-                                      {formatAge(a.minutes_ago)}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-right font-mono text-xs text-text-primary">
-                                      {a.match_score}%
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </section>
-                      )}
-
-                      {/* Propagation paths */}
-                      {selected.propagation_paths &&
-                        Object.keys(selected.propagation_paths).length > 0 && (
-                          <section>
-                            <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                              Blast Propagation Paths
-                            </h4>
-                            <div className="space-y-2">
-                              {Object.entries(selected.propagation_paths).map(([entity, path]) => (
-                                <div
-                                  key={entity}
-                                  className="flex flex-wrap items-center gap-1.5 text-xs p-3 rounded-lg bg-card-hover border border-border"
-                                >
-                                  <span className="font-mono text-text-primary">{entity}</span>
-                                  {path.map((node, i) => (
-                                    <span key={`${entity}-${i}`} className="flex items-center gap-1.5">
-                                      <ArrowRight className="h-3 w-3 text-text-secondary" />
-                                      <span className="font-mono text-text-secondary">{node}</span>
-                                    </span>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </section>
-                        )}
-
-                      {/* Expected symptoms + correlated changes */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <section>
-                          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                            Expected Next Symptoms
-                          </h4>
-                          <ul className="space-y-1.5">
-                            {selected.expected_symptoms.map((s) => (
-                              <li
-                                key={s}
-                                className="flex items-center gap-2 text-sm text-text-secondary"
-                              >
-                                <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
-                                {s}
-                              </li>
-                            ))}
-                          </ul>
-                        </section>
-
-                        {selected.correlated_changes && selected.correlated_changes.length > 0 && (
-                          <section>
-                            <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                              Correlated Changes (24h)
-                            </h4>
-                            <ul className="space-y-2">
-                              {selected.correlated_changes.map((c) => (
-                                <li
-                                  key={c.id}
-                                  className="p-2.5 rounded-lg border border-border bg-card-hover text-sm"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-medium text-text-primary truncate">
-                                      {c.title}
-                                    </span>
-                                    {severityBadge(c.severity)}
-                                  </div>
-                                  <p className="text-xs text-text-secondary mt-1">
-                                    {c.type.replace('_', ' ')} · {c.status}
-                                    {c.hours_ago != null && ` · ${c.hours_ago}h ago`}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-border">
-                        <section>
-                          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                            Recommended Proactive Actions
-                          </h4>
-                          <ol className="space-y-2">
-                            {selected.recommended_actions.map((a, i) => (
-                              <li key={a} className="flex gap-2 text-sm text-text-secondary">
-                                <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">
-                                  {i + 1}
-                                </span>
-                                {a}
-                              </li>
-                            ))}
-                          </ol>
-                        </section>
-                        <section>
-                          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-                            Evidence Collection Plan
-                          </h4>
-                          <ul className="space-y-1.5">
-                            {selected.evidence_collection_plan.map((e) => (
-                              <li key={e} className="text-sm text-text-secondary flex gap-2">
-                                <span className="text-primary">•</span>
-                                {e}
-                              </li>
-                            ))}
-                          </ul>
-                        </section>
-                      </div>
-                    </div>
-                  </Card>
-                ) : (
-                  <div className="h-full min-h-[320px] flex items-center justify-center rounded-xl border border-dashed border-border text-text-secondary text-sm">
-                    Select a threat to view details
-                  </div>
-                )}
-              </div>
+                    </button>
+                  );
+                })}
             </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
 
       <DrilldownDrawer
