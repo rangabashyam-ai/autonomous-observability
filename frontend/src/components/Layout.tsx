@@ -39,7 +39,7 @@ const secondaryNav = [
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
-  { to: '/adopters', label: 'Adopters', icon: Cloud },
+  { to: '/adapters', label: 'Adapters', icon: Cloud },
   { to: '/admin', label: 'Settings', icon: Settings },
 ];
 

@@ -77,10 +77,10 @@ interface ConfigRule {
 // ─── Provider brand config ─────────────────────────────────────────────────────
 
 const PROVIDER_CONFIG: Record<Provider, { label: string; color: string; bg: string; border: string }> = {
-  aws:        { label: 'Amazon AWS',       color: '#FF9900', bg: 'rgba(255,153,0,0.08)',   border: 'rgba(255,153,0,0.25)' },
-  azure:      { label: 'Microsoft Azure',  color: '#0078D4', bg: 'rgba(0,120,212,0.08)',   border: 'rgba(0,120,212,0.25)' },
-  gcp:        { label: 'Google Cloud',     color: '#4285F4', bg: 'rgba(66,133,244,0.08)',  border: 'rgba(66,133,244,0.25)' },
-  kubernetes: { label: 'Kubernetes',       color: '#326CE5', bg: 'rgba(50,108,229,0.08)',  border: 'rgba(50,108,229,0.25)' },
+  aws: { label: 'Amazon AWS', color: '#FF9900', bg: 'rgba(255,153,0,0.08)', border: 'rgba(255,153,0,0.25)' },
+  azure: { label: 'Microsoft Azure', color: '#0078D4', bg: 'rgba(0,120,212,0.08)', border: 'rgba(0,120,212,0.25)' },
+  gcp: { label: 'Google Cloud', color: '#4285F4', bg: 'rgba(66,133,244,0.08)', border: 'rgba(66,133,244,0.25)' },
+  kubernetes: { label: 'Kubernetes', color: '#326CE5', bg: 'rgba(50,108,229,0.08)', border: 'rgba(50,108,229,0.25)' },
 };
 
 const RESOURCE_TYPE_ICON: Record<string, string> = {
@@ -95,47 +95,47 @@ const RESOURCE_TYPE_ICON: Record<string, string> = {
 
 // AWS data sources shown in architecture diagram
 const AWS_DATA_SOURCES = [
-  { id: 'cloudwatch',       label: 'CloudWatch',        sub: 'Metrics + Alarms',     icon: BarChart2,    color: '#FF9900' },
-  { id: 'container_insights', label: 'Container Insights', sub: 'ECS/EKS metrics',   icon: Database,     color: '#FF9900' },
-  { id: 'xray',             label: 'X-Ray',             sub: 'Distributed traces',   icon: GitBranch,    color: '#FF9900' },
-  { id: 'adot',             label: 'ADOT',              sub: 'OTel collector',        icon: Activity,     color: '#FF9900' },
-  { id: 'cw_logs',          label: 'CloudWatch Logs',   sub: 'App + system logs',    icon: FileText,     color: '#FF9900' },
-  { id: 'vpc_flow',         label: 'VPC Flow Logs',     sub: 'Network traffic',      icon: Radio,        color: '#FF9900' },
-  { id: 'cloudtrail',       label: 'CloudTrail',        sub: 'Audit + API events',   icon: BookOpen,     color: '#FF9900' },
-  { id: 'aws_config',       label: 'AWS Config',        sub: 'Config changes',       icon: ShieldCheck,  color: '#FF9900' },
-  { id: 'kinesis',          label: 'Kinesis Streams',   sub: 'Real-time transport',  icon: Zap,          color: '#FF9900' },
-  { id: 'eventbridge',      label: 'EventBridge',       sub: 'Event routing',        icon: Terminal,     color: '#FF9900' },
-  { id: 'iam',              label: 'IAM Access Key',    sub: 'Single API key auth',  icon: Key,          color: '#FF9900' },
+  { id: 'cloudwatch', label: 'CloudWatch', sub: 'Metrics + Alarms', icon: BarChart2, color: '#FF9900' },
+  { id: 'container_insights', label: 'Container Insights', sub: 'ECS/EKS metrics', icon: Database, color: '#FF9900' },
+  { id: 'xray', label: 'X-Ray', sub: 'Distributed traces', icon: GitBranch, color: '#FF9900' },
+  { id: 'adot', label: 'ADOT', sub: 'OTel collector', icon: Activity, color: '#FF9900' },
+  { id: 'cw_logs', label: 'CloudWatch Logs', sub: 'App + system logs', icon: FileText, color: '#FF9900' },
+  { id: 'vpc_flow', label: 'VPC Flow Logs', sub: 'Network traffic', icon: Radio, color: '#FF9900' },
+  { id: 'cloudtrail', label: 'CloudTrail', sub: 'Audit + API events', icon: BookOpen, color: '#FF9900' },
+  { id: 'aws_config', label: 'AWS Config', sub: 'Config changes', icon: ShieldCheck, color: '#FF9900' },
+  { id: 'kinesis', label: 'Kinesis Streams', sub: 'Real-time transport', icon: Zap, color: '#FF9900' },
+  { id: 'eventbridge', label: 'EventBridge', sub: 'Event routing', icon: Terminal, color: '#FF9900' },
+  { id: 'iam', label: 'IAM Access Key', sub: 'Single API key auth', icon: Key, color: '#FF9900' },
 ];
 
 // Azure data sources shown in architecture diagram
 const AZURE_DATA_SOURCES = [
-  { id: 'azure_monitor',     label: 'Azure Monitor',       sub: 'Metrics + alerts',       icon: BarChart2,   color: '#0078D4' },
-  { id: 'container_insights',label: 'Container Insights',  sub: 'AKS / ACI metrics',      icon: Database,    color: '#0078D4' },
-  { id: 'app_insights',      label: 'App Insights',        sub: 'Distributed traces',     icon: GitBranch,   color: '#0078D4' },
-  { id: 'ama_otel',          label: 'AMA + OTel',          sub: 'OTel collector',         icon: Activity,    color: '#0078D4' },
-  { id: 'log_analytics',     label: 'Log Analytics',       sub: 'App + system logs',      icon: FileText,    color: '#0078D4' },
-  { id: 'nsg_flow',          label: 'NSG Flow Logs',       sub: 'Network traffic',        icon: Radio,       color: '#0078D4' },
-  { id: 'activity_log',      label: 'Activity Log',        sub: 'Audit + API events',     icon: BookOpen,    color: '#0078D4' },
-  { id: 'azure_policy',      label: 'Azure Policy',        sub: 'Config changes',         icon: ShieldCheck, color: '#0078D4' },
-  { id: 'event_hubs',        label: 'Event Hubs',          sub: 'Real-time log transport',icon: Zap,         color: '#0078D4' },
-  { id: 'event_grid',        label: 'Event Grid',          sub: 'Event routing',          icon: Terminal,    color: '#0078D4' },
-  { id: 'service_principal', label: 'Service Principal',   sub: 'App registration auth',  icon: Key,         color: '#0078D4' },
+  { id: 'azure_monitor', label: 'Azure Monitor', sub: 'Metrics + alerts', icon: BarChart2, color: '#0078D4' },
+  { id: 'container_insights', label: 'Container Insights', sub: 'AKS / ACI metrics', icon: Database, color: '#0078D4' },
+  { id: 'app_insights', label: 'App Insights', sub: 'Distributed traces', icon: GitBranch, color: '#0078D4' },
+  { id: 'ama_otel', label: 'AMA + OTel', sub: 'OTel collector', icon: Activity, color: '#0078D4' },
+  { id: 'log_analytics', label: 'Log Analytics', sub: 'App + system logs', icon: FileText, color: '#0078D4' },
+  { id: 'nsg_flow', label: 'NSG Flow Logs', sub: 'Network traffic', icon: Radio, color: '#0078D4' },
+  { id: 'activity_log', label: 'Activity Log', sub: 'Audit + API events', icon: BookOpen, color: '#0078D4' },
+  { id: 'azure_policy', label: 'Azure Policy', sub: 'Config changes', icon: ShieldCheck, color: '#0078D4' },
+  { id: 'event_hubs', label: 'Event Hubs', sub: 'Real-time log transport', icon: Zap, color: '#0078D4' },
+  { id: 'event_grid', label: 'Event Grid', sub: 'Event routing', icon: Terminal, color: '#0078D4' },
+  { id: 'service_principal', label: 'Service Principal', sub: 'App registration auth', icon: Key, color: '#0078D4' },
 ];
 
 // GCP data sources shown in architecture diagram
 const GCP_DATA_SOURCES = [
-  { id: 'cloud_monitoring',  label: 'Cloud Monitoring',    sub: 'Metrics + alerts',       icon: BarChart2,   color: '#4285F4' },
-  { id: 'gke_metrics',       label: 'GKE / GCE Metrics',   sub: 'Kubernetes monitoring',  icon: Database,    color: '#4285F4' },
-  { id: 'cloud_trace',       label: 'Cloud Trace',         sub: 'Distributed traces',     icon: GitBranch,   color: '#4285F4' },
-  { id: 'gcp_otel',          label: 'OTel Collector',      sub: 'OTel integration',       icon: Activity,    color: '#4285F4' },
-  { id: 'cloud_logging',     label: 'Cloud Logging',       sub: 'App + system logs',      icon: FileText,    color: '#4285F4' },
-  { id: 'vpc_flow',          label: 'VPC Flow Logs',       sub: 'Network traffic',        icon: Radio,       color: '#4285F4' },
-  { id: 'cloud_audit',       label: 'Cloud Audit Logs',    sub: 'Audit + API events',     icon: BookOpen,    color: '#4285F4' },
-  { id: 'asset_inventory',   label: 'Cloud Asset Inventory', sub: 'Asset tracking & compliance', icon: ShieldCheck, color: '#4285F4' },
-  { id: 'pubsub',            label: 'Cloud Pub/Sub',       sub: 'Real-time log transport',icon: Zap,         color: '#4285F4' },
-  { id: 'eventarc',          label: 'Eventarc',            sub: 'Event routing',          icon: Terminal,    color: '#4285F4' },
-  { id: 'service_account',   label: 'Service Account Key', sub: 'JSON key file auth',     icon: Key,         color: '#4285F4' },
+  { id: 'cloud_monitoring', label: 'Cloud Monitoring', sub: 'Metrics + alerts', icon: BarChart2, color: '#4285F4' },
+  { id: 'gke_metrics', label: 'GKE / GCE Metrics', sub: 'Kubernetes monitoring', icon: Database, color: '#4285F4' },
+  { id: 'cloud_trace', label: 'Cloud Trace', sub: 'Distributed traces', icon: GitBranch, color: '#4285F4' },
+  { id: 'gcp_otel', label: 'OTel Collector', sub: 'OTel integration', icon: Activity, color: '#4285F4' },
+  { id: 'cloud_logging', label: 'Cloud Logging', sub: 'App + system logs', icon: FileText, color: '#4285F4' },
+  { id: 'vpc_flow', label: 'VPC Flow Logs', sub: 'Network traffic', icon: Radio, color: '#4285F4' },
+  { id: 'cloud_audit', label: 'Cloud Audit Logs', sub: 'Audit + API events', icon: BookOpen, color: '#4285F4' },
+  { id: 'asset_inventory', label: 'Cloud Asset Inventory', sub: 'Asset tracking & compliance', icon: ShieldCheck, color: '#4285F4' },
+  { id: 'pubsub', label: 'Cloud Pub/Sub', sub: 'Real-time log transport', icon: Zap, color: '#4285F4' },
+  { id: 'eventarc', label: 'Eventarc', sub: 'Event routing', icon: Terminal, color: '#4285F4' },
+  { id: 'service_account', label: 'Service Account Key', sub: 'JSON key file auth', icon: Key, color: '#4285F4' },
 ];
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -560,7 +560,7 @@ function AWSSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
 
   return (
     <div className="rounded-xl border border-[#FF9900]/20 bg-[#FF9900]/5 overflow-hidden transition-all duration-200">
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#FF9900]/10 transition-colors"
       >
@@ -610,7 +610,7 @@ function AzureSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
 
   return (
     <div className="rounded-xl border border-[#0078D4]/20 bg-[#0078D4]/5 overflow-hidden transition-all duration-200">
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#0078D4]/10 transition-colors"
       >
@@ -633,20 +633,17 @@ function AzureSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
               return (
                 <div
                   key={src.id}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${
-                    hasConnection
-                      ? isLive
-                        ? 'border-[#0078D4]/20 bg-[#0078D4]/5'
-                        : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
-                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
-                  }`}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${hasConnection
+                    ? isLive
+                      ? 'border-[#0078D4]/20 bg-[#0078D4]/5'
+                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
+                    : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
+                    }`}
                 >
-                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                    hasConnection && isLive ? 'bg-[#0078D4]/15' : 'bg-[var(--color-border)]/30'
-                  }`}>
-                    <Icon className={`h-3.5 w-3.5 ${
-                      hasConnection && isLive ? 'text-[#0078D4]' : 'text-[var(--color-text-secondary)]'
-                    }`} />
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection && isLive ? 'bg-[#0078D4]/15' : 'bg-[var(--color-border)]/30'
+                    }`}>
+                    <Icon className={`h-3.5 w-3.5 ${hasConnection && isLive ? 'text-[#0078D4]' : 'text-[var(--color-text-secondary)]'
+                      }`} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
@@ -675,7 +672,7 @@ function GCPSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
 
   return (
     <div className="rounded-xl border border-[#4285F4]/20 bg-[#4285F4]/5 overflow-hidden transition-all duration-200">
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#4285F4]/10 transition-colors"
       >
@@ -698,20 +695,17 @@ function GCPSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
               return (
                 <div
                   key={src.id}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${
-                    hasConnection
-                      ? isLive
-                        ? 'border-[#4285F4]/20 bg-[#4285F4]/5'
-                        : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
-                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
-                  }`}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${hasConnection
+                    ? isLive
+                      ? 'border-[#4285F4]/20 bg-[#4285F4]/5'
+                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
+                    : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
+                    }`}
                 >
-                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                    hasConnection && isLive ? 'bg-[#4285F4]/15' : 'bg-[var(--color-border)]/30'
-                  }`}>
-                    <Icon className={`h-3.5 w-3.5 ${
-                      hasConnection && isLive ? 'text-[#4285F4]' : 'text-[var(--color-text-secondary)]'
-                    }`} />
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection && isLive ? 'bg-[#4285F4]/15' : 'bg-[var(--color-border)]/30'
+                    }`}>
+                    <Icon className={`h-3.5 w-3.5 ${hasConnection && isLive ? 'text-[#4285F4]' : 'text-[var(--color-text-secondary)]'
+                      }`} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
@@ -756,8 +750,8 @@ function ResourcesPanel({ activeProvider }: { activeProvider: Provider }) {
 
   const healthColor = (h: string) =>
     h === 'healthy' ? 'text-green-400 bg-green-400/10' :
-    h === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
-    'text-red-400 bg-red-400/10';
+      h === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
+        'text-red-400 bg-red-400/10';
 
   if (loading) return (
     <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]">
@@ -841,7 +835,7 @@ function LogsPanel({ activeProvider }: { activeProvider: Provider }) {
     const qs = `&provider=${activeProvider}`;
     apiFetch(`/api/integrations/logs?limit=200${qs}`)
       .then(d => setData(d))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [activeProvider]);
 
@@ -919,7 +913,7 @@ function TracesPanel({ activeProvider }: { activeProvider: Provider }) {
         setData(tracesData);
         setOtelStatus(otelData);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [activeProvider]);
 
@@ -1067,8 +1061,8 @@ function TracesPanel({ activeProvider }: { activeProvider: Provider }) {
                     <td className="px-4 py-2.5">
                       {t.has_fault ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-400/10 text-red-400">FAULT</span>
                         : t.has_error ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-400/10 text-orange-400">ERROR</span>
-                        : t.has_throttle ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-400/10 text-yellow-400">THROTTLE</span>
-                        : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-400/10 text-green-400">OK</span>}
+                          : t.has_throttle ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-400/10 text-yellow-400">THROTTLE</span>
+                            : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-400/10 text-green-400">OK</span>}
                     </td>
                     <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{new Date(t.timestamp).toLocaleTimeString()}</td>
                   </tr>
@@ -1095,7 +1089,7 @@ function AuditPanel({ activeProvider }: { activeProvider: Provider }) {
     const qs = `&provider=${activeProvider}`;
     apiFetch(`/api/integrations/audit-events?limit=200${qs}`)
       .then(d => setData(d))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [activeProvider]);
 
@@ -1105,8 +1099,8 @@ function AuditPanel({ activeProvider }: { activeProvider: Provider }) {
 
   const sevColor = (s: string) =>
     s === 'critical' ? 'text-red-400 bg-red-400/10' :
-    s === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
-    'text-blue-400 bg-blue-400/10';
+      s === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
+        'text-blue-400 bg-blue-400/10';
 
   if (loading) return <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading audit events...</div>;
 
@@ -1175,7 +1169,7 @@ function CompliancePanel({ activeProvider }: { activeProvider: Provider }) {
     const qs = `provider=${activeProvider}`;
     apiFetch(`/api/integrations/config-compliance?${qs}`)
       .then(d => setData(d))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [activeProvider]);
 
@@ -1248,7 +1242,7 @@ function CompliancePanel({ activeProvider }: { activeProvider: Provider }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function CloudAdoptersPage() {
+export default function CloudAdaptersPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<Record<string, string> | null>(null);
@@ -1281,11 +1275,11 @@ export default function CloudAdoptersPage() {
   const hasAWS = byProvider('aws').length > 0;
 
   const tabs: { id: TelemetryTab; label: string; icon: any; requiresCloud?: 'aws' }[] = [
-    { id: 'connect',    label: 'Connect',    icon: Cloud },
-    { id: 'resources',  label: 'Resources',  icon: Server },
-    { id: 'logs',       label: 'Logs',       icon: FileText },
-    { id: 'traces',     label: 'Traces',     icon: GitBranch },
-    { id: 'audit',      label: 'Audit',      icon: BookOpen,    requiresCloud: 'aws' },
+    { id: 'connect', label: 'Connect', icon: Cloud },
+    { id: 'resources', label: 'Resources', icon: Server },
+    { id: 'logs', label: 'Logs', icon: FileText },
+    { id: 'traces', label: 'Traces', icon: GitBranch },
+    { id: 'audit', label: 'Audit', icon: BookOpen, requiresCloud: 'aws' },
     { id: 'compliance', label: 'Compliance', icon: ShieldCheck, requiresCloud: 'aws' },
   ];
 
@@ -1298,7 +1292,7 @@ export default function CloudAdoptersPage() {
             <div className="h-9 w-9 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
               <Cloud className="h-5 w-5 text-[var(--color-primary)]" />
             </div>
-            <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Cloud Adopters</h1>
+            <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Cloud Adapters</h1>
           </div>
           <p className="text-sm text-[var(--color-text-secondary)] ml-12">
             Connect AWS, Azure, GCP, and Kubernetes to stream live telemetry into the platform.
@@ -1332,11 +1326,10 @@ export default function CloudAdoptersPage() {
             <button
               key={p}
               onClick={() => setActiveProvider(p)}
-              className={`rounded-xl p-4 border text-left transition-all duration-200 ${
-                isActive
-                  ? 'ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)] scale-[1.02]'
-                  : 'hover:scale-[1.01]'
-              }`}
+              className={`rounded-xl p-4 border text-left transition-all duration-200 ${isActive
+                ? 'ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)] scale-[1.02]'
+                : 'hover:scale-[1.01]'
+                }`}
               style={{
                 borderColor: isActive ? cfg.color : cfg.border,
                 background: cfg.bg,
@@ -1415,10 +1408,10 @@ export default function CloudAdoptersPage() {
           ))}
         </div>
       )}
-      {activeTab === 'resources'  && <ResourcesPanel  activeProvider={activeProvider} />}
-      {activeTab === 'logs'       && <LogsPanel       activeProvider={activeProvider} />}
-      {activeTab === 'traces'     && <TracesPanel     activeProvider={activeProvider} />}
-      {activeTab === 'audit'      && <AuditPanel      activeProvider={activeProvider} />}
+      {activeTab === 'resources' && <ResourcesPanel activeProvider={activeProvider} />}
+      {activeTab === 'logs' && <LogsPanel activeProvider={activeProvider} />}
+      {activeTab === 'traces' && <TracesPanel activeProvider={activeProvider} />}
+      {activeTab === 'audit' && <AuditPanel activeProvider={activeProvider} />}
       {activeTab === 'compliance' && <CompliancePanel activeProvider={activeProvider} />}
 
       {/* Info footer */}
