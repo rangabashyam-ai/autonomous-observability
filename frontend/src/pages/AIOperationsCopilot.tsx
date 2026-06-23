@@ -36,10 +36,13 @@ interface Recommendation {
 }
 
 const SUGGESTIONS = [
+  'Tell me about INC-1042',
+  'How to fix the payment incident?',
+  'What is the blast radius?',
+  'Show active incidents',
   'Why is Payment Authorization slow?',
-  'Which services are impacted?',
-  'What is the likely root cause?',
-  'What fix worked last time?',
+  'What changed recently?',
+  'Which services are at risk?',
 ];
 
 export default function AIOperationsCopilot() {
@@ -50,7 +53,7 @@ export default function AIOperationsCopilot() {
     {
       role: 'assistant',
       content:
-        'Welcome to AI Operations Copilot. I can analyze incidents, predict impact, identify root causes, and recommend remediation actions. What would you like to investigate?',
+        'Welcome to AI Operations Copilot. I can answer any question about your platform — incidents, root causes, blast radius, service health, fixes, and more. Ask me anything!',
     },
   ]);
   const [input, setInput] = useState(initialQuery);
@@ -97,29 +100,42 @@ export default function AIOperationsCopilot() {
 
   const send = async (question: string) => {
     if (!question.trim() || loading) return;
-    setMessages((m) => [...m, { role: 'user', content: question }]);
+    const newUserMsg: Message = { role: 'user', content: question };
+    setMessages((m) => [...m, newUserMsg]);
     setInput('');
     setLoading(true);
+
+    // Build history from current messages (exclude system welcome message if empty exchange)
+    const history = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
-      const res = await askCopilot(question);
+      const res = await fetch('http://localhost:8000/api/copilot/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, history }),
+      });
+      const data = await res.json();
       setMessages((m) => [
         ...m,
         {
           role: 'assistant',
-          content: res.answer,
-          sources: res.sources,
-          actions: res.suggested_actions,
+          content: data.answer || 'No response received.',
+          sources: data.sources,
+          actions: data.suggested_actions,
         },
       ]);
     } catch {
       setMessages((m) => [
         ...m,
-        { role: 'assistant', content: 'Unable to process your request. Please try again.' },
+        { role: 'assistant', content: 'Unable to reach the AI backend. Please check the server is running.' },
       ]);
     } finally {
       setLoading(false);
     }
   };
+
 
   const activeCase = overview?.recent_incidents[selectedCase];
 
@@ -141,7 +157,10 @@ export default function AIOperationsCopilot() {
               {cases.map((c, i) => (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedCase(i)}
+                  onClick={() => {
+                    setSelectedCase(i);
+                    send(`Tell me about ${c.id} — ${c.title}`);
+                  }}
                   className={cn(
                     'w-full text-left p-3 rounded-lg transition-colors duration-150',
                     selectedCase === i
@@ -154,12 +173,14 @@ export default function AIOperationsCopilot() {
                   </div>
                   <p className="text-xs text-text-primary line-clamp-2">{c.title}</p>
                   <p className="text-[10px] text-text-secondary mt-1">{c.service}</p>
+                  <p className="text-[10px] text-primary mt-0.5">Click to investigate →</p>
                 </button>
               ))}
               {cases.length === 0 && (
                 <p className="text-xs text-text-secondary p-3">No active cases</p>
               )}
             </div>
+
           </Card>
         </div>
 

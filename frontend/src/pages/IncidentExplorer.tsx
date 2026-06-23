@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests } from '../api/client';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import { useRegisterCopilotContext, useCopilot } from '../ai/context/CopilotProvider';
 import type { Incident, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary } from '../components/ui';
-import { ReportChat } from '../components/ReportChat';
+import InlineCopilot from '../components/copilot/InlineCopilot';
+import DrilldownDrawer from '../components/drilldown/DrilldownDrawer';
+import { useDrawerState } from '../hooks/useDrawerState';
 
 // ---------------------------------------------------------------------------
 // State badge
@@ -760,88 +762,63 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
   onClose: () => void;
 }) {
   const [crOpen, setCrOpen] = useState(false);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (crOpen) setCrOpen(false); else onClose(); } };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose, crOpen]);
+  const { openCopilot, registerPageContext } = useCopilot();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal card */}
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
-
-        {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
-          <div className="flex-1 min-w-0 pr-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className={`text-xs px-2 py-0.5 rounded border font-medium ${severityClass(incident.severity)}`}>
-                {incident.severity}
-              </span>
-              <StateBadge state={incident.state} />
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{incident.incident_id}</span>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
-              <button
-                id="btn-change-requests"
-                onClick={(e) => { e.stopPropagation(); setCrOpen(true); }}
-                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-violet-100 hover:bg-violet-200 dark:bg-violet-950/50 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 transition-all hover:shadow-sm active:scale-95"
-                aria-label="View change request history"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                Change Requests
-              </button>
-            </div>
+    <>
+      <DrilldownDrawer
+        isOpen={true}
+        onClose={onClose}
+        title={
+          <div className="flex items-center gap-3">
+            <span className="truncate max-w-[240px] md:max-w-[320px]">{incident.title}</span>
+            <button
+              id="btn-change-requests"
+              onClick={(e) => { e.stopPropagation(); setCrOpen(true); }}
+              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded bg-violet-100 hover:bg-violet-200 dark:bg-violet-950/50 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-[10px] font-semibold transition-all"
+              aria-label="View change request history"
+            >
+              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Change Requests
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            aria-label="Close"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-5">
-
+        }
+        subtitle={
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${severityClass(incident.severity)}`}>
+              {incident.severity}
+            </span>
+            <StateBadge state={incident.state} />
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{incident.incident_id}</span>
+          </div>
+        }
+        type="incident"
+        health={incident.severity === 'P1' || incident.severity === 'P2' ? 'critical' : 'warning'}
+      >
+        <div className="space-y-5">
           {/* Basic incident info */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
-            <p><span className="text-slate-500 dark:text-slate-400">Service: </span><span className="text-slate-900 dark:text-white font-medium">{incident.service}</span></p>
-            <p><span className="text-slate-500 dark:text-slate-400">Team: </span><span className="text-slate-900 dark:text-white font-medium">{incident.owner_team}</span></p>
-            <p><span className="text-slate-500 dark:text-slate-400">Environment: </span><span className="text-slate-900 dark:text-white font-medium">{incident.environment} / {incident.region}</span></p>
-            <p><span className="text-slate-500 dark:text-slate-400">Duration: </span><span className="text-slate-900 dark:text-white font-medium">{incident.duration_minutes} min</span></p>
+            <p><span className="text-slate-500 dark:text-slate-400 font-medium">Service: </span><span className="text-slate-900 dark:text-white font-semibold">{incident.service}</span></p>
+            <p><span className="text-slate-500 dark:text-slate-400 font-medium">Team: </span><span className="text-slate-900 dark:text-white font-semibold">{incident.owner_team}</span></p>
+            <p><span className="text-slate-500 dark:text-slate-400 font-medium">Environment: </span><span className="text-slate-900 dark:text-white font-semibold">{incident.environment} / {incident.region}</span></p>
+            <p><span className="text-slate-500 dark:text-slate-400 font-medium">Duration: </span><span className="text-slate-900 dark:text-white font-semibold">{incident.duration_minutes} min</span></p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">Alerts</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Alerts</p>
               <TagList items={incident.alerts} color="red" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">Symptoms</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Symptoms</p>
               <TagList items={incident.symptoms} color="yellow" />
             </div>
           </div>
 
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">Impacted Components</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Impacted Components</p>
             <TagList items={incident.impacted_components} />
           </div>
 
@@ -863,18 +840,36 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
 
           <AnalysisSection analysis={analysis} loading={analysisLoading} />
 
-          {/* Chat — only once analysis has loaded */}
+          {/* Unified AI Assistant */}
           {!analysisLoading && analysis && (
-            <ReportChat
-              reportContext={buildIncidentContext(incident, analysis, changeRequests)}
-              reportType={analysis.type}
-              subtitle="Scoped to Incidents"
-              entityName={`Incident ${incident.incident_id}`}
-              suggestedQuestions={['Summarize this incident', 'What is the root cause?', 'How can I resolve this?']}
+            <InlineCopilot
+              pageType="incident"
+              selectedEntity={incident.incident_id}
+              entityData={{
+                incident_id: incident.incident_id,
+                title: incident.title,
+                severity: incident.severity,
+                service: incident.service,
+                root_cause: incident.root_cause,
+                fix: incident.fix,
+                alerts: incident.alerts,
+                symptoms: incident.symptoms,
+                resolution: incident.resolution_notes,
+                duration_minutes: incident.duration_minutes,
+                impacted_components: incident.impacted_components,
+                analysis_summary: analysis.reasoning,
+              }}
+              relatedAlerts={incident.alerts}
+              suggestedQuestions={[
+                `What triggered ${incident.incident_id}?`,
+                `How do we apply the suggested fix?`,
+                `Are there similar historical incidents for ${incident.service}?`
+              ]}
+              className="mt-4"
             />
           )}
         </div>
-      </div>
+      </DrilldownDrawer>
 
       {/* Change Requests slide-over */}
       {crOpen && (
@@ -883,7 +878,7 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
           onClose={() => setCrOpen(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -896,6 +891,8 @@ const PAGE_SIZE = 100;
 export default function IncidentExplorer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerState();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [total, setTotal] = useState(0);
@@ -915,7 +912,7 @@ export default function IncidentExplorer() {
   const handleSearchClick = () => {
     if (search.trim()) {
       if (search.trim().toUpperCase().startsWith('INC-')) {
-        navigate(`/incidents?id=${encodeURIComponent(search.trim().toUpperCase())}`);
+        openDrawer('incident', search.trim().toUpperCase(), { keepOtherParams: true });
       } else {
         navigate(`/incidents?search=${encodeURIComponent(search.trim())}`);
       }
@@ -932,9 +929,8 @@ export default function IncidentExplorer() {
       setLoadingMore(true);
     }
 
-    const idParam = searchParams.get('id');
     const searchParamVal = searchParams.get('search');
-    const activeSearch = idParam || searchParamVal || search;
+    const activeSearch = searchParamVal || search;
 
     getIncidents({
       limit: PAGE_SIZE,
@@ -964,41 +960,59 @@ export default function IncidentExplorer() {
 
   useEffect(() => { load(true); }, [severity, searchParams]);
 
-  // Handle ?id= deep-link: open popup for the given incident
+  // Handle old ?id= deep-link and redirect to drawer query params
   useEffect(() => {
     const id = searchParams.get('id');
-    const q = searchParams.get('search');
     if (id) {
-      setSearch(id);
-      getIncident(id).then(setSelected).catch(console.error);
-    } else if (q) {
-      setSearch(q);
-      setSelected(null);
-    } else {
-      setSearch('');
-      setSelected(null);
+      openDrawer('incident', id);
     }
   }, [searchParams]);
+
+  // Sync search input with URL search param
+  useEffect(() => {
+    const q = searchParams.get('search');
+    if (q) {
+      setSearch(q);
+    }
+  }, [searchParams]);
+
+  // Load incident details and analysis dynamically based on route drawer parameters
+  useEffect(() => {
+    if (drawerType === 'incident' && drawerId) {
+      const found = incidents.find(i => i.incident_id === drawerId);
+      if (found) {
+        setSelected(found);
+      } else {
+        getIncident(drawerId).then(setSelected).catch(console.error);
+      }
+
+      setAnalysis(null);
+      setAnalysisError(null);
+      setAnalysisLoading(true);
+      setChangeRequests(null);
+
+      getIncidentClickAnalysis(drawerId)
+        .then(setAnalysis)
+        .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
+        .finally(() => setAnalysisLoading(false));
+
+      getIncidentChangeRequests(drawerId)
+        .then((r) => setChangeRequests({ tickets: r.tickets }))
+        .catch(() => setChangeRequests(null));
+    } else {
+      setSelected(null);
+      setAnalysis(null);
+      setAnalysisError(null);
+      setChangeRequests(null);
+    }
+  }, [drawerType, drawerId]);
+
   const handleRowClick = (inc: Incident) => {
-    setSelected(inc);
-    setAnalysis(null);
-    setAnalysisError(null);
-    setAnalysisLoading(true);
-    setChangeRequests(null);
-    getIncidentClickAnalysis(inc.incident_id)
-      .then(setAnalysis)
-      .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
-      .finally(() => setAnalysisLoading(false));
-    getIncidentChangeRequests(inc.incident_id)
-      .then((r) => setChangeRequests({ tickets: r.tickets }))
-      .catch(() => setChangeRequests(null));
+    openDrawer('incident', inc.incident_id, { keepOtherParams: true });
   };
 
   const handleClose = () => {
-    setSelected(null);
-    setAnalysis(null);
-    setAnalysisError(null);
-    setChangeRequests(null);
+    closeDrawer();
   };
 
   const hasMore = incidents.length < total;

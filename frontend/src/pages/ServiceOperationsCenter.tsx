@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import { useDrawerState } from '../hooks/useDrawerState';
+import { useRegisterCopilotContext, useCopilot } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { getMonitoringDashboard, getOverview, getDependencyGraph, getDependencyPaths } from '../api/client';
+import { 
+  getMonitoringDashboard, 
+  getOverview, 
+  getDependencyGraph, 
+  getDependencyPaths, 
+  getIncident, 
+  getIncidentClickAnalysis, 
+  getIncidentChangeRequests 
+} from '../api/client';
 import type { MonitoringDashboard, ServiceMetric, GraphNode as APIGraphNode } from '../types/api';
-import type { Overview } from '../types/intelligence';
+import type { Overview, Incident } from '../types/intelligence';
 import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-primitives';
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -17,22 +26,31 @@ import { getHealthNodeStyle } from '../utils/graphTheme';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
 import RelatedResourcesPanel from '../components/drilldown/RelatedResourcesPanel';
-import { AlertCircle, Sparkles, ChevronRight, ExternalLink, Activity, Zap, Network } from 'lucide-react';
+import { AlertCircle, Sparkles, ChevronRight, ExternalLink, Activity, Zap, Network, TrendingUp, AlertCircle as AlertIcon } from 'lucide-react';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
 export default function ServiceOperationsCenter() {
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const { openCopilot, registerPageContext } = useCopilot();
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [graphNodes, setGraphNodes] = useState<Node[]>([]);
   const [graphEdges, setGraphEdges] = useState<Edge[]>([]);
   const [rawGraphNodes, setRawGraphNodes] = useState<APIGraphNode[]>([]);
 
-  // Drilldown drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Drawer route state
+  const { drawerType, drawerId, metricType, openDrawer, closeDrawer } = useDrawerState();
+
   const [selectedNode, setSelectedNode] = useState<APIGraphNode | null>(null);
   const [selectedNodeDeps, setSelectedNodeDeps] = useState<{ upstream: any[]; downstream: any[] } | null>(null);
+
+  // Incident details state
+  const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
+  const [incidentAnalysis, setIncidentAnalysis] = useState<any | null>(null);
+  const [incidentAnalysisLoading, setIncidentAnalysisLoading] = useState(false);
+  const [incidentAnalysisError, setIncidentAnalysisError] = useState<string | null>(null);
+  const [incidentChangeRequests, setIncidentChangeRequests] = useState<any | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -107,42 +125,84 @@ export default function ServiceOperationsCenter() {
   }, [services]);
 
   const handleServiceClick = useCallback((serviceId: string, _label: string) => {
-    let graphNode = rawGraphNodes.find((n) => n.id === serviceId);
-    if (!graphNode) {
-      const matched = services.find((s) => s.id === serviceId);
-      if (matched) {
-        graphNode = {
-          id: matched.id,
-          label: matched.name,
-          type: 'microservice',
-          status: matched.health,
-          health: matched.health,
-          metrics: {
-            cpu: Math.random() * 30 + 40,
-            memory: Math.random() * 30 + 50,
-            latency: matched.latency_p99_ms,
-            error_rate: matched.error_rate,
-            risk_score: matched.health === 'critical' ? 85 : matched.health === 'warning' ? 55 : 20,
-            incident_count: matched.health === 'critical' ? 2 : 0,
-          }
-        } as any;
+    openDrawer('service', serviceId);
+  }, [openDrawer]);
+
+  const handleIncidentClick = useCallback((incidentId: string) => {
+    openDrawer('incident', incidentId);
+  }, [openDrawer]);
+
+  // Load service drilldown details when drawer parameters change
+  useEffect(() => {
+    if (drawerType === 'service' && drawerId) {
+      let graphNode = rawGraphNodes.find((n) => n.id === drawerId);
+      if (!graphNode && services.length > 0) {
+        const matched = services.find((s) => s.id === drawerId);
+        if (matched) {
+          graphNode = {
+            id: matched.id,
+            label: matched.name,
+            type: 'microservice',
+            status: matched.health,
+            health: matched.health,
+            metrics: {
+              cpu: Math.random() * 30 + 40,
+              memory: Math.random() * 30 + 50,
+              latency: matched.latency_p99_ms,
+              error_rate: matched.error_rate,
+              risk_score: matched.health === 'critical' ? 85 : matched.health === 'warning' ? 55 : 20,
+              incident_count: matched.health === 'critical' ? 2 : 0,
+            }
+          } as any;
+        }
       }
-    }
-    if (graphNode) {
-      setSelectedNode(graphNode);
-      setDrawerOpen(true);
-      getDependencyPaths(serviceId)
-        .then((paths) => {
-          setSelectedNodeDeps({
-            upstream: paths.upstream || [],
-            downstream: paths.downstream || [],
+      if (graphNode) {
+        setSelectedNode(graphNode);
+        getDependencyPaths(drawerId)
+          .then((paths) => {
+            setSelectedNodeDeps({
+              upstream: paths.upstream || [],
+              downstream: paths.downstream || [],
+            });
+          })
+          .catch(() => {
+            setSelectedNodeDeps({ upstream: [], downstream: [] });
           });
-        })
-        .catch(() => {
-          setSelectedNodeDeps({ upstream: [], downstream: [] });
-        });
+      }
+    } else {
+      setSelectedNode(null);
+      setSelectedNodeDeps(null);
     }
-  }, [rawGraphNodes, services]);
+  }, [drawerType, drawerId, rawGraphNodes, services]);
+
+  // Load incident details when drawer parameters change
+  useEffect(() => {
+    if (drawerType === 'incident' && drawerId) {
+      setSelectedIncident(null);
+      setIncidentAnalysis(null);
+      setIncidentAnalysisError(null);
+      setIncidentAnalysisLoading(true);
+      setIncidentChangeRequests(null);
+
+      getIncident(drawerId)
+        .then(setSelectedIncident)
+        .catch(console.error);
+
+      getIncidentClickAnalysis(drawerId)
+        .then(setIncidentAnalysis)
+        .catch((err) => setIncidentAnalysisError(err?.message ?? 'Analysis failed'))
+        .finally(() => setIncidentAnalysisLoading(false));
+
+      getIncidentChangeRequests(drawerId)
+        .then((r) => setIncidentChangeRequests({ tickets: r.tickets }))
+        .catch(() => setIncidentChangeRequests(null));
+    } else {
+      setSelectedIncident(null);
+      setIncidentAnalysis(null);
+      setIncidentAnalysisError(null);
+      setIncidentChangeRequests(null);
+    }
+  }, [drawerType, drawerId]);
 
   // Handle dependency graph node click → open drilldown drawer
   const onNodeClick = useCallback(
@@ -220,9 +280,7 @@ export default function ServiceOperationsCenter() {
             label="Services Monitored"
             value={services.length}
             sub={`${services.filter((s) => s.health === 'healthy').length} healthy`}
-            onClick={() => {
-              document.getElementById('service-health-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'services' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -230,7 +288,7 @@ export default function ServiceOperationsCenter() {
             label="Active Incidents"
             value={exec!.active_incidents}
             variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
-            onClick={() => navigate('/incidents?active=true')}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'incidents' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -238,9 +296,7 @@ export default function ServiceOperationsCenter() {
             label="Avg P99 Latency"
             value={`${avgLatency.toFixed(0)}ms`}
             variant="warning"
-            onClick={() => {
-              document.getElementById('latency-trends-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'latency' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -248,9 +304,7 @@ export default function ServiceOperationsCenter() {
             label="Avg Error Rate"
             value={`${avgError.toFixed(2)}%`}
             variant={avgError > 1.5 ? 'critical' : 'default'}
-            onClick={() => {
-              document.getElementById('error-trends-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'errors' })}
           />
         </div>
       </Grid12>
@@ -359,7 +413,7 @@ export default function ServiceOperationsCenter() {
 
         {/* ─── Sidebar ─── */}
         <div className="col-span-12 xl:col-span-4 space-y-4">
-          {/* Active Incidents (already clickable) */}
+          {/* Active Incidents (clickable directly to right drawer) */}
           <Card>
             <CardHeader>
               <CardTitle>Active Incidents</CardTitle>
@@ -367,10 +421,10 @@ export default function ServiceOperationsCenter() {
             </CardHeader>
             <div className="space-y-2">
               {overview.recent_incidents.slice(0, exec?.active_incidents || 2).map((inc) => (
-                <Link
+                <div
                   key={inc.incident_id}
-                  to={`/incidents?id=${inc.incident_id}`}
-                  className="block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200"
+                  onClick={() => handleIncidentClick(inc.incident_id)}
+                  className="block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200 cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>
@@ -379,7 +433,7 @@ export default function ServiceOperationsCenter() {
                     <span className="text-[10px] text-text-secondary">{inc.service}</span>
                   </div>
                   <p className="text-xs text-text-primary line-clamp-2">{inc.title}</p>
-                </Link>
+                </div>
               ))}
             </div>
           </Card>
@@ -472,7 +526,7 @@ export default function ServiceOperationsCenter() {
         </div>
       </Grid12>
 
-      {/* ─── Incident Timeline (clickable bars) ─── */}
+      {/* ─── Incident Timeline (clickable directly to right drawer) ─── */}
       <CollapsibleSection title="Incident Timeline" className="mt-6" defaultOpen>
         <Card>
           <div className="flex gap-1 overflow-x-auto pb-2">
@@ -484,7 +538,7 @@ export default function ServiceOperationsCenter() {
                   key={h}
                   onClick={() => {
                     if (matchingIncident) {
-                      navigate(`/incidents?id=${matchingIncident.incident_id}`);
+                      handleIncidentClick(matchingIncident.incident_id);
                     } else {
                       navigate(`/incidents`);
                     }
@@ -511,8 +565,8 @@ export default function ServiceOperationsCenter() {
 
       {/* ─── Dependency Node Drilldown Drawer ─── */}
       <DrilldownDrawer
-        isOpen={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setSelectedNode(null); setSelectedNodeDeps(null); }}
+        isOpen={drawerType === 'service'}
+        onClose={closeDrawer}
         title={selectedNode?.label ?? ''}
         subtitle={selectedNode?.id}
         type="service"
@@ -535,131 +589,504 @@ export default function ServiceOperationsCenter() {
       >
         {selectedNode && (
           <div className="space-y-6">
-            {/* Key Metrics */}
-            <DrilldownSection title="Key Metrics" icon={<Activity className="w-4 h-4" />}>
-              <div className="grid grid-cols-2 gap-3">
-                <DrilldownMetricCard
-                  label="CPU Usage"
-                  value={selectedNode.metrics.cpu.toFixed(1)}
-                  unit="%"
-                  status={selectedNode.metrics.cpu > 80 ? 'critical' : selectedNode.metrics.cpu > 60 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Memory"
-                  value={selectedNode.metrics.memory.toFixed(1)}
-                  unit="%"
-                  status={selectedNode.metrics.memory > 85 ? 'critical' : selectedNode.metrics.memory > 70 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Latency"
-                  value={selectedNode.metrics.latency.toFixed(1)}
-                  unit="ms"
-                  status={selectedNode.metrics.latency > 100 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Error Rate"
-                  value={selectedNode.metrics.error_rate.toFixed(2)}
-                  unit="%"
-                  status={selectedNode.metrics.error_rate > 2 ? 'critical' : selectedNode.metrics.error_rate > 0.5 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Risk Score"
-                  value={selectedNode.metrics.risk_score.toFixed(0)}
-                  status={selectedNode.metrics.risk_score > 70 ? 'critical' : selectedNode.metrics.risk_score > 40 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Incidents"
-                  value={selectedNode.metrics.incident_count}
-                  status={selectedNode.metrics.incident_count > 5 ? 'critical' : selectedNode.metrics.incident_count > 0 ? 'warning' : 'good'}
-                />
+            <div className="grid grid-cols-2 gap-4">
+              <DrilldownMetricCard
+                label="Error Rate"
+                value={selectedNode.metrics.error_rate.toFixed(2)}
+                unit="%"
+                status={selectedNode.metrics.error_rate > 1.5 ? 'critical' : selectedNode.metrics.error_rate > 0.5 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="P99 Latency"
+                value={selectedNode.metrics.latency.toFixed(0)}
+                unit="ms"
+                status={selectedNode.metrics.latency > 150 ? 'critical' : selectedNode.metrics.latency > 80 ? 'warning' : 'good'}
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                <p className="text-[10px] text-text-secondary mb-1">CPU</p>
+                <p className="text-lg font-bold text-text-primary">{selectedNode.metrics.cpu.toFixed(0)}%</p>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                <p className="text-[10px] text-text-secondary mb-1">Memory</p>
+                <p className="text-lg font-bold text-text-primary">{selectedNode.metrics.memory.toFixed(0)}%</p>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
+                <p className="text-[10px] text-text-secondary mb-1">Risk Score</p>
+                <p className="text-lg font-bold text-text-primary">{selectedNode.metrics.risk_score.toFixed(0)}%</p>
+              </div>
+            </div>
+
+            <DrilldownSection title="Resource Health Graph">
+              <div className="h-24">
+                <MiniLineChart data={generateTrend(selectedNode.metrics.latency, 10)} height={80} color="#3B82F6" />
               </div>
             </DrilldownSection>
 
-            {/* AI Insights */}
-            <AIInsightsPanel
-              insights={[]}
-              entityType="service"
-              entityName={selectedNode.label}
-              health={selectedNode.health as 'healthy' | 'warning' | 'critical'}
-            />
-
-            {/* Dependencies */}
-            <DrilldownSection title="Dependencies" icon={<Network className="w-4 h-4" />}>
-              {selectedNodeDeps ? (
+            {drawerRelatedResources.length > 0 && (
+              <DrilldownSection title="Connected Services">
                 <RelatedResourcesPanel resources={drawerRelatedResources} title="Connected Services" />
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400">Loading dependencies...</p>
-              )}
-            </DrilldownSection>
+              </DrilldownSection>
+            )}
 
-            {/* Quick Navigation */}
-            <DrilldownSection title="Quick Actions" icon={<Zap className="w-4 h-4" />}>
-              <div className="space-y-2">
-                <Link
-                  to={`/services/${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Full Service Dashboard</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
-                <Link
-                  to={`/rca?service=${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Root Cause Analysis</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
-                <Link
-                  to={`/blast-radius?service=${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-red-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Blast Radius Analysis</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
-              </div>
-            </DrilldownSection>
-
-            {/* Scoped AI Assistant inside the Drawer */}
-            <div className="mt-4 border-t border-border pt-4">
+            <div className="mt-6">
               <InlineCopilot
                 pageType="service"
                 selectedEntity={selectedNode.id}
                 entityData={{
                   service_id: selectedNode.id,
-                  name: selectedNode.label,
-                  health: selectedNode.health,
-                  metrics: {
-                    cpu: selectedNode.metrics.cpu,
-                    memory: selectedNode.metrics.memory,
-                    latency: selectedNode.metrics.latency,
-                    error_rate: selectedNode.metrics.error_rate,
-                    risk_score: selectedNode.metrics.risk_score,
-                    incident_count: selectedNode.metrics.incident_count,
-                  },
+                  label: selectedNode.label,
+                  metrics: selectedNode.metrics,
                 }}
+                relatedAlerts={overview.open_alerts_preview.filter(a => a.entity_id === selectedNode.id)}
+                relatedIncidents={overview.recent_incidents.filter(i => i.service === selectedNode.label)}
                 relatedMetrics={{
                   cpu: selectedNode.metrics.cpu,
                   memory: selectedNode.metrics.memory,
                   latency: selectedNode.metrics.latency,
                   error_rate: selectedNode.metrics.error_rate,
                 }}
-                relatedAlerts={overview.open_alerts_preview?.filter((a: any) => a.service === selectedNode.id) ?? []}
-                relatedIncidents={overview.recent_incidents?.filter((i: any) => i.service === selectedNode.id) ?? []}
-                title={`AI Assistant: ${selectedNode.label}`}
-                subtitle={`Ask questions about ${selectedNode.label} only`}
                 suggestedQuestions={[
-                  `Why is ${selectedNode.label} in ${selectedNode.health} state?`,
-                  `Analyze CPU and memory usage for ${selectedNode.label}`,
-                  `What are the active alerts/incidents for ${selectedNode.label}?`,
+                  `Why is microservice ${selectedNode.label} health state ${selectedNode.health}?`,
+                  `Analyze CPU and error rate hotspots for ${selectedNode.label}`,
+                  `Show downstream impact if ${selectedNode.label} fails`
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </DrilldownDrawer>
+
+      {/* Metric Drilldown Drawer for Service Operations */}
+      <DrilldownDrawer
+        isOpen={drawerType === 'metric'}
+        onClose={closeDrawer}
+        title={
+          metricType === 'services' ? 'Services Monitored' :
+            metricType === 'latency' ? 'Average P99 Latency' :
+              metricType === 'errors' ? 'Average Error Rate' :
+                metricType === 'incidents' ? 'Active Incidents' : ''
+        }
+        subtitle={
+          metricType === 'services' ? 'Microservice health and availability snapshot' :
+            metricType === 'latency' ? 'Historical response time trends and rankings' :
+              metricType === 'errors' ? 'Microservice exception/error rate trends and rankings' :
+                metricType === 'incidents' ? 'Current operational incidents requiring mitigation' : ''
+        }
+        type={
+          metricType === 'services' ? 'service' :
+            metricType === 'incidents' ? 'incident' : 'api'
+        }
+        health={
+          metricType === 'services' ? (services.some(s => s.health === 'critical') ? 'critical' : services.some(s => s.health === 'warning') ? 'warning' : 'healthy') :
+            metricType === 'latency' ? (avgLatency > 150 ? 'critical' : avgLatency > 80 ? 'warning' : 'healthy') :
+              metricType === 'errors' ? (avgError > 2.0 ? 'critical' : avgError > 0.5 ? 'warning' : 'healthy') :
+                metricType === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') : undefined
+        }
+      >
+        {metricType === 'services' && (
+          <div>
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Healthy"
+                value={services.filter(s => s.health === 'healthy').length}
+                status="good"
+              />
+              <DrilldownMetricCard
+                label="Warning"
+                value={services.filter(s => s.health === 'warning').length}
+                status="warning"
+              />
+              <DrilldownMetricCard
+                label="Critical"
+                value={services.filter(s => s.health === 'critical').length}
+                status="critical"
+              />
+            </div>
+
+            <DrilldownSection title="Service Availability Breakdown">
+              <div className="space-y-3">
+                {services.map(s => (
+                  <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+                    <span className="font-semibold text-text-primary text-xs">{s.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-xs">{s.availability.toFixed(2)}%</span>
+                      <HealthBadge health={s.health} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="Services Monitored"
+                entityData={{
+                  services_status: services.map(s => ({ name: s.name, availability: s.availability, health: s.health }))
+                }}
+                suggestedQuestions={[
+                  "Identify the least stable service in terms of availability",
+                  "Are there warning/critical alerts on any of these services?",
+                  "Which services have been degraded for more than 15 minutes?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {metricType === 'latency' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Avg Latency"
+                value={avgLatency.toFixed(1)}
+                unit="ms"
+                status={avgLatency > 150 ? 'critical' : avgLatency > 80 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Slowest Endpoint"
+                value="merchant-service"
+              />
+            </div>
+
+            <DrilldownSection title="P99 Response Times">
+              <div className="space-y-3">
+                {[...services]
+                  .sort((a, b) => b.latency_p99_ms - a.latency_p99_ms)
+                  .map(s => (
+                    <div key={s.id} className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-text-primary">
+                        <span>{s.name}</span>
+                        <span>{s.latency_p99_ms.toFixed(0)}ms</span>
+                      </div>
+                      <div className="w-full bg-border h-2 rounded-full overflow-hidden">
+                        <div
+                           className={`h-full rounded-full ${s.latency_p99_ms > 150 ? 'bg-critical' : s.latency_p99_ms > 85 ? 'bg-warning' : 'bg-success'
+                            }`}
+                          style={{ width: `${Math.min(100, s.latency_p99_ms / 3)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="Avg P99 Latency"
+                entityData={{
+                  average_latency: avgLatency,
+                  latency_trend: latencyTrend,
+                  standings: services.map(s => ({ name: s.name, latency: s.latency_p99_ms, health: s.health }))
+                }}
+                suggestedQuestions={[
+                  "Why is merchant-service experiencing p99 latency spikes?",
+                  "Is the database query lag causing downstream API latency?",
+                  "Recommend threshold configurations for latency alerts"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {metricType === 'errors' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Avg Error Rate"
+                value={avgError.toFixed(2)}
+                unit="%"
+                status={avgError > 2.0 ? 'critical' : avgError > 0.5 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Highest Error Rate"
+                value="auth-service"
+              />
+            </div>
+
+            <DrilldownSection title="HTTP Exception/Error Rates">
+              <div className="space-y-3">
+                {[...services]
+                  .sort((a, b) => b.error_rate - a.error_rate)
+                  .map(s => (
+                    <div key={s.id} className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-text-primary">
+                        <span>{s.name}</span>
+                        <span>{s.error_rate.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-border h-2 rounded-full overflow-hidden">
+                        <div
+                           className={`h-full rounded-full ${s.error_rate > 2.0 ? 'bg-critical' : s.error_rate > 0.5 ? 'bg-warning' : 'bg-success'
+                            }`}
+                          style={{ width: `${Math.min(100, s.error_rate * 25)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="Avg Error Rate"
+                entityData={{
+                  average_error_rate: avgError,
+                  error_trend: errorTrend,
+                  standings: services.map(s => ({ name: s.name, error_rate: s.error_rate, health: s.health }))
+                }}
+                suggestedQuestions={[
+                  "Why is average error rate high?",
+                  "Which microservice is throwing the most errors and why?",
+                  "Is the API Gateway error spike related to a backend database failure?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+
+        {metricType === 'incidents' && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Active Incidents"
+                value={exec!.active_incidents}
+                status={exec!.active_incidents > 0 ? 'critical' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Total Open Alerts"
+                value={overview.summary.open_alerts}
+                status={overview.summary.open_alerts > 0 ? 'warning' : 'good'}
+              />
+            </div>
+
+            <DrilldownSection title="Active Incidents List" icon={<AlertIcon className="w-4 h-4 text-critical" />}>
+              {overview.recent_incidents.slice(0, exec!.active_incidents).length === 0 ? (
+                <p className="text-xs text-text-secondary">No active incidents found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {overview.recent_incidents.slice(0, exec!.active_incidents).map(inc => (
+                    <div 
+                      key={inc.incident_id} 
+                      onClick={() => handleIncidentClick(inc.incident_id)}
+                      className="p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200 cursor-pointer text-left"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-critical/30 bg-critical/10 text-critical`}>
+                          {inc.severity}
+                        </span>
+                        <span className="text-[10px] text-text-secondary">{inc.service}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
+                      <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <DrilldownButton onClick={() => { closeDrawer(); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
+                          View RCA
+                        </DrilldownButton>
+                        <DrilldownButton onClick={() => { closeDrawer(); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
+                          Blast Radius
+                        </DrilldownButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="Active Incidents"
+                entityData={{
+                  active_incidents_count: exec!.active_incidents,
+                  incidents: overview.recent_incidents.slice(0, exec!.active_incidents),
+                }}
+                relatedIncidents={overview.recent_incidents.slice(0, exec!.active_incidents)}
+                suggestedQuestions={[
+                  "Can you explain the root cause of these active incidents?",
+                  "What is the estimated time to resolution?",
+                  "Are there correlated alerts for these incidents?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </DrilldownDrawer>
+
+      {/* ─── Incident Detail Drawer ─── */}
+      <DrilldownDrawer
+        isOpen={drawerType === 'incident'}
+        onClose={closeDrawer}
+        title={selectedIncident ? selectedIncident.title : 'Incident details'}
+        subtitle={drawerId || ''}
+        type="incident"
+        health={selectedIncident?.severity.startsWith('P1') || selectedIncident?.severity === '1' ? 'critical' : 'warning'}
+      >
+        {selectedIncident && (
+          <div className="space-y-5">
+            {/* Basic incident info */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+              <p><span className="text-slate-500 dark:text-slate-400 font-medium">Service: </span><span className="text-slate-900 dark:text-white font-semibold">{selectedIncident.service}</span></p>
+              <p><span className="text-slate-500 dark:text-slate-400 font-medium">Team: </span><span className="text-slate-900 dark:text-white font-semibold">{selectedIncident.owner_team}</span></p>
+              <p><span className="text-slate-500 dark:text-slate-400 font-medium">Environment: </span><span className="text-slate-900 dark:text-white font-semibold">{selectedIncident.environment} / {selectedIncident.region}</span></p>
+              <p><span className="text-slate-500 dark:text-slate-400 font-medium">Duration: </span><span className="text-slate-900 dark:text-white font-semibold">{selectedIncident.duration_minutes ?? '?'} min</span></p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Alerts</p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedIncident.alerts.map((item: string) => (
+                    <span key={item} className="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800">
+                      {item}
+                    </span>
+                  ))}
+                  {selectedIncident.alerts.length === 0 && <span className="text-xs text-slate-400 italic">none</span>}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Symptoms</p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedIncident.symptoms.map((item: string) => (
+                    <span key={item} className="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-yellow-50 text-yellow-700 border-yellow-250 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-800">
+                      {item}
+                    </span>
+                  ))}
+                  {selectedIncident.symptoms.length === 0 && <span className="text-xs text-slate-400 italic">none</span>}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Impacted Components</p>
+              <div className="flex flex-wrap gap-1">
+                {selectedIncident.impacted_components.map((item: string) => (
+                  <span key={item} className="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-350 dark:border-slate-700">
+                    {item}
+                  </span>
+                ))}
+                {selectedIncident.impacted_components.length === 0 && <span className="text-xs text-slate-400 italic">none</span>}
+              </div>
+            </div>
+
+            {selectedIncident.similar_incidents && selectedIncident.similar_incidents.length > 0 && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium text-slate-700 dark:text-slate-300">Similar incidents: </span>
+                {selectedIncident.similar_incidents.join(', ')}
+              </p>
+            )}
+
+            {/* Analysis Section */}
+            {incidentAnalysisLoading ? (
+              <div className="flex items-center gap-2 py-4 justify-center text-xs text-slate-500 dark:text-slate-400">
+                <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Running analysis…
+              </div>
+            ) : incidentAnalysisError ? (
+              <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+                {incidentAnalysisError}
+              </div>
+            ) : incidentAnalysis ? (
+              <div className="space-y-4 text-xs">
+                {/* Candidates / root causes */}
+                {incidentAnalysis.type === 'incident_rca' && incidentAnalysis.root_cause_candidates && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">Root Cause Candidates</p>
+                    <div className="space-y-2">
+                      {incidentAnalysis.root_cause_candidates.map((c: any, i: number) => (
+                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-slate-800 dark:text-white">{c.root_cause}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-955/40 dark:text-red-400`}>{c.confidence}% confidence</span>
+                          </div>
+                          {c.suggested_fixes?.[0] && (
+                            <p className="text-emerald-700 dark:text-emerald-400">→ {c.suggested_fixes[0]}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* suggested fix */}
+                {incidentAnalysis.suggested_fix && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg">
+                    <p className="text-slate-500 dark:text-slate-400 mb-0.5 font-medium">Suggested Fix</p>
+                    <p className="font-semibold text-emerald-700 dark:text-emerald-400">{incidentAnalysis.suggested_fix}</p>
+                  </div>
+                )}
+
+                {/* reasoning */}
+                {incidentAnalysis.reasoning && (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <p className="text-slate-500 dark:text-slate-400 mb-1 font-medium">Reasoning</p>
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{incidentAnalysis.reasoning}</p>
+                  </div>
+                )}
+
+                {/* AI Deep Analysis */}
+                {incidentAnalysis.llm_analysis && (
+                  <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-semibold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase">AI Deep Analysis</span>
+                    </div>
+                    <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed space-y-1">
+                      {incidentAnalysis.llm_analysis.split('\n').map((line: string, idx: number) => {
+                        if (line.trim() === '') return <div key={idx} className="h-1" />;
+                        return <p key={idx}>{line}</p>;
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Change Requests Section */}
+            {incidentChangeRequests && incidentChangeRequests.tickets && incidentChangeRequests.tickets.length > 0 && (
+              <div className="space-y-2 border-t border-border pt-4">
+                <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">Change Request History</p>
+                {incidentChangeRequests.tickets.map((ticket: any, ti: number) => (
+                  <div key={ti} className="p-3 rounded-lg border border-border bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded">
+                        {ticket.jira_key || 'Change Ticket'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">{ticket.service}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-900 dark:text-white">{ticket.summary}</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Status: <span className="font-semibold">{ticket.incident_state}</span></p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Inline AI Copilot inside the incident drawer */}
+            <div className="mt-6 border-t border-border pt-6">
+              <InlineCopilot
+                pageType="incident"
+                selectedEntity={selectedIncident.incident_id}
+                entityData={{
+                  incident_id: selectedIncident.incident_id,
+                  title: selectedIncident.title,
+                  severity: selectedIncident.severity,
+                  service: selectedIncident.service,
+                  root_cause: selectedIncident.root_cause,
+                  fix: selectedIncident.fix,
+                  alerts: selectedIncident.alerts,
+                  symptoms: selectedIncident.symptoms,
+                  duration_minutes: selectedIncident.duration_minutes,
+                  impacted_components: selectedIncident.impacted_components,
+                }}
+                relatedAlerts={selectedIncident.alerts}
+                relatedIncidents={[selectedIncident]}
+                suggestedQuestions={[
+                  "Can you explain the root cause of this incident?",
+                  "What is the recommended fix and verification plan?",
+                  "Are there similar past incidents on this service?"
                 ]}
               />
             </div>

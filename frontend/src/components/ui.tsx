@@ -55,12 +55,14 @@ export function StatCard({
   sub,
   alert,
   onClick,
+  valueClass,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   alert?: boolean;
   onClick?: () => void;
+  valueClass?: string;
 }) {
   const isClickable = !!onClick;
   return (
@@ -77,7 +79,7 @@ export function StatCard({
       }`}
     >
       <p className={`text-xs ${textMuted} mb-1`}>{label}</p>
-      <p className={`text-2xl font-bold ${alert ? 'text-red-700 dark:text-red-400' : textPrimary}`}>{value}</p>
+      <p className={`text-2xl font-bold ${valueClass ? valueClass : alert ? 'text-red-700 dark:text-red-400' : textPrimary}`}>{value}</p>
       {sub && <p className={`text-xs ${textMuted} mt-1`}>{sub}</p>}
     </div>
   );

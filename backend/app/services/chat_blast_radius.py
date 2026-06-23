@@ -179,7 +179,17 @@ Recent Incidents:
             model = os.environ.get("FAST_MODEL") or "llama-3.1-8b-instant"
             answer, _ = chat_with_fallback(llm_messages, model, temperature=0.2)
         except Exception as e:
-            answer = f"Groq API execution error: {str(e)}"
+            err = str(e)
+            if "429" in err or "rate_limit" in err.lower():
+                answer = "⚠️ AI model temporarily rate-limited by Groq. Please wait 30-60 seconds and try again."
+            elif "413" in err or "too large" in err.lower() or "context_length" in err.lower():
+                answer = "⚠️ AI context too large for the current Groq tier. Try clearing/shortening your conversation history."
+            elif "402" in err or "Payment" in err:
+                answer = "⚠️ Groq API credits insufficient. Please top up your account."
+            elif "401" in err or "403" in err or "unauthorized" in err.lower() or "1010" in err:
+                answer = "⚠️ Groq API key is invalid or expired. Check your GROQ_API_KEY in backend/.env."
+            else:
+                answer = f"⚠️ AI temporarily unavailable: {err[:200]}"
     else:
         # Local SRE heuristic diagnostics engine fallback
         q = question.lower()

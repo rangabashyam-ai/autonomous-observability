@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { analyzeEarlyDetection, copilotChat } from '../api/client';
+import InlineCopilot from '../components/copilot/InlineCopilot';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
 import type { EarlyDetection } from '../types/intelligence';
@@ -379,183 +380,6 @@ function ClickableMetricCard({
   );
 }
 
-function AiSuggestionsBlock({
-  loading,
-  response,
-  fallbackPlan,
-  chatHistory,
-  suggestedQuestions,
-  onAskAi,
-  onAskQuestion,
-}: {
-  loading: boolean;
-  response: CopilotResponse | null;
-  fallbackPlan?: ClearancePlan;
-  chatHistory: AiChatEntry[];
-  suggestedQuestions: string[];
-  onAskAi: () => void;
-  onAskQuestion: (question: string) => void;
-}) {
-  const [question, setQuestion] = useState('');
-  const actions = response?.recommended_actions?.length
-    ? response.recommended_actions
-    : fallbackPlan?.priority_actions ?? [];
-  const summary = response?.summary || fallbackPlan?.summary;
-  const avoidance = fallbackPlan?.avoidance_steps ?? [];
-  const hasChat = chatHistory.length > 0;
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const q = question.trim();
-    if (!q || loading) return;
-    setQuestion('');
-    onAskQuestion(q);
-  };
-
-  return (
-    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h4 className="text-sm font-semibold text-text-primary">AI Assistant</h4>
-        </div>
-        <button
-          type="button"
-          onClick={onAskAi}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Bot className={cn('h-3.5 w-3.5', loading && 'animate-pulse')} />
-          {loading ? 'Analyzing…' : 'Auto-analyze'}
-        </button>
-      </div>
-
-      {!hasChat && summary && <p className="text-sm text-text-secondary mb-3">{summary}</p>}
-      {!hasChat && actions.length > 0 && (
-        <ol className="space-y-2 mb-3">
-          {actions.map((action, i) => (
-            <li key={action} className="flex gap-2 text-sm text-text-primary">
-              <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
-                {i + 1}
-              </span>
-              {action}
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {hasChat && (
-        <div className="space-y-3 mb-3 max-h-56 overflow-y-auto pr-1">
-          {chatHistory.map((entry, i) => (
-            <div
-              key={`${entry.role}-${i}`}
-              className={cn(
-                'rounded-lg px-3 py-2 text-sm',
-                entry.role === 'user'
-                  ? 'bg-card border border-border text-text-primary ml-4'
-                  : 'bg-primary/10 text-text-secondary mr-4'
-              )}
-            >
-              {entry.role === 'user' ? (
-                <p className="flex items-start gap-2">
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
-                  {entry.content}
-                </p>
-              ) : (
-                <div>
-                  <p className="font-medium text-text-primary mb-1 flex items-center gap-1.5">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
-                    AI response
-                  </p>
-                  <p>{entry.response?.summary || entry.content}</p>
-                  {entry.response?.recommended_actions && entry.response.recommended_actions.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-xs">
-                      {entry.response.recommended_actions.map((a) => (
-                        <li key={a} className="flex gap-1.5">
-                          <span className="text-success">→</span>
-                          {a}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-          {loading && (
-            <p className="text-xs text-text-secondary flex items-center gap-2">
-              <Bot className="h-3.5 w-3.5 animate-pulse text-primary" />
-              Thinking…
-            </p>
-          )}
-        </div>
-      )}
-
-      {!hasChat && response?.findings && response.findings.length > 0 && (
-        <ul className="space-y-1 mb-3 text-xs text-text-secondary">
-          {response.findings.map((f) => (
-            <li key={f}>• {f}</li>
-          ))}
-        </ul>
-      )}
-
-      {!hasChat && avoidance.length > 0 && (
-        <div className="pt-3 border-t border-primary/10 mb-3">
-          <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
-            Avoid incident formation
-          </p>
-          <ul className="space-y-1">
-            {avoidance.map((step) => (
-              <li key={step} className="text-xs text-text-secondary flex gap-2">
-                <ShieldAlert className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
-                {step}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {suggestedQuestions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {suggestedQuestions.map((q) => (
-            <button
-              key={q}
-              type="button"
-              disabled={loading}
-              onClick={() => onAskQuestion(q)}
-              className="text-[11px] px-2.5 py-1 rounded-full border border-primary/25 bg-card text-text-secondary hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex gap-2 pt-3 border-t border-primary/10">
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask a question about this context…"
-          disabled={loading}
-          className="flex-1 text-sm px-3 py-2 rounded-lg border border-border bg-card text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={loading || !question.trim()}
-          className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-          aria-label="Send question"
-        >
-          <Send className="h-4 w-4" />
-        </button>
-      </form>
-
-      {response?.confidence && !hasChat && (
-        <p className="text-[11px] text-text-secondary mt-2">AI confidence: {response.confidence}</p>
-      )}
-    </div>
-  );
-}
 
 function AlertFeedRow({
   alert,
@@ -883,10 +707,26 @@ export default function EarlyDetectionDashboard() {
       if (appendToChat) {
         setAiChat((prev) => {
           historyForApi = [
-            ...prev.map((m) => ({
-              role: m.role,
-              content: m.role === 'user' ? m.content : m.response?.summary ?? m.content,
-            })),
+            ...prev.map((m) => {
+              if (m.role === 'assistant' && m.response) {
+                const res = m.response;
+                let fullContent = m.content;
+                if (res.findings && res.findings.length > 0) {
+                  fullContent += `\n\nFindings:\n` + res.findings.map((f) => `- ${f}`).join('\n');
+                }
+                if (res.evidence && res.evidence.length > 0) {
+                  fullContent += `\n\nEvidence:\n` + res.evidence.map((e) => `- ${e}`).join('\n');
+                }
+                if (res.recommended_actions && res.recommended_actions.length > 0) {
+                  fullContent += `\n\nRecommended Actions:\n` + res.recommended_actions.map((a) => `- ${a}`).join('\n');
+                }
+                if (res.confidence) {
+                  fullContent += `\n\nConfidence: ${res.confidence}`;
+                }
+                return { role: m.role, content: fullContent };
+              }
+              return { role: m.role, content: m.content };
+            }),
             { role: 'user', content: question },
           ];
           return [...prev, { role: 'user', content: question }];
@@ -1537,28 +1377,24 @@ export default function EarlyDetectionDashboard() {
             ? 'critical'
             : 'warning'
         }
-        actions={
-          <button
-            type="button"
-            onClick={runAiAnalysis}
-            disabled={aiLoading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Sparkles className={cn('h-3.5 w-3.5', aiLoading && 'animate-pulse')} />
-            {aiLoading ? 'AI analyzing…' : 'Auto-analyze'}
-          </button>
-        }
+        actions={null}
       >
         {drill && (
-          <AiSuggestionsBlock
-            loading={aiLoading}
-            response={aiResponse}
-            fallbackPlan={clearancePlan}
-            chatHistory={aiChat}
-            suggestedQuestions={suggestedQuestions}
-            onAskAi={runAiAnalysis}
-            onAskQuestion={(q) => runAiQuery(q, true)}
-          />
+          <div className="mt-4">
+            <InlineCopilot
+              pageType="prediction"
+              selectedEntity={buildDrillAiContext()?.selectedEntity ?? 'Early Detection'}
+              entityData={{
+                ...(buildDrillAiContext()?.entityData ?? {}),
+                drilldown: drill.panel,
+                total_active: alertsFeed.length,
+                critical_count: criticalFeed.length,
+                clearance_plan: clearancePlan,
+              }}
+              relatedAlerts={buildDrillAiContext()?.relatedAlerts ?? []}
+              suggestedQuestions={suggestedQuestions}
+            />
+          </div>
         )}
 
         {drill?.panel === 'active-alerts' && (

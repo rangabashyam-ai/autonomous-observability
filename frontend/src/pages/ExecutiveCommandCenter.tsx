@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getMonitoringDashboard, getOverview } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Overview } from '../types/intelligence';
-import type { MonitoringDashboard } from '../types/api';
+import type { MonitoringDashboard, ServiceMetric } from '../types/api';
 import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-primitives';
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -12,14 +12,22 @@ import { generateDualTrend, TrendChart } from '../components/charts/charts';
 import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
 import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
+import { useDrawerState } from '../hooks/useDrawerState';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 
 export default function ExecutiveCommandCenter() {
   const navigate = useNavigate();
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [activeDrawer, setActiveDrawer] = useState<'health' | 'revenue' | 'incidents' | 'sla' | 'customers' | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<{ id: string; label: string; x: number; y: number; health: 'healthy' | 'warning' | 'critical' } | null>(null);
+
+  // Drawer route state
+  const { drawerType, drawerId, metricType, openDrawer, closeDrawer } = useDrawerState();
+
+  const [selectedRegion, setSelectedRegion] = useState<{ id: string; label: string; health: 'healthy' | 'warning' | 'critical' } | null>(null);
+  const [selectedService, setSelectedService] = useState<ServiceMetric | null>(null);
+
+  const exec = monitoring?.executive;
+  const services = monitoring?.service.services ?? [];
 
   useEffect(() => {
     Promise.all([getMonitoringDashboard(), getOverview()])
@@ -30,8 +38,44 @@ export default function ExecutiveCommandCenter() {
       .catch(console.error);
   }, []);
 
-  const exec = monitoring?.executive;
-  const services = monitoring?.service.services ?? [];
+  // Sync selectedRegion with route parameter
+  useEffect(() => {
+    if (drawerType === 'region' && drawerId) {
+      const regionsMap: Record<string, { id: string; label: string; health: 'healthy' | 'warning' | 'critical' }> = {
+        'ap-northeast': { id: 'ap-northeast', label: 'AP Northeast', health: 'critical' },
+        'eu-west': { id: 'eu-west', label: 'EU West', health: 'warning' },
+        'us-east': { id: 'us-east', label: 'US East', health: 'healthy' },
+        'us-west': { id: 'us-west', label: 'US West', health: 'healthy' },
+      };
+      const found = regionsMap[drawerId] || { id: drawerId, label: drawerId.toUpperCase(), health: 'healthy' };
+      setSelectedRegion(found);
+    } else {
+      setSelectedRegion(null);
+    }
+  }, [drawerType, drawerId]);
+
+  // Sync selectedService with route parameter
+  useEffect(() => {
+    if (drawerType === 'service' && drawerId && services.length > 0) {
+      const found = services.find(s => s.id === drawerId);
+      if (found) {
+        setSelectedService(found);
+      } else {
+        setSelectedService({
+          id: drawerId,
+          name: drawerId.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          health: 'warning',
+          latency_p99_ms: 103.9,
+          error_rate: 1.836,
+          throughput_rps: 4706,
+          transaction_volume: 28913,
+          availability: 99.837,
+        });
+      }
+    } else {
+      setSelectedService(null);
+    }
+  }, [drawerType, drawerId, services]);
 
   const businessHealth = useMemo(() => {
     if (!exec) return 0;
@@ -106,7 +150,7 @@ export default function ExecutiveCommandCenter() {
             variant={businessHealth >= 95 ? 'success' : businessHealth >= 85 ? 'warning' : 'critical'}
             sub="Composite SLA + availability"
             trend={1.2}
-            onClick={() => setActiveDrawer('health')}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'health' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -115,7 +159,7 @@ export default function ExecutiveCommandCenter() {
             value={exec!.active_incidents}
             variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
             sub={`${overview.summary.open_alerts} open alerts`}
-            onClick={() => setActiveDrawer('incidents')}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'incidents' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -125,7 +169,7 @@ export default function ExecutiveCommandCenter() {
             variant="success"
             sub="Rolling 30-day window"
             trend={0.08}
-            onClick={() => setActiveDrawer('sla')}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'sla' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -134,7 +178,7 @@ export default function ExecutiveCommandCenter() {
             value={exec!.customer_impact_count.toLocaleString()}
             variant={exec!.customer_impact_count > 50 ? 'warning' : 'default'}
             sub="Across all active incidents"
-            onClick={() => setActiveDrawer('customers')}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'customers' })}
           />
         </div>
       </Grid12>
@@ -197,10 +241,10 @@ export default function ExecutiveCommandCenter() {
                 </CardHeader>
                 <div className="space-y-1">
                   {services.slice(0, 6).map((svc) => (
-                    <Link
+                    <button
                       key={svc.id}
-                      to={`/services/${svc.id}`}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-card-hover transition-all duration-200 cursor-pointer group"
+                      onClick={() => openDrawer('service', svc.id)}
+                      className="w-full flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-card-hover transition-all duration-200 cursor-pointer group text-left"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-text-primary group-hover:text-primary transition-colors truncate">{svc.name}</p>
@@ -210,7 +254,7 @@ export default function ExecutiveCommandCenter() {
                         <HealthBadge health={svc.health} />
                         <ChevronRight className="h-3.5 w-3.5 text-text-secondary/50 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               </Card>
@@ -222,7 +266,7 @@ export default function ExecutiveCommandCenter() {
                 </CardHeader>
                 <RegionalHealthMap
                   className="h-[180px]"
-                  onRegionClick={(r) => setSelectedRegion(r)}
+                  onRegionClick={(r) => openDrawer('region', r.id)}
                 />
                 <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
                   <span className="flex items-center gap-1">
@@ -247,18 +291,18 @@ export default function ExecutiveCommandCenter() {
                     {
                       label: 'Transaction Volume',
                       value: services.reduce((a, s) => a + s.transaction_volume, 0),
-                      onClick: () => setActiveDrawer('health')
+                      onClick: () => openDrawer('metric', undefined, { metricType: 'health' })
                     },
                     {
                       label: 'Success Rate',
                       value: `${exec!.transaction_success_rate.toFixed(1)}%`,
-                      onClick: () => setActiveDrawer('health')
+                      onClick: () => openDrawer('metric', undefined, { metricType: 'health' })
                     },
                     {
                       label: 'Services at Risk',
                       value: exec!.services_at_risk,
                       alert: true,
-                      onClick: () => setActiveDrawer('health')
+                      onClick: () => openDrawer('metric', undefined, { metricType: 'health' })
                     },
                     {
                       label: 'Early Warnings',
@@ -287,36 +331,36 @@ export default function ExecutiveCommandCenter() {
 
       {/* Drilldown Drawer for Executive Metrics */}
       <DrilldownDrawer
-        isOpen={activeDrawer !== null}
-        onClose={() => setActiveDrawer(null)}
+        isOpen={drawerType === 'metric'}
+        onClose={closeDrawer}
         title={
-          activeDrawer === 'health' ? 'Business Health Score' :
-            activeDrawer === 'revenue' ? 'Revenue at Risk' :
-              activeDrawer === 'incidents' ? 'Active Incidents' :
-                activeDrawer === 'sla' ? 'SLA Compliance' :
-                  activeDrawer === 'customers' ? 'Customers Impacted' : ''
+          metricType === 'health' ? 'Business Health Score' :
+            metricType === 'revenue' ? 'Revenue at Risk' :
+              metricType === 'incidents' ? 'Active Incidents' :
+                metricType === 'sla' ? 'SLA Compliance' :
+                  metricType === 'customers' ? 'Customers Impacted' : ''
         }
         subtitle={
-          activeDrawer === 'health' ? 'Overall operational health score' :
-            activeDrawer === 'revenue' ? 'Estimated financial exposure due to operational issues' :
-              activeDrawer === 'incidents' ? 'Current operational incidents requiring mitigation' :
-                activeDrawer === 'sla' ? 'Rolling 30-day compliance targets and trends' :
-                  activeDrawer === 'customers' ? 'Estimated users affected by active incidents' : ''
+          metricType === 'health' ? 'Overall operational health score' :
+            metricType === 'revenue' ? 'Estimated financial exposure due to operational issues' :
+              metricType === 'incidents' ? 'Current operational incidents requiring mitigation' :
+                metricType === 'sla' ? 'Rolling 30-day compliance targets and trends' :
+                  metricType === 'customers' ? 'Estimated users affected by active incidents' : ''
         }
         type={
-          activeDrawer === 'incidents' || activeDrawer === 'customers' ? 'incident' :
-            activeDrawer === 'revenue' || activeDrawer === 'sla' ? 'api' : 'service'
+          metricType === 'incidents' || metricType === 'customers' ? 'incident' :
+            metricType === 'revenue' || metricType === 'sla' ? 'api' : 'service'
         }
         health={
-          activeDrawer === 'health' ? (businessHealth >= 95 ? 'healthy' : businessHealth >= 85 ? 'warning' : 'critical') :
-            activeDrawer === 'revenue' ? (exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'healthy') :
-              activeDrawer === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') :
-                activeDrawer === 'sla' ? (exec!.sla_compliance >= 99.5 ? 'healthy' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical') :
-                  activeDrawer === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
+          metricType === 'health' ? (businessHealth >= 95 ? 'healthy' : businessHealth >= 85 ? 'warning' : 'critical') :
+            metricType === 'revenue' ? (exec!.revenue_impact_usd > 10000 ? 'critical' : exec!.revenue_impact_usd > 1000 ? 'warning' : 'healthy') :
+              metricType === 'incidents' ? (exec!.active_incidents > 0 ? 'critical' : 'healthy') :
+                metricType === 'sla' ? (exec!.sla_compliance >= 99.5 ? 'healthy' : exec!.sla_compliance >= 98.5 ? 'warning' : 'critical') :
+                  metricType === 'customers' ? (exec!.customer_impact_count > 50 ? 'warning' : 'healthy') : undefined
         }
       >
 
-        {activeDrawer === 'health' && (
+        {metricType === 'health' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <DrilldownMetricCard
@@ -396,7 +440,7 @@ export default function ExecutiveCommandCenter() {
           </div>
         )}
 
-        {activeDrawer === 'revenue' && (
+        {metricType === 'revenue' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <DrilldownMetricCard
@@ -484,7 +528,7 @@ export default function ExecutiveCommandCenter() {
           </div>
         )}
 
-        {activeDrawer === 'incidents' && (
+        {metricType === 'incidents' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <DrilldownMetricCard
@@ -519,10 +563,10 @@ export default function ExecutiveCommandCenter() {
                         <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
                         <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
                         <div className="flex gap-2">
-                          <DrilldownButton onClick={() => navigate(`/rca?id=${inc.incident_id}`)} variant="primary">
+                          <DrilldownButton onClick={() => { closeDrawer(); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
                             View RCA
                           </DrilldownButton>
-                          <DrilldownButton onClick={() => navigate(`/blast-radius?id=${inc.incident_id}`)} variant="secondary">
+                          <DrilldownButton onClick={() => { closeDrawer(); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
                             Blast Radius
                           </DrilldownButton>
                         </div>
@@ -552,7 +596,7 @@ export default function ExecutiveCommandCenter() {
           </div>
         )}
 
-        {activeDrawer === 'sla' && (
+        {metricType === 'sla' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <DrilldownMetricCard
@@ -617,7 +661,7 @@ export default function ExecutiveCommandCenter() {
           </div>
         )}
 
-        {activeDrawer === 'customers' && (
+        {metricType === 'customers' && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <DrilldownMetricCard
@@ -647,11 +691,11 @@ export default function ExecutiveCommandCenter() {
                       {activeIncidents.map((inc, index) => {
                         let allocated = 0;
                         if (activeIncidents.length === 1) {
-                          allocated = totalImpact;
+                           allocated = totalImpact;
                         } else if (index === 0) {
-                          allocated = Math.round(totalImpact * 0.63);
+                           allocated = Math.round(totalImpact * 0.63);
                         } else {
-                          allocated = totalImpact - Math.round(totalImpact * 0.63);
+                           allocated = totalImpact - Math.round(totalImpact * 0.63);
                         }
                         return (
                           <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
@@ -679,8 +723,8 @@ export default function ExecutiveCommandCenter() {
                 pageType="executive"
                 selectedEntity="Customers Impacted"
                 entityData={{
-                  total_customer_impact: exec!.customer_impact_count,
-                  active_incidents_count: exec!.active_incidents,
+                  customer_impact: exec!.customer_impact_count,
+                  active_incidents: exec!.active_incidents,
                   breakdown: overview.recent_incidents.slice(0, exec!.active_incidents).map((inc, index) => {
                     const activeIncidents = overview.recent_incidents.slice(0, exec!.active_incidents);
                     const totalImpact = exec!.customer_impact_count;
@@ -708,8 +752,8 @@ export default function ExecutiveCommandCenter() {
 
       {/* Drilldown Drawer for Regional Operations */}
       <DrilldownDrawer
-        isOpen={selectedRegion !== null}
-        onClose={() => setSelectedRegion(null)}
+        isOpen={drawerType === 'region'}
+        onClose={closeDrawer}
         title={selectedRegion ? `${selectedRegion.label} Regional Operations` : ''}
         subtitle="Regional metrics, service status, and active incidents"
         type="node"
@@ -757,10 +801,10 @@ export default function ExecutiveCommandCenter() {
                         <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
                         <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
                         <div className="flex gap-2">
-                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
+                          <DrilldownButton onClick={() => { closeDrawer(); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
                             View RCA
                           </DrilldownButton>
-                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
+                          <DrilldownButton onClick={() => { closeDrawer(); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
                             Blast Radius
                           </DrilldownButton>
                         </div>
@@ -829,6 +873,86 @@ export default function ExecutiveCommandCenter() {
                   `Why is the ${selectedRegion.label} region in a ${selectedRegion.health} state?`,
                   "What services run in this region?",
                   "Is there a network degradation affecting regional latency?"
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </DrilldownDrawer>
+
+      {/* Drilldown Drawer for Service Details */}
+      <DrilldownDrawer
+        isOpen={drawerType === 'service'}
+        onClose={closeDrawer}
+        title={selectedService ? selectedService.name : ''}
+        subtitle={selectedService ? `Service ID: ${selectedService.id}` : ''}
+        type="service"
+        health={selectedService?.health as any}
+      >
+        {selectedService && (
+          <div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <DrilldownMetricCard
+                label="Availability"
+                value={`${selectedService.availability.toFixed(2)}%`}
+                status={selectedService.availability >= 99.9 ? 'good' : 'warning'}
+              />
+              <DrilldownMetricCard
+                label="P99 Latency"
+                value={`${selectedService.latency_p99_ms.toFixed(1)}ms`}
+                status={selectedService.latency_p99_ms > 100 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Error Rate"
+                value={`${selectedService.error_rate.toFixed(2)}%`}
+                status={selectedService.error_rate > 1.0 ? 'warning' : 'good'}
+              />
+              <DrilldownMetricCard
+                label="Throughput"
+                value={`${selectedService.throughput_rps.toFixed(0)} RPS`}
+                status="good"
+              />
+            </div>
+
+            <DrilldownSection title="Recent Deployments" icon={<Zap className="w-4 h-4" />}>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div>
+                    <p className="text-xs font-semibold text-text-primary">v2.4.1 → v2.4.2</p>
+                    <p className="text-[10px] text-text-secondary">2 hours ago · Deployed by: ops-team</p>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/40 rounded font-semibold">
+                    SUCCESS
+                  </span>
+                </div>
+              </div>
+            </DrilldownSection>
+
+            <div className="mt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity={selectedService.name}
+                entityData={{
+                  service: selectedService.id,
+                  status: selectedService.health,
+                  sla: selectedService.availability,
+                  metrics: {
+                    latency_p99_ms: selectedService.latency_p99_ms,
+                    error_rate: selectedService.error_rate,
+                    throughput_rps: selectedService.throughput_rps,
+                  },
+                }}
+                relatedAlerts={[
+                  { title: 'CPU utilization above 75%', severity: 'P3' },
+                  { title: 'Error rate spike detected', severity: 'P2' },
+                ]}
+                relatedIncidents={overview.recent_incidents.filter((inc) =>
+                  inc.service?.toLowerCase().includes(selectedService.id.toLowerCase())
+                )}
+                suggestedQuestions={[
+                  `Why is the ${selectedService.name} service experiencing alerts?`,
+                  `Show me the active incidents for ${selectedService.name}.`,
+                  `What are the suggested playbooks for this service?`
                 ]}
               />
             </div>

@@ -99,10 +99,26 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
 
       try {
         const context = buildContext(pageContext, question.trim());
-        const apiMessages = history.slice(0, -1).map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
+        const apiMessages = history.slice(0, -1).map((m) => {
+          if (m.role === 'assistant' && m.response) {
+            const res = m.response;
+            let fullContent = m.content;
+            if (res.findings && res.findings.length > 0) {
+              fullContent += `\n\nFindings:\n` + res.findings.map((f) => `- ${f}`).join('\n');
+            }
+            if (res.evidence && res.evidence.length > 0) {
+              fullContent += `\n\nEvidence:\n` + res.evidence.map((e) => `- ${e}`).join('\n');
+            }
+            if (res.recommended_actions && res.recommended_actions.length > 0) {
+              fullContent += `\n\nRecommended Actions:\n` + res.recommended_actions.map((a) => `- ${a}`).join('\n');
+            }
+            if (res.confidence) {
+              fullContent += `\n\nConfidence: ${res.confidence}`;
+            }
+            return { role: m.role, content: fullContent };
+          }
+          return { role: m.role, content: m.content };
+        });
 
         const response = await copilotChat(context, apiMessages);
 

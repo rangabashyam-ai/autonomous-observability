@@ -9,14 +9,21 @@ import { DataTable } from '../components/ui/data-table';
 import { generateTrend, MiniAreaChart, MiniLineChart } from '../components/charts/charts';
 import { UtilizationBar } from '../components/dashboard/visualizations';
 import { DrilldownHeatmap } from '../components/dashboard/drilldown-heatmap';
-import { Modal } from '../components/ui/modal';
+import DrilldownDrawer from '../components/drilldown/DrilldownDrawer';
+import InlineCopilot from '../components/copilot/InlineCopilot';
+import { useDrawerState } from '../hooks/useDrawerState';
 
 export default function TechnicalPlatformView() {
   const [data, setData] = useState<MonitoringDashboard | null>(null);
-  const [openModal, setOpenModal] = useState<string | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  
+  // Drawer route state
+  const { drawerType, drawerId, metricType, openDrawer, closeDrawer } = useDrawerState();
   const [modalPage, setModalPage] = useState(1);
   const itemsPerPage = 25;
+
+  useEffect(() => {
+    setModalPage(1);
+  }, [drawerType, drawerId, metricType]);
 
   useEffect(() => {
     getMonitoringDashboard().then(setData).catch(console.error);
@@ -51,10 +58,7 @@ export default function TechnicalPlatformView() {
             label="K8s Cluster Health"
             value={`${k8sHealth}%`}
             variant={k8sHealth >= 90 ? 'success' : 'warning'}
-            onClick={() => {
-              setOpenModal('k8s');
-              setModalPage(1);
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'k8s_health' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
@@ -62,10 +66,7 @@ export default function TechnicalPlatformView() {
             label="Active Pods"
             value={tech!.containers.length}
             sub={`${tech!.containers.filter((c) => c.status !== 'healthy').length} degraded`}
-            onClick={() => {
-              setOpenModal('pods');
-              setModalPage(1);
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'pods' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
@@ -73,10 +74,7 @@ export default function TechnicalPlatformView() {
             label="Avg CPU"
             value={`${avgCpu.toFixed(1)}%`}
             variant={avgCpu > 75 ? 'warning' : 'default'}
-            onClick={() => {
-              setOpenModal('cpu');
-              setModalPage(1);
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'cpu' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
@@ -84,10 +82,7 @@ export default function TechnicalPlatformView() {
             label="Avg Memory"
             value={`${avgMem.toFixed(1)}%`}
             variant={avgMem > 80 ? 'critical' : 'default'}
-            onClick={() => {
-              setOpenModal('memory');
-              setModalPage(1);
-            }}
+            onClick={() => openDrawer('metric', undefined, { metricType: 'memory' })}
           />
         </div>
       </Grid12>
@@ -126,7 +121,7 @@ export default function TechnicalPlatformView() {
 
       <CollapsibleSection title="Platform Metrics" className="mt-6" defaultOpen>
         <Grid12>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('k8s')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openDrawer('metric', undefined, { metricType: 'k8s_status' })}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>K8s Cluster Status</CardTitle></CardHeader>
               <MiniAreaChart data={generateTrend(k8sHealth, 12)} height={80} color="#10B981" />
@@ -146,7 +141,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('apis')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openDrawer('metric', undefined, { metricType: 'apis' })}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>API Performance</CardTitle></CardHeader>
               <MiniLineChart
@@ -161,7 +156,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('databases')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openDrawer('metric', undefined, { metricType: 'databases' })}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Database Load</CardTitle></CardHeader>
               <MiniAreaChart
@@ -182,7 +177,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('queues')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openDrawer('metric', undefined, { metricType: 'queues' })}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Queue Metrics</CardTitle></CardHeader>
               <MiniLineChart
@@ -242,8 +237,14 @@ export default function TechnicalPlatformView() {
         </Grid12>
       </CollapsibleSection>
 
-      {/* K8s Cluster Health Modal */}
-      <Modal isOpen={openModal === 'k8s'} onClose={() => setOpenModal(null)} title="K8s Cluster Health Details" size="lg">
+      {/* K8s Cluster Health Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'k8s_health'} 
+        onClose={closeDrawer} 
+        title="K8s Cluster Health Details" 
+        type="infrastructure"
+        health={k8sHealth >= 90 ? 'healthy' : 'warning'}
+      >
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
@@ -298,11 +299,40 @@ export default function TechnicalPlatformView() {
               </div>
             )}
           </div>
-        </div>
-      </Modal>
 
-      {/* Active Pods Modal */}
-      <Modal isOpen={openModal === 'pods'} onClose={() => setOpenModal(null)} title="Active Pods - Complete List" size="xl">
+          <div className="mt-6 border-t border-border pt-6">
+            <InlineCopilot
+              pageType="service"
+              selectedEntity="k8s-cluster-a"
+              entityData={{
+                cluster_id: 'k8s-cluster-a',
+                containers_count: tech!.containers.length,
+                healthy_containers: tech!.containers.filter((c) => c.status === 'healthy').length,
+                warning_containers: tech!.containers.filter((c) => c.status === 'warning').length,
+                critical_containers: tech!.containers.filter((c) => c.status === 'critical').length,
+              }}
+              relatedMetrics={{
+                health_pct: k8sHealth,
+              }}
+              title="AI Assistant: Kubernetes Cluster"
+              subtitle="Ask questions about cluster health and container distribution"
+              suggestedQuestions={[
+                "Why is the cluster status degraded?",
+                "Analyze CPU and Memory across all containers",
+                "Which pods are critical and need attention?",
+              ]}
+            />
+          </div>
+        </div>
+      </DrilldownDrawer>
+
+      {/* Active Pods Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'pods'} 
+        onClose={closeDrawer} 
+        title="Active Pods - Complete List" 
+        type="infrastructure"
+      >
         <div className="space-y-4">
           <p className="text-sm text-text-secondary">Total Pods: <span className="font-semibold text-text-primary">{tech!.containers.length}</span></p>
           <div className="overflow-x-auto">
@@ -360,11 +390,38 @@ export default function TechnicalPlatformView() {
               </button>
             </div>
           )}
-        </div>
-      </Modal>
 
-      {/* Average CPU Modal */}
-      <Modal isOpen={openModal === 'cpu'} onClose={() => setOpenModal(null)} title="CPU Usage - Nodes & Pods Breakdown" size="xl">
+          <div className="mt-6 border-t border-border pt-6">
+            <InlineCopilot
+              pageType="service"
+              selectedEntity="k8s-pods-fleet"
+              entityData={{
+                total_pods: tech!.containers.length,
+                degraded_pods: tech!.containers.filter((c) => c.status !== 'healthy').length,
+              }}
+              relatedMetrics={{
+                pods_count: tech!.containers.length,
+              }}
+              title="AI Assistant: Pods Fleet"
+              subtitle="Ask questions about container fleet utilization and status"
+              suggestedQuestions={[
+                "Explain why some containers have warning status",
+                "Show the top resource-consuming pods",
+                "Recommend mitigation steps for degraded pods",
+              ]}
+            />
+          </div>
+        </div>
+      </DrilldownDrawer>
+
+      {/* Average CPU Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'cpu'} 
+        onClose={closeDrawer} 
+        title="CPU Usage Breakdown" 
+        type="infrastructure"
+        health={avgCpu > 75 ? 'warning' : 'healthy'}
+      >
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
@@ -448,11 +505,38 @@ export default function TechnicalPlatformView() {
                 ))}
             </div>
           </div>
-        </div>
-      </Modal>
 
-      {/* Average Memory Modal */}
-      <Modal isOpen={openModal === 'memory'} onClose={() => setOpenModal(null)} title="Memory Usage - Complete Breakdown" size="xl">
+          <div className="mt-6 border-t border-border pt-6">
+            <InlineCopilot
+              pageType="service"
+              selectedEntity="k8s-cpu-utilization"
+              entityData={{
+                avg_cpu: avgCpu,
+                nodes_count: infra!.servers.length,
+              }}
+              relatedMetrics={{
+                avg_cpu: avgCpu,
+              }}
+              title="AI Assistant: CPU Analyzer"
+              subtitle="Ask questions about cluster-wide CPU hotspots"
+              suggestedQuestions={[
+                "Which Kubernetes nodes have the highest CPU utilization?",
+                "Is the average CPU usage of " + avgCpu.toFixed(1) + "% normal?",
+                "How can we balance CPU load across the nodes?",
+              ]}
+            />
+          </div>
+        </div>
+      </DrilldownDrawer>
+
+      {/* Average Memory Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'memory'} 
+        onClose={closeDrawer} 
+        title="Memory Usage Breakdown" 
+        type="infrastructure"
+        health={avgMem > 80 ? 'critical' : 'healthy'}
+      >
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
@@ -551,11 +635,38 @@ export default function TechnicalPlatformView() {
               ))}
             </div>
           </div>
-        </div>
-      </Modal>
 
-      {/* K8s Cluster Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'k8s'} onClose={() => setSelectedMetric(null)} title="K8s Cluster Status - Detailed View" size="xl">
+          <div className="mt-6 border-t border-border pt-6">
+            <InlineCopilot
+              pageType="service"
+              selectedEntity="k8s-memory-utilization"
+              entityData={{
+                avg_memory: avgMem,
+                nodes_count: infra!.servers.length,
+              }}
+              relatedMetrics={{
+                avg_memory: avgMem,
+              }}
+              title="AI Assistant: Memory Analyzer"
+              subtitle="Ask questions about cluster-wide memory consumption"
+              suggestedQuestions={[
+                "Which nodes are close to memory exhaustion?",
+                "Recommend steps to mitigate memory pressure",
+                "Analyze container memory limits",
+              ]}
+            />
+          </div>
+        </div>
+      </DrilldownDrawer>
+
+      {/* K8s Cluster Status Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'k8s_status'} 
+        onClose={closeDrawer} 
+        title="K8s Cluster Status - Detailed View" 
+        type="infrastructure"
+        health={k8sHealth >= 90 ? 'healthy' : 'warning'}
+      >
         {tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
@@ -575,7 +686,7 @@ export default function TechnicalPlatformView() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">All Containers ({tech.containers.length} total)</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 {tech.containers.map((c) => (
                   <div key={c.id} className="p-3 rounded-lg border border-border hover:bg-card-hover transition-all">
                     <div className="flex items-center justify-between mb-2">
@@ -591,12 +702,41 @@ export default function TechnicalPlatformView() {
                 ))}
               </div>
             </div>
+
+            <div className="mt-6 border-t border-border pt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="k8s-cluster-a"
+                entityData={{
+                  cluster_id: 'k8s-cluster-a',
+                  containers_count: tech.containers.length,
+                  healthy_containers: tech.containers.filter((c) => c.status === 'healthy').length,
+                  warning_containers: tech.containers.filter((c) => c.status === 'warning').length,
+                  critical_containers: tech.containers.filter((c) => c.status === 'critical').length,
+                }}
+                relatedMetrics={{
+                  health_pct: k8sHealth,
+                }}
+                title="AI Assistant: Kubernetes Cluster"
+                subtitle="Ask questions about cluster health and container distribution"
+                suggestedQuestions={[
+                  "Why is the cluster status degraded?",
+                  "Analyze CPU and Memory across all containers",
+                  "Which pods are critical and need attention?",
+                ]}
+              />
+            </div>
           </div>
         )}
-      </Modal>
+      </DrilldownDrawer>
 
-      {/* API Performance Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'apis'} onClose={() => setSelectedMetric(null)} title="API Performance - All Endpoints" size="xl">
+      {/* API Performance Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'apis'} 
+        onClose={closeDrawer} 
+        title="API Performance - All Endpoints" 
+        type="api"
+      >
         {tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
@@ -616,13 +756,13 @@ export default function TechnicalPlatformView() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">All API Endpoints ({tech.apis.length} total)</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 {tech.apis.map((api) => {
                   const score = Math.min(100, api.latency_ms / 3 + api.error_rate * 20);
                   return (
                     <div key={api.name} className="p-3 rounded-lg border border-border hover:bg-card-hover transition-all">
                       <div className="flex items-start justify-between mb-2">
-                        <p className="text-sm font-mono font-semibold flex-1">{api.name}</p>
+                        <p className="text-sm font-mono font-semibold flex-1 truncate">{api.name}</p>
                         <span className={`px-2 py-1 rounded text-xs font-semibold text-white whitespace-nowrap ml-2 ${
                           score >= 85 ? 'bg-critical' : score >= 70 ? 'bg-warning' : 'bg-success'
                         }`}>
@@ -648,12 +788,40 @@ export default function TechnicalPlatformView() {
                 })}
               </div>
             </div>
+
+            <div className="mt-6 border-t border-border pt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="api-gateway-endpoints"
+                entityData={{
+                  total_apis: tech.apis.length,
+                  avg_latency: (tech.apis.reduce((a, x) => a + x.latency_ms, 0) / tech.apis.length),
+                  avg_error_rate: (tech.apis.reduce((a, x) => a + x.error_rate, 0) / tech.apis.length),
+                }}
+                relatedMetrics={{
+                  latency: (tech.apis.reduce((a, x) => a + x.latency_ms, 0) / tech.apis.length),
+                  error_rate: (tech.apis.reduce((a, x) => a + x.error_rate, 0) / tech.apis.length),
+                }}
+                title="AI Assistant: API Gateway"
+                subtitle="Ask questions about latency and HTTP error trends"
+                suggestedQuestions={[
+                  "Which API routes have the highest latency?",
+                  "What is causing errors on some routes?",
+                  "Summarize API gateway performance metrics",
+                ]}
+              />
+            </div>
           </div>
         )}
-      </Modal>
+      </DrilldownDrawer>
 
-      {/* Database Load Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'databases'} onClose={() => setSelectedMetric(null)} title="Database Load - All Databases" size="xl">
+      {/* Database Load Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'databases'} 
+        onClose={closeDrawer} 
+        title="Database Load - All Databases" 
+        type="infrastructure"
+      >
         {tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
@@ -673,7 +841,7 @@ export default function TechnicalPlatformView() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">All Databases ({tech.databases.length} total)</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 {tech.databases.map((db) => {
                   const connScore = Math.min(100, (db.connections / 100) * 100);
                   return (
@@ -701,12 +869,38 @@ export default function TechnicalPlatformView() {
                 })}
               </div>
             </div>
+
+            <div className="mt-6 border-t border-border pt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="databases-cluster"
+                entityData={{
+                  databases: tech.databases,
+                }}
+                relatedMetrics={{
+                  connections: tech.databases.reduce((a, d) => a + d.connections, 0),
+                  query_latency: tech.databases.reduce((a, d) => a + d.query_latency_ms, 0) / tech.databases.length,
+                }}
+                title="AI Assistant: Database Cluster"
+                subtitle="Ask questions about query latency and connection pools"
+                suggestedQuestions={[
+                  "Are database connections healthy?",
+                  "Is query latency normal across databases?",
+                  "Explain database replication lag",
+                ]}
+              />
+            </div>
           </div>
         )}
-      </Modal>
+      </DrilldownDrawer>
 
-      {/* Queue Metrics Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'queues'} onClose={() => setSelectedMetric(null)} title="Queue Metrics - All Queues" size="xl">
+      {/* Queue Metrics Drawer */}
+      <DrilldownDrawer 
+        isOpen={drawerType === 'metric' && metricType === 'queues'} 
+        onClose={closeDrawer} 
+        title="Queue Metrics - All Queues" 
+        type="infrastructure"
+      >
         {tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
@@ -726,7 +920,7 @@ export default function TechnicalPlatformView() {
 
             <div>
               <h3 className="text-sm font-semibold mb-3">All Queues ({tech.queues.length} total)</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                 {tech.queues.map((q) => {
                   const depthScore = Math.min(100, (q.depth / 10000) * 100);
                   return (
@@ -754,9 +948,30 @@ export default function TechnicalPlatformView() {
                 })}
               </div>
             </div>
+
+            <div className="mt-6 border-t border-border pt-6">
+              <InlineCopilot
+                pageType="service"
+                selectedEntity="message-queues-hub"
+                entityData={{
+                  queues: tech.queues,
+                }}
+                relatedMetrics={{
+                  depth: tech.queues.reduce((a, q) => a + q.depth, 0),
+                  throughput: tech.queues.reduce((a, q) => a + q.throughput_msg_s, 0) / tech.queues.length,
+                }}
+                title="AI Assistant: Queue Monitor"
+                subtitle="Ask questions about message backlogs and lag"
+                suggestedQuestions={[
+                  "Do we have consumer lag on any message queue?",
+                  "Which queue has the largest backlog?",
+                  "How to scale consumers to clear lag?",
+                ]}
+              />
+            </div>
           </div>
         )}
-      </Modal>
+      </DrilldownDrawer>
     </div>
   );
 }

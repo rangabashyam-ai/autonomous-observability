@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import { useRegisterCopilotContext, useCopilot } from '../ai/context/CopilotProvider';
+import InlineCopilot from '../components/copilot/InlineCopilot';
 import ReactFlow, { Background, Controls, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { analyzeBlastRadius, getDependencyGraph } from '../api/client';
@@ -34,6 +35,7 @@ type GraphSelection =
   | null;
 export default function BlastRadiusDashboard() {
   const { theme } = useTheme();
+  const { openCopilot, registerPageContext } = useCopilot();
   const [alerts] = useState(['CPU Saturation', 'API Error Spike']);
   const [symptoms] = useState(['Latency Increase', 'Retry Storm']);
   const [service, setService] = useState('payment-authorization');
@@ -423,23 +425,23 @@ export default function BlastRadiusDashboard() {
     }
 
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <>
         {/* Backdrop overlay */}
         <div
-          className="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm z-40"
           onClick={() => setActiveModal(null)}
         />
 
-        {/* Modal container */}
-        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-250 dark:border-slate-700 rounded-2xl w-full max-w-md shadow-2xl relative z-10 overflow-hidden transform transition-all">
+        {/* Drawer container */}
+        <div className="fixed right-0 top-0 bottom-0 z-50 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-150 dark:border-slate-750 bg-slate-50/50 dark:bg-slate-900/40">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               {title} Analysis
             </h3>
             <button
               onClick={() => setActiveModal(null)}
-              className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-350 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-705 transition-colors"
+              className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -448,8 +450,34 @@ export default function BlastRadiusDashboard() {
           </div>
 
           {/* Content */}
-          <div className="px-6 py-5">
+          <div className="px-6 py-5 space-y-6">
             {explanation}
+            
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-5">
+              <InlineCopilot
+                pageType="blast"
+                selectedEntity={title}
+                entityData={{
+                  metric: activeModal,
+                  value: activeModal === 'business_impact' ? result.business_impact_score :
+                         activeModal === 'severity' ? result.severity_recommendation :
+                         activeModal === 'scope' ? result.issue_scope :
+                         activeModal === 'customers' ? result.impacted_customers_estimate : '',
+                  failure_source: service,
+                  failure_source_label: rootLabel,
+                  affected_nodes: result.blast_radius_nodes,
+                  currently_impacted: result.currently_impacted_services,
+                  likely_downstream: result.likely_downstream_services,
+                  impacted_infrastructure: result.impacted_infrastructure,
+                  impacted_regions: result.impacted_regions,
+                }}
+                suggestedQuestions={[
+                  `Why is the ${title} at this level?`,
+                  `How does the failure on ${rootLabel} affect this?`,
+                  `What are the suggested remediations to lower the impact?`
+                ]}
+              />
+            </div>
           </div>
 
           {/* Footer */}
@@ -462,7 +490,7 @@ export default function BlastRadiusDashboard() {
             </button>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -539,15 +567,15 @@ export default function BlastRadiusDashboard() {
     const statusEmoji = statusEmojiMap[status] || '🟢';
 
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <>
         {/* Backdrop overlay */}
         <div
-          className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-[2px] transition-opacity"
+          className="fixed inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-[2px] z-40"
           onClick={() => setActiveRegionModal(null)}
         />
 
-        {/* Popover Card */}
-        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[320px] shadow-xl relative z-10 overflow-hidden transform transition-all text-xs">
+        {/* Drawer container */}
+        <div className="fixed right-0 top-0 bottom-0 z-50 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40">
             <div className="flex items-center gap-1.5">
@@ -598,6 +626,28 @@ export default function BlastRadiusDashboard() {
                 </div>
               </div>
             </div>
+            
+            <div className="border-t border-slate-100 dark:border-slate-700/60 pt-4">
+              <InlineCopilot
+                pageType="blast"
+                selectedEntity={`${rName} Regional Operations`}
+                entityData={{
+                  region: rName,
+                  status: status,
+                  failed_pods: failedPods,
+                  impacted_services: impactedServices,
+                  avg_latency: latency,
+                  affected_customers: affectedCustomers,
+                  failure_source: service,
+                  failure_source_label: rootLabel,
+                }}
+                suggestedQuestions={[
+                  `Why is the ${rName} region showing a ${status} status?`,
+                  `Which microservice in ${rName} has the highest latency?`,
+                  `How do we isolate the failure in ${rName}?`
+                ]}
+              />
+            </div>
           </div>
           {/* Action Buttons */}
           <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-700/60">
@@ -609,7 +659,7 @@ export default function BlastRadiusDashboard() {
             </button>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -746,16 +796,6 @@ export default function BlastRadiusDashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Impact & Blast Radius"
-        description="Predict impacted services, downstream failures, and visualize blast radius on dependency graph"
-      />
-
-      <div className="flex gap-3 mb-4">
-        <button onClick={runAnalysis} disabled={loading} className={btnPrimary}>
-          {loading ? 'Analyzing...' : 'Refresh Analysis'}
-        </button>
-      </div>
       {result && (
         <>
           {/* KPI Stat Cards and ConfidenceBar */}
@@ -765,7 +805,7 @@ export default function BlastRadiusDashboard() {
                 label="Business Impact"
                 value={result.business_impact_score}
                 sub="/ 100"
-                alert={result.business_impact_score >= 80}
+                valueClass="text-red-600 dark:text-red-400"
                 onClick={() => setActiveModal('business_impact')}
               />
               <StatCard
@@ -776,7 +816,7 @@ export default function BlastRadiusDashboard() {
               <StatCard
                 label="Scope"
                 value={result.issue_scope}
-                alert={result.issue_scope === 'systemic'}
+                valueClass={result.issue_scope === 'systemic' ? 'text-red-600 dark:text-red-400' : undefined}
                 onClick={() => setActiveModal('scope')}
               />
               <StatCard
@@ -853,18 +893,11 @@ export default function BlastRadiusDashboard() {
                 )}
               </div>
               <div className="flex-1 overflow-y-auto max-h-[80px] pr-1">
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-col gap-1.5">
                   {['us-east', 'eu-central', 'ap-southeast'].map((r) => {
                     const status = getRegionStatus(r);
                     
                     const isSelected = activeRegionModal === r || selectedRegionHighlight === r || selectedRegionFilter === r;
-
-                    const statusEmojiMap = {
-                      Healthy: '🟢',
-                      Warning: '🟡',
-                      Critical: '🔴',
-                    };
-                    const statusEmoji = statusEmojiMap[status] || '🟢';
 
                     // Compute impacted service count dynamically:
                     const regionServiceMap: Record<string, string[]> = {
@@ -890,11 +923,15 @@ export default function BlastRadiusDashboard() {
                         onClick={() => {
                           setActiveRegionModal(activeRegionModal === r ? null : r);
                         }}
-                        className={`flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer font-medium ${chipBgMap[status]} ${
-                          isSelected ? 'ring-2 ring-sky-500 ring-offset-1 dark:ring-offset-slate-900 scale-105' : ''
+                        className={`w-full flex items-center justify-between text-[10px] px-3 py-1 rounded-lg border transition-all duration-150 hover:scale-102 active:scale-98 cursor-pointer font-semibold ${chipBgMap[status]} ${
+                          isSelected ? 'ring-2 ring-sky-500 ring-offset-1 dark:ring-offset-slate-900 scale-102 font-bold' : ''
                         }`}
                       >
-                        <span>{r} {statusEmoji} {impactedCount}</span>
+                        <span className="font-bold">{r.toUpperCase()}</span>
+                        <span className="flex items-center gap-1.5">
+                          {status === 'Critical' ? '🔴' : status === 'Warning' ? '🟠' : '🟢'}
+                          <span className="font-bold">{impactedCount}</span>
+                        </span>
                       </button>
                     );
                   })}
@@ -903,9 +940,9 @@ export default function BlastRadiusDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 xl:gap-5">
-            {/* Graph: Expanded to xl:col-span-8 and h-[780px] */}
-            <div className="xl:col-span-8 h-[780px] bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-inner">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
+            {/* Graph: Expanded to lg:col-span-8 and responsive height */}
+            <div className="lg:col-span-8 h-[500px] lg:h-[780px] bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-inner">
               <div className="flex-1 min-h-0 w-full relative">
                 <ReactFlow
                   className="w-full h-full"
@@ -938,8 +975,8 @@ export default function BlastRadiusDashboard() {
               </div>
             </div>
 
-            {/* Right side Investigation Workflow Panel: Adjusted height h-[780px] */}
-            <div className="xl:col-span-4 h-[780px] flex flex-col gap-2 pr-1">
+            {/* Right side Investigation Workflow Panel: Responsive height */}
+            <div className="lg:col-span-4 h-auto lg:h-[780px] flex flex-col gap-2 pr-1">
               <div className="shrink-0">
                 <IncidentPropagationSummary
                   result={result}
@@ -967,10 +1004,28 @@ export default function BlastRadiusDashboard() {
               </div>
 
               <div className="shrink-0">
-                <BlastRadiusPathChat
-                  service={service}
-                  selection={selectionDetail}
-                  rootLabel={rootLabel}
+                <InlineCopilot
+                  pageType="blast"
+                  selectedEntity={service}
+                  entityData={{
+                    failure_source: service,
+                    blast_radius_nodes: result?.blast_radius_nodes || [service],
+                    currently_impacted: result?.currently_impacted_services || [],
+                    likely_downstream: result?.likely_downstream_services || [],
+                    impacted_infrastructure: result?.impacted_infrastructure || [],
+                    impacted_regions: result?.impacted_regions || [],
+                    issue_scope: result?.issue_scope || 'unknown',
+                    revenue_impact: result?.business_impact_score || '0',
+                    affected_nodes: result?.blast_radius_nodes || [],
+                    critical_paths: result?.blast_radius_nodes || [],
+                  }}
+                  suggestedQuestions={[
+                    `What is the blast radius if ${service} fails?`,
+                    `Which downstream services are at risk from ${service}?`,
+                    `How can we mitigate the cascade from ${service}?`
+                  ]}
+                  title="Blast Radius Investigation"
+                  showLiveBadge={true}
                   isExpanded={expandedPanel === 'chat'}
                   onToggle={() => setExpandedPanel(prev => prev === 'chat' ? null : 'chat')}
                 />

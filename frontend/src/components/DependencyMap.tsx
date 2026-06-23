@@ -14,7 +14,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import DependencyNode from './DependencyNode';
-import { ReportChat } from './ReportChat';
+import InlineCopilot from './copilot/InlineCopilot';
+import { useCopilot } from '../ai/context/CopilotProvider';
 import {
   getDependencyGraph,
   getDependencyPaths,
@@ -238,6 +239,7 @@ interface NodeChatPopupProps {
 }
 
 function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: NodeChatPopupProps) {
+  const { openCopilot, registerPageContext } = useCopilot();
   const context = useMemo(
     () => buildNodeContext(node, paths, heatmapMetric),
     [node, paths, heatmapMetric],
@@ -250,13 +252,10 @@ function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: No
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={onClose} />
 
-      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
 
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
@@ -350,18 +349,30 @@ function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: No
             )}
           </section>
 
-          {/* Chat */}
-          <ReportChat
-            key={node.id}
-            reportContext={context}
-            reportType="dependency_node"
-            subtitle="Scoped to Maps"
-            entityName={node.label}
-            suggestedQuestions={['What are the upstream dependencies?', 'Is this node healthy?', 'Show metrics for this node']}
+          {/* Unified AI Assistant */}
+          <InlineCopilot
+            pageType="service"
+            selectedEntity={node.id}
+            entityData={{
+              service_id: node.id,
+              name: node.label,
+              health: node.health,
+              metrics: node.metrics,
+              layer: node.layer,
+              type: node.type,
+              upstream: paths?.upstream || [],
+              downstream: paths?.downstream || [],
+            }}
+            suggestedQuestions={[
+              `What is causing the health state of ${node.label}?`,
+              `Show the upstream dependencies for ${node.label}`,
+              `Explain the connections of ${node.label}`
+            ]}
+            className="mt-4"
           />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
