@@ -186,11 +186,11 @@ export default function BlastRadiusPathChat({
   };
 
   const circleStyles: Record<string, string> = {
-    blue: "bg-blue-50 dark:bg-blue-955/40 text-blue-600 dark:text-blue-400",
-    red: "bg-red-50 dark:bg-red-955/40 text-red-655 dark:text-red-400",
-    orange: "bg-orange-50 dark:bg-orange-955/30 text-orange-600 dark:text-orange-455",
-    green: "bg-emerald-50 dark:bg-emerald-955/30 text-emerald-600 dark:text-emerald-455",
-    purple: "bg-purple-50 dark:bg-purple-955/30 text-purple-600 dark:text-purple-400"
+    blue: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
+    red: "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400",
+    orange: "bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400",
+    green: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
+    purple: "bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400"
   };
 
   // Dynamic context text builder
@@ -208,7 +208,7 @@ export default function BlastRadiusPathChat({
       {/* COLLAPSED STATE DESIGN / SUMMARY BAR */}
       <div 
         onClick={toggleExpanded}
-        className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 h-[48px] gap-2"
+        className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-700/30 h-[48px] gap-2"
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className="shrink-0 text-base">🤖</span>
@@ -218,7 +218,7 @@ export default function BlastRadiusPathChat({
         </div>
 
         <div className="hidden sm:flex items-center gap-1.5 px-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-955/20 text-emerald-700 dark:text-emerald-450 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-1.5">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-1.5">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -230,7 +230,7 @@ export default function BlastRadiusPathChat({
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
             style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           >
             ▼
@@ -241,7 +241,7 @@ export default function BlastRadiusPathChat({
       {/* EXPANDED CONTENT WRAPPER */}
       <div 
         className={`transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
+          isExpanded ? 'max-h-[50vh] border-t border-slate-200 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
         }`}
       >
         <div className="p-4 space-y-3 rounded-b-lg">
@@ -342,7 +342,7 @@ export default function BlastRadiusPathChat({
 
           {/* INPUT BAR */}
           <form onSubmit={handleSubmit} className="p-3 border-t border-slate-200 dark:border-slate-700 bg-[#f1f5f9] dark:bg-slate-900/50 flex items-center gap-2 rounded-xl shrink-0">
-            <div className="flex-1 flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#e2e8f0] dark:border-slate-650 bg-white dark:bg-slate-900 shadow-sm focus-within:ring-1 focus-within:ring-[#6366f1] transition-shadow">
+            <div className="flex-1 flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#e2e8f0] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm focus-within:ring-1 focus-within:ring-[#6366f1] transition-shadow">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

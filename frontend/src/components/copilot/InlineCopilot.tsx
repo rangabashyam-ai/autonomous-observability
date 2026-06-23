@@ -33,6 +33,12 @@ interface InlineCopilotProps {
   subtitle?: string;
   /** Custom class name */
   className?: string;
+  /** Controlled expansion state */
+  isExpanded?: boolean;
+  /** Callback triggered when the header is clicked */
+  onToggle?: () => void;
+  /** Whether to show a Live badge in the header */
+  showLiveBadge?: boolean;
 }
 
 function newId(): string {
@@ -50,11 +56,16 @@ export default function InlineCopilot({
   title = 'AI Assistant',
   subtitle,
   className,
+  isExpanded: controlledExpanded,
+  onToggle,
+  showLiveBadge,
 }: InlineCopilotProps) {
   const [messages, setMessages] = useState<InlineChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [internalExpanded, setInternalExpanded] = useState(true);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
   const [lastResponse, setLastResponse] = useState<CopilotResponse | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +75,11 @@ export default function InlineCopilot({
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    setMessages([]);
+    setLastResponse(null);
+  }, [selectedEntity]);
 
   const buildPayload = (question: string): CopilotContextPayload => ({
     context_scope: 'strict',
@@ -96,10 +112,26 @@ export default function InlineCopilot({
 
     try {
       const context = buildPayload(question.trim());
-      const apiMessages = updatedMessages.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const apiMessages = updatedMessages.slice(0, -1).map((m) => {
+        if (m.role === 'assistant' && m.response) {
+          const res = m.response;
+          let fullContent = m.content;
+          if (res.findings && res.findings.length > 0) {
+            fullContent += `\n\nFindings:\n` + res.findings.map((f) => `- ${f}`).join('\n');
+          }
+          if (res.evidence && res.evidence.length > 0) {
+            fullContent += `\n\nEvidence:\n` + res.evidence.map((e) => `- ${e}`).join('\n');
+          }
+          if (res.recommended_actions && res.recommended_actions.length > 0) {
+            fullContent += `\n\nRecommended Actions:\n` + res.recommended_actions.map((a) => `- ${a}`).join('\n');
+          }
+          if (res.confidence) {
+            fullContent += `\n\nConfidence: ${res.confidence}`;
+          }
+          return { role: m.role, content: fullContent };
+        }
+        return { role: m.role, content: m.content };
+      });
 
       const response = await copilotChat(context, apiMessages);
 
@@ -139,18 +171,16 @@ export default function InlineCopilot({
 
   return (
     <div className={cn(
-      'rounded-xl border overflow-hidden',
-      'border-primary/20 bg-gradient-to-br from-primary/[0.03] to-indigo-500/[0.03]',
-      'dark:from-primary/[0.06] dark:to-indigo-500/[0.06]',
+      'rounded-xl border border-border bg-card shadow-sm overflow-hidden',
       className
     )}>
       {/* Header */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-primary/5 transition-colors"
+        onClick={toggleExpanded}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-indigo-500 flex items-center justify-center shadow-sm">
+          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm shrink-0">
             <Bot className="h-4 w-4 text-white" />
           </div>
           <div className="text-left">
@@ -166,7 +196,13 @@ export default function InlineCopilot({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {messages.length > 0 && (
+          {showLiveBadge && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
+              Live
+            </span>
+          )}
+          {messages.length > 0 && !showLiveBadge && (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
               {messages.filter((m) => m.role === 'assistant').length} responses
             </span>
@@ -180,14 +216,14 @@ export default function InlineCopilot({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-primary/10">
+        <div className="border-t border-border">
           {/* Messages area */}
           <div ref={scrollContainerRef} className="max-h-[360px] overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
-              <div className="text-center py-4 space-y-3">
-                <Sparkles className="h-8 w-8 text-primary/40 mx-auto" />
+              <div className="text-center py-6 space-y-3">
+                <Sparkles className="h-10 w-10 text-primary/40 mx-auto" />
                 <p className="text-xs text-text-secondary">
-                  Ask anything about <span className="font-medium text-text-primary">{selectedEntity}</span>
+                  Ask anything about <span className="font-semibold text-text-primary">{selectedEntity}</span>
                 </p>
                 <p className="text-[10px] text-text-secondary/60">
                   Powered by Groq · Context-scoped AI analysis
@@ -198,30 +234,37 @@ export default function InlineCopilot({
             {messages.map((msg) => (
               <div key={msg.id} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                 <div className={cn(
-                  'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm',
+                  'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm shadow-sm',
                   msg.role === 'user'
                     ? 'bg-primary text-white rounded-br-md'
                     : 'bg-card border border-border rounded-bl-md'
                 )}>
-                  <p className={cn(
-                    'text-xs leading-relaxed',
-                    msg.role === 'user' ? 'text-white' : 'text-text-primary'
-                  )}>
-                    {msg.content}
-                  </p>
-
-                  {msg.role === 'assistant' && msg.response?.model && msg.response.model.startsWith('error-') && (
-                    <div className="mt-2.5 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-[10px] flex items-start gap-1.5 font-medium leading-relaxed">
-                      <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                  {msg.role === 'assistant' && msg.response?.model && msg.response.model.startsWith('error-') ? (
+                    <div className="p-0.5 text-red-600 dark:text-red-400 text-xs flex items-start gap-2 font-medium leading-relaxed">
+                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
                       <div>
-                        <span className="font-semibold block mb-0.5">AI Service Offline</span>
-                        Please resolve the API key configuration/credits issue to resume.
+                        <span className="font-bold block mb-0.5">
+                          {msg.response.model === 'error-unconfigured' && 'API Key Unconfigured'}
+                          {msg.response.model === 'error-unauthorized' && 'Authentication Failed'}
+                          {msg.response.model === 'error-ratelimit' && 'Rate Limit Exceeded'}
+                          {msg.response.model === 'error-contextlimit' && 'Context Length Exceeded'}
+                          {msg.response.model === 'error-payment' && 'Insufficient Balance'}
+                          {!['error-unconfigured', 'error-unauthorized', 'error-ratelimit', 'error-contextlimit', 'error-payment'].includes(msg.response.model) && 'AI Service Offline'}
+                        </span>
+                        <p className="text-[11px] opacity-90 leading-normal">{msg.content.replace(/^⚠️ /, '')}</p>
                       </div>
                     </div>
+                  ) : (
+                    <p className={cn(
+                      'text-xs leading-relaxed',
+                      msg.role === 'user' ? 'text-white' : 'text-text-primary'
+                    )}>
+                      {msg.content}
+                    </p>
                   )}
 
                   {/* Structured response details */}
-                  {msg.response && (
+                  {msg.role === 'assistant' && msg.response && !msg.response.model?.startsWith('error-') && (
                     <div className="mt-2.5 space-y-2 border-t border-border/40 pt-2.5">
                       {/* Findings */}
                       {msg.response.findings.length > 0 && (
@@ -292,13 +335,13 @@ export default function InlineCopilot({
 
           {/* Suggested questions */}
           {messages.length === 0 && suggestedQuestions.length > 0 && (
-            <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+            <div className="px-4 pb-4 flex flex-wrap gap-2 justify-start">
               {suggestedQuestions.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => sendMessage(q)}
                   disabled={isLoading}
-                  className="text-[10px] px-2.5 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 text-left"
+                  className="text-xs px-3.5 py-2 rounded-xl border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 text-left font-medium cursor-pointer"
                 >
                   {q}
                 </button>
@@ -307,29 +350,29 @@ export default function InlineCopilot({
           )}
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="px-3 py-2.5 border-t border-primary/10 flex gap-2">
+          <form onSubmit={handleSubmit} className="px-4 py-3.5 border-t border-border bg-card flex gap-3">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={`Ask about ${selectedEntity}...`}
               disabled={isLoading}
-              className="flex-1 h-9 px-3 text-xs rounded-lg border border-border bg-background text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+              className="flex-1 h-10 px-4 text-xs rounded-xl border border-border bg-slate-50/50 dark:bg-slate-900/50 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="h-9 w-9 flex items-center justify-center rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-40 transition-colors"
+              className="h-10 w-10 flex items-center justify-center rounded-xl bg-primary text-white hover:bg-primary/95 disabled:opacity-40 transition-all active:scale-95 shrink-0 shadow-sm cursor-pointer"
             >
-              <Send className="h-3.5 w-3.5" />
+              <Send className="h-4 w-4" />
             </button>
             {messages.length > 0 && (
               <button
                 type="button"
                 onClick={clearConversation}
-                className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
+                className="h-10 w-10 flex items-center justify-center rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-card-hover transition-all active:scale-95 shrink-0 cursor-pointer"
                 title="Clear conversation"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-4 w-4" />
               </button>
             )}
           </form>

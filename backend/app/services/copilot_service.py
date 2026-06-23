@@ -486,7 +486,10 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
     model = select_model(page_type, len(messages))
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    if os.environ.get("GROQ_API_KEY"):
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    is_groq_valid = groq_key and not groq_key.startswith("your_")
+
+    if is_groq_valid:
         try:
             raw, model_used = chat_with_fallback(llm_messages, model)
             result = _parse_structured_response(raw)
@@ -497,43 +500,50 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
         except Exception as exc:
             logger.exception("GROQ call failed")
             err_msg = str(exc)
-            user_question = context.get("user_question", "") or (
-                messages[-1].get("content", "") if messages else ""
-            )
-            mock = _mock_response(context, user_question)
-            if mock.get("summary") and mock["summary"] != "That information is not present in the current investigation context.":
-                mock["model"] = "rule-based-fallback"
-                mock["timestamp"] = timestamp
-                mock["agent"] = agent.page_type
-                return mock
-
-            friendly_err = "The AI assistant is temporarily unavailable due to an issue with your GROQ API key or request. Please verify your key, account balance, and GROQ endpoint."
-            if "429" in err_msg or "rate_limit" in err_msg.lower():
-                friendly_err = (
-                    "The AI assistant is temporarily unavailable because the GROQ daily token limit was reached. "
-                    "Wait for the limit to reset, upgrade your Groq tier, or use the rule-based guidance below."
-                )
-            elif "402" in err_msg or "Payment Required" in err_msg:
-                friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your GROQ API key. Please top up your account or configure a new key."
-            elif "403" in err_msg or "1010" in err_msg:
-                friendly_err = "The AI assistant request was blocked by GROQ. Check your GROQ_API_KEY, GROQ_BASE_URL, and make sure the request is not being blocked by Cloudflare or an invalid endpoint."
             
+            if "429" in err_msg or "rate_limit" in err_msg.lower():
+                friendly_err = "⚠️ The AI assistant is temporarily unavailable because the GROQ rate limit was reached. Please wait 30-60 seconds before retrying or upgrade your tier."
+                model_code = "error-ratelimit"
+            elif "413" in err_msg or "too large" in err_msg.lower() or "context_length" in err_msg.lower():
+                friendly_err = "⚠️ The conversation context length exceeds the model's limit. Please clear the chat history or shorten your query."
+                model_code = "error-contextlimit"
+            elif "402" in err_msg or "payment" in err_msg.lower() or "Payment Required" in err_msg:
+                friendly_err = "⚠️ GROQ API account payment required/insufficient credits. Please top up your balance or update your billing details."
+                model_code = "error-payment"
+            elif "401" in err_msg or "403" in err_msg or "unauthorized" in err_msg.lower() or "1010" in err_msg:
+                friendly_err = "⚠️ GROQ API authentication failed: Invalid or expired API Key. Please verify the GROQ_API_KEY configured in backend/.env."
+                model_code = "error-unauthorized"
+            else:
+                friendly_err = f"⚠️ The AI assistant is temporarily unavailable: {err_msg[:250]}"
+                model_code = "error-unresolved"
+                
             return {
                 "summary": friendly_err,
                 "findings": [],
                 "evidence": [],
                 "recommended_actions": [
-                  "Check your Groq API key and account",
-                  "Configure a valid GROQ_API_KEY in backend/.env"
+                  "Verify your GROQ_API_KEY in backend/.env",
+                  "Check account balance and rate limits at console.groq.com"
                 ],
                 "confidence": "0%",
-                "model": "error-unresolved",
+                "model": model_code,
                 "agent": agent.page_type,
                 "timestamp": timestamp,
             }
 
+    # If key is missing or placeholder, try rule-based fallback first
+    user_question = context.get("user_question", "") or (
+        messages[-1].get("content", "") if messages else ""
+    )
+    mock = _mock_response(context, user_question)
+    if mock.get("summary") and mock["summary"] != "That information is not present in the current investigation context.":
+        mock["model"] = "rule-based-fallback"
+        mock["timestamp"] = timestamp
+        mock["agent"] = agent.page_type
+        return mock
+
     return {
-        "summary": "GROQ_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
+        "summary": "⚠️ GROQ_API_KEY is not configured in backend/.env. Please configure a valid API key to enable AI analysis.",
         "findings": [],
         "evidence": [],
         "recommended_actions": [

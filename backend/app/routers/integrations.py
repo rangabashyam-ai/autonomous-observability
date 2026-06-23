@@ -355,38 +355,59 @@ def delete_connection(connection_id: str, provider: str = Query(..., description
 
 @router.get("/logs")
 def get_integration_logs(
-    source: Optional[str] = Query(None, description="Filter by source: cloudwatch_logs|vpc_flow_logs"),
+    provider: Optional[str] = Query(None, description="Filter by provider: aws|azure|gcp|kubernetes"),
+    source: Optional[str] = Query(None, description="Filter by source: cloudwatch_logs|vpc_flow_logs|log_analytics|activity_log"),
     log_group: Optional[str] = Query(None, description="Filter by log group name"),
     limit: int = Query(default=200, le=2000),
 ):
-    """Return CloudWatch log events and VPC Flow Log events."""
+    """Return log events across connected cloud providers."""
     data = _read_json(_DATA_DIR / "integrations" / "logs.json")
-    all_events: list[dict] = data.get("log_events", []) + data.get("vpc_flow_events", [])
+    all_events: list[dict] = (
+        data.get("log_events", []) +
+        data.get("vpc_flow_events", []) +
+        data.get("azure_log_events", []) +
+        data.get("azure_activity_events", []) +
+        data.get("gcp_log_events", []) +
+        data.get("kubernetes_log_events", [])
+    )
 
+    if provider:
+        all_events = [e for e in all_events if e.get("provider") == provider]
     if source:
         all_events = [e for e in all_events if e.get("source") == source]
     if log_group:
         all_events = [e for e in all_events if log_group in e.get("log_group", "")]
 
+    # Collect matching groups
+    groups = (
+        data.get("log_groups", []) +
+        data.get("azure_log_groups", []) +
+        data.get("gcp_log_groups", []) +
+        data.get("kubernetes_log_groups", [])
+    )
+
     return {
         "events": all_events[:limit],
         "total": len(all_events),
-        "log_groups": data.get("log_groups", []),
+        "log_groups": groups,
         "updated_at": data.get("updated_at", ""),
     }
 
 
 @router.get("/traces")
 def get_integration_traces(
+    provider: Optional[str] = Query(None, description="Filter by provider: aws|azure|gcp|kubernetes"),
     has_error: Optional[bool] = Query(None, description="Filter traces with errors"),
     has_fault: Optional[bool] = Query(None, description="Filter traces with faults"),
     service: Optional[str] = Query(None, description="Filter by root service name"),
     limit: int = Query(default=100, le=1000),
 ):
-    """Return X-Ray distributed traces and service map."""
+    """Return distributed traces and service maps."""
     data = _read_json(_DATA_DIR / "integrations" / "traces.json")
     traces: list[dict] = data.get("traces", [])
 
+    if provider:
+        traces = [t for t in traces if t.get("provider") == provider]
     if has_error is not None:
         traces = [t for t in traces if t.get("has_error") == has_error]
     if has_fault is not None:
@@ -404,15 +425,18 @@ def get_integration_traces(
 
 @router.get("/audit-events")
 def get_audit_events(
+    provider: Optional[str] = Query(None, description="Filter by provider: aws|azure|gcp|kubernetes"),
     severity: Optional[str] = Query(None, description="Filter by severity: critical|warning|info"),
     event_name: Optional[str] = Query(None, description="Filter by event name (partial match)"),
     username: Optional[str] = Query(None, description="Filter by IAM username"),
     limit: int = Query(default=200, le=2000),
 ):
-    """Return CloudTrail audit events."""
+    """Return cloud audit events."""
     data = _read_json(_DATA_DIR / "integrations" / "audit_events.json")
     events: list[dict] = data.get("events", [])
 
+    if provider:
+        events = [e for e in events if e.get("provider") == provider]
     if severity:
         events = [e for e in events if e.get("severity") == severity]
     if event_name:
@@ -429,14 +453,18 @@ def get_audit_events(
 
 @router.get("/config-compliance")
 def get_config_compliance(
+    provider: Optional[str] = Query(None, description="Filter by provider: aws|azure|gcp|kubernetes"),
     compliant: Optional[bool] = Query(None, description="Filter: true=compliant only, false=non-compliant only"),
     rule_name: Optional[str] = Query(None, description="Filter by rule name (partial match)"),
 ):
-    """Return AWS Config rule compliance status."""
+    """Return Config rule compliance status."""
     data = _read_json(_DATA_DIR / "integrations" / "config_compliance.json")
     rules: list[dict] = data.get("rules", [])
     non_compliant: list[dict] = data.get("non_compliant_resources", [])
 
+    if provider:
+        rules = [r for r in rules if r.get("provider") == provider]
+        non_compliant = [r for r in non_compliant if r.get("provider") == provider]
     if compliant is not None:
         rules = [r for r in rules if r.get("is_compliant") == compliant]
     if rule_name:
@@ -446,7 +474,7 @@ def get_config_compliance(
     return {
         "rules": rules,
         "non_compliant_resources": non_compliant,
-        "total_rules": data.get("total_rules", 0),
-        "non_compliant_rule_count": data.get("non_compliant_rule_count", 0),
+        "total_rules": len(rules),
+        "non_compliant_rule_count": len([r for r in rules if not r.get("is_compliant")]),
         "updated_at": data.get("updated_at", ""),
     }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ReportChat } from '../components/ReportChat';
+import InlineCopilot from '../components/copilot/InlineCopilot';
 import { Link } from 'react-router-dom';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
+import { useRegisterCopilotContext, useCopilot } from '../ai/context/CopilotProvider';
 import { Search, RefreshCw, ChevronDown, History, GitCompare, Brain, AlertCircle, CheckCircle, Clock, TrendingUp, Zap, Activity } from 'lucide-react';
 import { analyzeRCA, analyzeRCAWithAgent } from '../api/client';
 import type { RCAResult, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
@@ -160,6 +160,8 @@ function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
   symptoms: string[];
   onClose: () => void;
 }) {
+  const { openCopilot, registerPageContext } = useCopilot();
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -172,9 +174,9 @@ function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
   const candidates = result.root_cause_candidates ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
+    <>
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 flex flex-col bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300">
 
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
@@ -279,17 +281,30 @@ function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
           {/* LLM output moved to the bottom */}
           <AgentLLMBlock content={result.llm_analysis} model={result.llm_model} error={result.llm_error} />
 
-          {/* Chat */}
-          <ReportChat
-            reportContext={buildAgentContext(result, service, alerts, symptoms)}
-            reportType="incident_rca"
-            subtitle="Scoped to RCA"
-            entityName={`${service} RCA`}
-            suggestedQuestions={['Why was this identified as the root cause?', 'Suggest alternative hypotheses', 'Explain the confidence score']}
+          {/* Unified AI Assistant */}
+          <InlineCopilot
+            pageType="rca"
+            selectedEntity={`${service.replace(/-/g, ' ')} RCA`}
+            entityData={{
+              service,
+              alerts,
+              symptoms,
+              primary_component: result.primary_component,
+              suggested_fix: result.suggested_fix,
+              reasoning: result.reasoning,
+              root_cause_candidates: result.root_cause_candidates,
+            }}
+            relatedAlerts={alerts}
+            suggestedQuestions={[
+              "What is the most likely root cause?",
+              "How can we remediate this issue quickly?",
+              "What evidence supports the primary component failure?"
+            ]}
+            className="mt-4"
           />
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

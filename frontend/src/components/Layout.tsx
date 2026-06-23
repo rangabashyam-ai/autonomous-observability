@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   ChevronRight,
+  ChevronLeft,
   Network,
   Shield,
   FileSearch,
@@ -21,25 +22,24 @@ import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
 import { cn } from '../lib/cn';
 import { useState, useEffect, useRef } from 'react';
-import CopilotPanel from './copilot/CopilotPanel';
 import { getOverview } from '../api/client';
 import type { Overview } from '../types/intelligence';
 
 const primaryNav = [
   { to: '/', label: 'Executive', icon: LayoutDashboard, end: true },
   { to: '/operations', label: 'Service Ops', icon: Activity, end: false },
-  { to: '/platform', label: 'Platform', icon: Server, end: false },
+  { to: '/platform', label: 'Platform Ops', icon: Server, end: false },
   { to: '/copilot', label: 'AI Copilot', icon: Bot, end: false },
 ];
 
 const secondaryNav = [
-  { to: '/dependencies', label: 'Map', icon: Map },
+  { to: '/dependencies', label: 'Dependency Mapping', icon: Map },
   { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
   { to: '/rca', label: 'RCA', icon: FileSearch },
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
-  { to: '/integrations', label: 'Integrations', icon: Cloud },
+  { to: '/adopters', label: 'Adopters', icon: Cloud },
   { to: '/admin', label: 'Settings', icon: Settings },
 ];
 
@@ -122,9 +122,8 @@ export default function Layout() {
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        onClick={() => setSidebarExpanded(prev => !prev)}
         className={cn(
-          'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0 cursor-pointer',
+          'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0',
           'border-r border-border bg-card',
           'transition-[width] duration-200 ease-in-out',
           sidebarExpanded ? 'w-[220px]' : 'w-[60px]'
@@ -142,7 +141,7 @@ export default function Layout() {
             )}
           >
             <h1 className="text-sm font-semibold text-text-primary leading-tight whitespace-nowrap">
-              Autonomous Ops
+              AI Ops
             </h1>
             <p className="text-[10px] text-text-secondary whitespace-nowrap">
               Enterprise Platform
@@ -185,6 +184,26 @@ export default function Layout() {
 
         {/* Footer — pinned to bottom, never grows */}
         <div className={cn('border-t border-border space-y-2 shrink-0', sidebarExpanded ? 'p-3' : 'p-2')}>
+          <button
+            onClick={() => setSidebarExpanded(prev => !prev)}
+            className={cn(
+              'w-full flex items-center gap-2 py-2 text-xs font-medium rounded-lg border border-border bg-card-hover text-text-secondary hover:text-text-primary transition-colors',
+              sidebarExpanded ? 'px-3 justify-center' : 'justify-center px-2'
+            )}
+            aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {sidebarExpanded ? (
+              <>
+                <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                Collapse
+              </>
+            ) : (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              </>
+            )}
+          </button>
+
           <button
             onClick={toggleTheme}
             className={cn(
@@ -385,7 +404,6 @@ export default function Layout() {
         </main>
       </div>
 
-      <CopilotPanel />
     </div>
   );
 }

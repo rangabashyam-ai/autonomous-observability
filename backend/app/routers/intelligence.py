@@ -232,7 +232,7 @@ def _build_universal_copilot_context(question: str, history: list[dict]) -> dict
         for n in infra_raw[:6]
     ]
 
-    # Early Detections / Predictions
+    # Early Detections / Predictions — trimmed to avoid 413 token overflow
     early_detections = []
     try:
         raw_det = detect_early_failures().get("detections", [])
@@ -243,10 +243,11 @@ def _build_universal_copilot_context(question: str, history: list[dict]) -> dict
                 "confidence": d.get("confidence"),
                 "estimated_time_to_incident_minutes": d.get("estimated_time_to_incident_minutes"),
                 "risk_level": d.get("risk_level"),
-                "contributing_signals": d.get("contributing_signals", []),
-                "recommended_actions": d.get("recommended_actions", []),
+                # Only include first 3 contributing signals and 3 recommended actions
+                "contributing_signals": d.get("contributing_signals", [])[:3],
+                "recommended_actions": d.get("recommended_actions", [])[:3],
             }
-            for d in raw_det
+            for d in raw_det[:5]  # cap at 5 detections
         ]
     except Exception:
         pass
@@ -315,46 +316,60 @@ def _build_universal_copilot_context(question: str, history: list[dict]) -> dict
     except Exception:
         pass
 
-    # ── Cloud Logs ────────────────────────────────────────────────────────────
+    # ── Cloud Logs — trimmed to avoid token overflow ──────────────────────────
     cloud_logs = {}
+    _wants_logs = any(w in q for w in ["log", "cloudwatch", "error log", "vpc", "flow"])
     try:
         raw_logs = read_json("integrations/logs.json")
+        _log_limit = 5 if _wants_logs else 2
+        _log_events = raw_logs.get("log_events", [])
+        _vpc_events = raw_logs.get("vpc_flow_events", [])
         cloud_logs = {
-            "log_events": raw_logs.get("log_events", [])[:15],
-            "vpc_flow_events": raw_logs.get("vpc_flow_events", [])[:15],
-            "total_events": len(raw_logs.get("log_events", [])) + len(raw_logs.get("vpc_flow_events", []))
+            "log_events": [
+                {k: v for k, v in e.items() if k in ("timestamp", "level", "message", "source", "service")}
+                for e in _log_events[:_log_limit]
+            ],
+            "vpc_flow_events": _vpc_events[:2] if _wants_logs else [],
+            "total_events": len(_log_events) + len(_vpc_events)
         }
     except Exception:
         pass
 
-    # ── Cloud Traces ──────────────────────────────────────────────────────────
+    # ── Cloud Traces — trimmed ────────────────────────────────────────────────
     cloud_traces = {}
+    _wants_traces = any(w in q for w in ["trace", "x-ray", "xray", "span", "latency trace"])
     try:
         raw_traces = read_json("integrations/traces.json")
+        _trace_limit = 5 if _wants_traces else 2
+        _all_traces = raw_traces.get("traces", [])
         cloud_traces = {
-            "traces": raw_traces.get("traces", [])[:15],
-            "service_map": raw_traces.get("service_map", [])[:10],
-            "total_traces": len(raw_traces.get("traces", []))
+            "traces": _all_traces[:_trace_limit],
+            "service_map": raw_traces.get("service_map", [])[:5],
+            "total_traces": len(_all_traces)
         }
     except Exception:
         pass
 
-    # ── CloudTrail Audit Events ───────────────────────────────────────────────
+    # ── CloudTrail Audit Events — trimmed ─────────────────────────────────────
     audit_events = []
+    _wants_audit = any(w in q for w in ["audit", "cloudtrail", "trail", "who", "access", "iam"])
     try:
-        audit_events = read_json("integrations/audit_events.json").get("events", [])
+        _all_audit = read_json("integrations/audit_events.json").get("events", [])
+        audit_events = _all_audit[:5] if _wants_audit else _all_audit[:2]
     except Exception:
         pass
 
-    # ── Config Compliance Rules ───────────────────────────────────────────────
+    # ── Config Compliance Rules — trimmed ─────────────────────────────────────
     config_compliance = {}
+    _wants_compliance = any(w in q for w in ["compliance", "config", "rule", "non-compliant", "policy", "security"])
     try:
         raw_compliance = read_json("integrations/config_compliance.json")
+        _rule_limit = 8 if _wants_compliance else 3
         config_compliance = {
             "total_rules": raw_compliance.get("total_rules", 0),
             "non_compliant_rule_count": raw_compliance.get("non_compliant_rule_count", 0),
-            "rules": raw_compliance.get("rules", [])[:10],
-            "non_compliant_resources": raw_compliance.get("non_compliant_resources", [])[:10],
+            "rules": raw_compliance.get("rules", [])[:_rule_limit],
+            "non_compliant_resources": raw_compliance.get("non_compliant_resources", [])[:5],
         }
     except Exception:
         pass
@@ -552,81 +567,92 @@ def _build_universal_copilot_context(question: str, history: list[dict]) -> dict
 
 @router.post("/copilot/ask")
 def ask_copilot(req: CopilotRequest):
-    from app.services.copilot_service import copilot_chat
-    import os
-    from app.data_store import read_json
-    from app.services.groq_client import chat_with_fallback, select_model
-    from app.services.intelligence import _load_incidents, _load_alerts, _load_changes, _load_deployments
     import json
     import logging
+    import os
     from datetime import datetime, timezone
+
+    from app.services.groq_client import chat_completion, PRIMARY_MODEL
 
     logger = logging.getLogger("uvicorn")
 
     # Build comprehensive context
     context = _build_universal_copilot_context(req.question, req.history)
 
-    # Build universal system prompt with all data inline
-    system_prompt = f"""You are OpsGPT — an expert AI Operations Copilot for an autonomous observability platform.
-You have FULL KNOWLEDGE of the entire platform: all incidents, services, metrics, alerts, changes, blast radius, RCA analysis.
+    # ── Hard-cap context JSON to prevent 413 token-overflow errors ────────────
+    # llama-3.3-70b-versatile supports 128K tokens, but Groq rate tiers limit
+    # requests to ~32K tokens per minute. We cap at 28K chars (~7K tokens) so
+    # the full prompt (system + context + history + question) stays safe.
+    _MAX_CONTEXT_CHARS = 28_000
+    context_json = json.dumps(context, default=str)
+    if len(context_json) > _MAX_CONTEXT_CHARS:
+        # Condensed context: keep only operationally critical fields
+        condensed = {
+            "platform_summary": context.get("platform_summary", {}),
+            "matched_incidents": context.get("matched_incidents", []),
+            "active_incidents": context.get("active_incidents", []),
+            "recent_resolved_incidents": context.get("recent_resolved_incidents", []),
+            "open_alerts": context.get("open_alerts", []),
+            "early_detections": context.get("early_detections", [])[:3],
+            "services": context.get("services", [])[:6],
+            "recent_changes": context.get("recent_changes", []),
+            "recent_deployments": context.get("recent_deployments", []),
+            "mentioned_service": context.get("mentioned_service"),
+            "service_incidents": context.get("service_incidents", [])[:5],
+            "service_alerts": context.get("service_alerts", [])[:5],
+            "investigations": context.get("investigations", [])[:3],
+            "rca_knowledge_patterns": context.get("rca_knowledge_patterns", [])[:3],
+            "codebase_guide": context.get("codebase_guide", {}),
+            "cloud_connections": context.get("cloud_connections", []),
+            "user_question": context.get("user_question", ""),
+        }
+        context_json = json.dumps(condensed, default=str)
+        if len(context_json) > _MAX_CONTEXT_CHARS:
+            context_json = context_json[:_MAX_CONTEXT_CHARS] + "...}"
 
-CAPABILITIES:
-- Answer ANY question about incidents (given INC-ID or service name)
-- Explain root cause of any incident
-- Describe how to resolve/fix an incident
-- Calculate blast radius (which services are impacted)
-- List active incidents, open alerts, early detection warnings
-- Analyze service health and metrics
-- Explain recent changes and deployments
-- Answer questions about the application codebase structure, file layout, and ports (e.g. backend port 8000, frontend port 5173)
-- Answer questions about cloud integration concepts, like "Connection Name" (e.g. prod-aws, staging-aws, dev-gcp) and why it's required (compound keys, credential store mapping)
-- Answer questions about cloud credentials encryption (AES Fernet derived from INTEGRATION_SECRET_KEY in .env) and validation modes (AWS STS assume role vs IAM access key, Azure service principal, GCP service account JSON, Kubernetes kubeconfig/token)
-- Answer questions about live cloud integrations data: resources list, CloudWatch logs, X-Ray traces, CloudTrail audit events, and AWS Config compliance rules
-- Answer follow-up questions using conversation history (e.g., "how to solve it" refers to the incident discussed in history)
-
-RULES:
-1. Always ground answers in the CONTEXT PAYLOAD below — use real incident IDs, real service names, real metrics, real logs, real compliance rules.
-2. If asked about the codebase layout or folders/files, use the codebase_guide section.
-3. If asked about "Connection Name" or specific connections like "prod-aws", explain what they are, look them up in cloud_connections, and explain why it is required for identifying configurations and preventing data collisions.
-4. If asked about credentials verification or encryption, explain the Fernet encryption derived from INTEGRATION_SECRET_KEY, storing in connections.json, and the auth validation modes.
-5. If asked about cloud logs, traces, audit events, or config compliance, summarize the corresponding fields (cloud_logs, cloud_traces, cloud_audit_events, cloud_config_compliance) and provide specific examples from the data.
-6. If an incident ID is mentioned (e.g., INC-1042), find it in matched_incidents and explain it in full.
-7. If asked about blast radius, use the blast_radius_analysis section.
-8. If asked about root cause, use matched_incidents root_cause or rca_analysis.
-9. If asked "how to fix / solve / resolve", give concrete remediation steps from the incident fix field.
-10. Use conversation history to understand follow-up questions (e.g., "how to solve it" = previous incident).
-11. NEVER say "I don't have that information" if the data is in the payload.
-12. For questions about the whole platform, summarize platform_summary + active_incidents.
-13. Be specific: name exact services, IDs, metrics, root causes.
-
-RESPONSE FORMAT — respond with valid JSON only:
-{{
-  "summary": "Main answer in 2-4 sentences",
-  "findings": ["finding 1", "finding 2", "finding 3"],
-  "evidence": ["INC-1042: Payment degradation", "Alert: CPU > 90%", ...],
-  "recommended_actions": ["Step 1: ...", "Step 2: ...", "Step 3: ..."],
-  "confidence": "95%"
-}}
-
-CURRENT CONTEXT PAYLOAD:
-{json.dumps(context, indent=2, default=str)}
-"""
+    system_prompt = (
+        "You are OpsGPT — an expert AI Operations Copilot for an autonomous observability platform.\n"
+        "You have full knowledge of the entire platform: incidents, services, metrics, alerts, changes, RCA, cloud integrations.\n\n"
+        "RULES:\n"
+        "1. Ground ALL answers in the CONTEXT PAYLOAD below — cite real INC-XXXX IDs, service names, metrics.\n"
+        "2. For 'how many active incidents' questions: count from active_incidents array and list each by ID + title.\n"
+        "3. For 'tell me about INC-XXXX': use matched_incidents or active_incidents to give title, severity, root_cause, fix.\n"
+        "4. For fix/resolve questions: use the incident fix field or recommended_actions — cite specific technical steps.\n"
+        "5. For blast radius: use blast_radius_analysis section.\n"
+        "6. For platform overview: use platform_summary counts + list active_incidents by ID.\n"
+        "7. For codebase/architecture: use codebase_guide section.\n"
+        "8. For cloud connections: use cloud_connections section.\n"
+        "9. Use conversation history to resolve follow-up pronouns (it, that, them).\n"
+        "10. NEVER fabricate IDs, service names, or metrics not present in the payload.\n\n"
+        "RESPONSE FORMAT — respond with valid JSON only:\n"
+        '{"summary":"Direct factual answer citing real data","findings":["finding with real IDs"],' 
+        '"evidence":["INC-XXXX: title","Alert: metric"],' 
+        '"recommended_actions":["Concrete technical step"],"confidence":"95%"}\n\n'
+        f"CONTEXT PAYLOAD:\n{context_json}"
+    )
 
     groq_key = os.environ.get("GROQ_API_KEY")
     timestamp = datetime.now(timezone.utc).isoformat()
 
     if groq_key:
         try:
-            # Build messages: system + history + current question
+            # Build messages — cap history to last 6 messages to save tokens
             llm_messages = [{"role": "system", "content": system_prompt}]
-            for msg in req.history:
+            for msg in req.history[-6:]:
                 role = msg.get("role", "user")
                 if role in ("user", "assistant"):
-                    llm_messages.append({"role": role, "content": msg.get("content", "")})
+                    llm_messages.append({"role": role, "content": msg.get("content", "")[:800]})
             llm_messages.append({"role": "user", "content": req.question})
 
-            model = select_model("universal_copilot", len(req.history))
-            raw, model_used = chat_with_fallback(llm_messages, model, temperature=0.2)
+            # Call PRIMARY_MODEL (70B) directly — do NOT fall back to 8B.
+            # The 8B model has a tiny context window and will always 413 on a
+            # platform-wide system prompt. If 70B is rate-limited, surface that
+            # clearly to the user instead.
+            result_raw = chat_completion(
+                llm_messages, PRIMARY_MODEL, temperature=0.2, max_tokens=1024, timeout=45
+            )
+            raw = result_raw["choices"][0]["message"]["content"]
+            model_used = PRIMARY_MODEL
 
             # Parse JSON response
             from app.services.copilot_service import _parse_structured_response
@@ -653,14 +679,24 @@ CURRENT CONTEXT PAYLOAD:
                 "timestamp": timestamp,
             }
         except Exception as exc:
-            logger.exception("Universal copilot LLM call failed")
+            logger.warning("Universal copilot LLM call failed: %s", exc)
             err = str(exc)
-            if "402" in err or "Payment" in err:
-                msg = "AI assistant unavailable — insufficient Groq API credits. Please top up your account."
+            if "429" in err or "rate_limit" in err.lower():
+                msg = (
+                    "⚠️ AI model temporarily rate-limited by Groq. "
+                    "Please wait 30-60 seconds and try again."
+                )
+            elif "413" in err or "too large" in err.lower():
+                msg = (
+                    "⚠️ AI context too large for the current Groq tier. "
+                    "Try a more specific question like 'Tell me about INC-1042'."
+                )
+            elif "402" in err or "Payment" in err:
+                msg = "⚠️ Groq API credits insufficient. Please top up your account."
             elif "403" in err or "1010" in err:
-                msg = "AI assistant blocked by Groq. Check your GROQ_API_KEY in backend/.env."
+                msg = "⚠️ AI blocked by Groq. Check your GROQ_API_KEY in backend/.env."
             else:
-                msg = f"AI assistant temporarily unavailable: {err[:200]}"
+                msg = f"⚠️ AI temporarily unavailable: {err[:200]}"
             return {"question": req.question, "answer": msg, "sources": [], "suggested_actions": [], "timestamp": timestamp}
 
     return {

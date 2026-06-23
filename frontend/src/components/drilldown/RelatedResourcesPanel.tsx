@@ -162,7 +162,7 @@ export function IncidentContextPanel({ incidents, alerts }: IncidentContextPanel
             {incidents.map((incident) => (
               <Link
                 key={incident.id}
-                to={`/incidents?id=${incident.id}`}
+                to={`?drawer=incident&drawerId=${incident.id}`}
                 className="block p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg hover:shadow-md transition-all"
               >
                 <div className="flex items-start justify-between mb-2">

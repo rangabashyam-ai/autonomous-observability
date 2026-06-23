@@ -20,21 +20,27 @@ export function Modal({ isOpen, onClose, title, children, size = 'lg' }: ModalPr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className={cn('w-full bg-card rounded-[var(--radius-card)] border border-border shadow-lg', sizes[size])}>
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* Drawer container */}
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-card border-l border-border shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card z-10">
           <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
           <button
             onClick={onClose}
-            className="text-text-secondary hover:text-text-primary transition-colors"
+            className="text-text-secondary hover:text-text-primary transition-colors p-1 hover:bg-card-hover rounded-lg"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         {/* Content */}
-        <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">{children}</div>
+        <div className="p-6 flex-1">{children}</div>
       </div>
-    </div>
+    </>
   );
 }

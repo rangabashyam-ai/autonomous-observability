@@ -777,9 +777,10 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
         "the architecture elements outlined above."
     )
 
-    groq_key = os.environ.get("GROQ_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    is_groq_valid = groq_key and not groq_key.startswith("your_")
     
-    if groq_key:
+    if is_groq_valid:
         from app.services.groq_client import chat_with_fallback, select_model
         
         messages = [{"role": "system", "content": system_prompt}]
@@ -796,7 +797,22 @@ def scoped_copilot_query(context_type: str, context_payload: dict, question: str
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         except Exception as e:
-            pass
+            err = str(e)
+            if "429" in err or "rate_limit" in err.lower():
+                msg = "⚠️ AI model temporarily rate-limited by Groq. Please wait 30-60 seconds and try again."
+            elif "413" in err or "too large" in err.lower() or "context_length" in err.lower():
+                msg = "⚠️ AI context too large for the current Groq tier. Try clearing/shortening your conversation history."
+            elif "402" in err or "Payment" in err:
+                msg = "⚠️ Groq API credits insufficient. Please top up your account."
+            elif "401" in err or "403" in err or "unauthorized" in err.lower() or "1010" in err:
+                msg = "⚠️ Groq API key is invalid or expired. Check your GROQ_API_KEY in backend/.env."
+            else:
+                msg = f"⚠️ AI temporarily unavailable: {err[:200]}"
+            return {
+                "answer": msg,
+                "sources": [],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
     mock_answer = generate_mock_sre_response(context_type, context_payload, question)
     return {

@@ -162,16 +162,16 @@ export function IncidentPropagationSummary({
 
         {/* Middle: Badges */}
         <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-955/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
             {result.severity_recommendation}
           </span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-355 border border-slate-200 dark:border-slate-700">
             {result.issue_scope.charAt(0).toUpperCase() + result.issue_scope.slice(1)}
           </span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-955/20 text-red-550 border border-red-500/20">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-955/20 text-red-600 dark:text-red-400 border border-red-500/20">
             {result.business_impact_score}/100
           </span>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-955/20 text-blue-650 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30">
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30">
             ~{result.impacted_customers_estimate.toLocaleString()} customers
           </span>
         </div>
@@ -183,7 +183,7 @@ export function IncidentPropagationSummary({
           </span>
           <button
             type="button"
-            className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
             style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           >
             ▼
@@ -207,7 +207,7 @@ export function IncidentPropagationSummary({
 
           <div className="grid grid-cols-3 gap-x-2 py-0.5 border-b border-slate-50 dark:border-slate-800/50">
             <span className="font-medium text-slate-400">What failed?:</span>
-            <span className="col-span-2 text-red-655 dark:text-red-400 font-semibold">{rootLabel}</span>
+            <span className="col-span-2 text-red-600 dark:text-red-400 font-semibold">{rootLabel}</span>
           </div>
 
           <div className="grid grid-cols-3 gap-x-2 py-0.5 border-b border-slate-50 dark:border-slate-800/50 items-center">
@@ -216,11 +216,11 @@ export function IncidentPropagationSummary({
               className="col-span-2 flex items-center gap-1 overflow-x-auto whitespace-nowrap text-[9px] font-semibold py-0.5"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              <span className="px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-955/20 text-red-655 dark:text-red-400 border border-red-100 dark:border-red-900/30">
+              <span className="px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-905/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30">
                 CPU Saturation
               </span>
               <span className="text-slate-400 shrink-0">→</span>
-              <span className="px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-955/20 text-red-655 dark:text-red-400 border border-red-100 dark:border-red-900/30">
+              <span className="px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-905/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30">
                 API Error Spike
               </span>
               <span className="text-slate-400 shrink-0">→</span>
@@ -350,17 +350,17 @@ export function IncidentPropagationSummary({
 
               {/* 2. Inline metric pills */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="flex flex-col p-1 rounded-lg bg-red-50/50 dark:bg-red-955/20 border border-red-100 dark:border-red-900/30 text-center">
+                <div className="flex flex-col p-1 rounded-lg bg-red-50/50 dark:bg-red-905/20 border border-red-100 dark:border-red-900/30 text-center">
                   <span className="text-[9px] uppercase tracking-wider text-red-500/80 font-bold">Error Rate</span>
-                  <span className="text-xs font-mono font-bold text-red-655 dark:text-red-400 mt-0.5">94%</span>
+                  <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400 mt-0.5">94%</span>
                 </div>
-                <div className="flex flex-col p-1 rounded-lg bg-orange-50/50 dark:bg-orange-955/20 border border-orange-100 dark:border-orange-900/30 text-center">
-                  <span className="text-[9px] uppercase tracking-wider text-orange-550 dark:text-orange-455 font-bold">Latency P99</span>
+                <div className="flex flex-col p-1 rounded-lg bg-orange-50/50 dark:bg-orange-905/20 border border-orange-100 dark:border-orange-900/30 text-center">
+                  <span className="text-[9px] uppercase tracking-wider text-orange-500 dark:text-orange-400 font-bold">Latency P99</span>
                   <span className="text-xs font-mono font-bold text-orange-600 dark:text-orange-400 mt-0.5">2340ms</span>
                 </div>
-                <div className="flex flex-col p-1 rounded-lg bg-yellow-50/50 dark:bg-yellow-955/20 border border-yellow-150 dark:border-yellow-900/30 text-center">
+                <div className="flex flex-col p-1 rounded-lg bg-yellow-50/50 dark:bg-yellow-905/20 border border-yellow-100 dark:border-yellow-900/30 text-center">
                   <span className="text-[9px] uppercase tracking-wider text-yellow-600/85 dark:text-yellow-500/80 font-bold">CPU Usage</span>
-                  <span className="text-xs font-mono font-bold text-yellow-655 dark:text-yellow-400 mt-0.5">98%</span>
+                  <span className="text-xs font-mono font-bold text-yellow-600 dark:text-yellow-400 mt-0.5">98%</span>
                 </div>
               </div>
 
@@ -469,16 +469,16 @@ export default function BlastRadiusDetailPanel({
             }`}>
               {selectedNode.health}
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-355 border border-slate-200 dark:border-slate-700">
               {selectedNode.riskScore.toFixed(0)}% risk
             </span>
           </div>
         ) : selectedEdge ? (
           <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto whitespace-nowrap px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-955/20 text-violet-750 dark:text-violet-400 border border-violet-250 dark:border-violet-900/50">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-905/20 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-900/50">
               <span className="text-violet-500 mr-1">●</span>{selectedEdge.sourceLabel} → {selectedEdge.targetLabel}
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-205 dark:border-slate-700">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-350 border border-slate-200 dark:border-slate-700">
               {selectedEdge.kindLabel}
             </span>
           </div>
@@ -715,7 +715,7 @@ function NodeDetail({
       );
     } else {
       return (
-        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border border-red-200 dark:border-red-900/30 animate-pulse">
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 dark:bg-red-955/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/30 animate-pulse">
           impacted
         </span>
       );
@@ -799,7 +799,7 @@ function NodeDetail({
 
           {/* Root Cause badge */}
           {isRoot ? (
-            <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-red-650 text-white shadow-sm">
+            <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-red-600 text-white shadow-sm dark:bg-red-500">
               ROOT CAUSE
             </span>
           ) : (
@@ -858,9 +858,9 @@ function NodeDetail({
           </div>
 
           {/* CPU Usage */}
-          <div className="flex flex-col justify-between p-2 rounded-xl bg-yellow-50/60 dark:bg-yellow-950/20 border border-yellow-150/50 dark:border-yellow-900/30 text-center min-h-[64px]">
+          <div className="flex flex-col justify-between p-2 rounded-xl bg-yellow-50/60 dark:bg-yellow-950/20 border border-yellow-100/50 dark:border-yellow-900/30 text-center min-h-[64px]">
             <span className="text-[9px] uppercase tracking-wider text-yellow-600/85 dark:text-yellow-400 font-bold leading-none">CPU Usage</span>
-            <span className="text-sm font-mono font-bold text-yellow-650 dark:text-yellow-450 my-1">{metrics.cpu}</span>
+            <span className="text-sm font-mono font-bold text-yellow-600 dark:text-yellow-400 my-1">{metrics.cpu}</span>
             <div className="h-4 w-full">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 100 20" preserveAspectRatio="none">
                 <path
@@ -890,7 +890,7 @@ function NodeDetail({
                 const isNodeRoot = nodeId === rootId;
                 const nodeLabel = nodeId === rootId ? rootLabel : (graph?.nodes.find(n => n.id === nodeId)?.label ?? nodeId);
                 const badgeColor = isNodeRoot 
-                  ? 'bg-red-500 text-white dark:bg-red-650 dark:text-red-50' 
+                  ? 'bg-red-500 text-white dark:bg-red-600 dark:text-red-50' 
                   : 'bg-orange-500 text-white dark:bg-orange-600 dark:text-orange-50';
                 
                 return (
@@ -942,7 +942,7 @@ function NodeDetail({
                         <button
                           type="button"
                           onClick={() => onSelectNode(dep.id)}
-                          className="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-955/40 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 hover:bg-orange-200 dark:hover:bg-orange-950/60 transition-colors text-[10px] font-semibold"
+                          className="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-905/40 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 hover:bg-orange-200 dark:hover:bg-orange-950/60 transition-colors text-[10px] font-semibold"
                         >
                           {dep.label}
                         </button>
@@ -1085,28 +1085,28 @@ function NodeDetail({
           <button
             type="button"
             onClick={() => handleActionClick('Investigate')}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-500 text-blue-600 dark:text-blue-450 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600/80 transition-colors text-xs font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-500 text-blue-600 dark:text-blue-455 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600/80 transition-colors text-xs font-semibold"
           >
             <span>🔍</span> Investigate
           </button>
           <button
             type="button"
             onClick={() => handleActionClick('Alert Team')}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500 text-red-650 dark:text-red-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-600/80 transition-colors text-xs font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-600/80 transition-colors text-xs font-semibold"
           >
             <span>📢</span> Alert Team
           </button>
           <button
             type="button"
             onClick={() => handleActionClick('View Logs')}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500 text-indigo-650 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-600/80 transition-colors text-xs font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-600/80 transition-colors text-xs font-semibold"
           >
             <span>📋</span> View Logs
           </button>
           <button
             type="button"
             onClick={() => handleActionClick('Run Runbook')}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500 text-amber-650 dark:text-amber-450 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-600/80 transition-colors text-xs font-semibold"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-600/80 transition-colors text-xs font-semibold"
           >
             <span>⚡</span> Run Runbook
           </button>
@@ -1131,8 +1131,8 @@ function NodeDetail({
         <div className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider mb-2">
           Analysis Details
         </div>
-        <div className="flex gap-2.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-955/20 border border-blue-150/60 dark:border-blue-900/40">
-          <div className="text-blue-550 dark:text-blue-400 shrink-0 mt-0.5">
+        <div className="flex gap-2.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-905/20 border border-blue-200/60 dark:border-blue-900/40">
+          <div className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>

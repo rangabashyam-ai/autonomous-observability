@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 interface DrilldownDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   type: 'service' | 'infrastructure' | 'api' | 'incident' | 'node';
   health?: 'healthy' | 'warning' | 'critical';
   children: ReactNode;
@@ -81,7 +81,7 @@ export default function DrilldownDrawer({
               <div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
                 {subtitle && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>
+                  <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{subtitle}</div>
                 )}
               </div>
             </div>

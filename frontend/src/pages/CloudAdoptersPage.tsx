@@ -123,6 +123,21 @@ const AZURE_DATA_SOURCES = [
   { id: 'service_principal', label: 'Service Principal',   sub: 'App registration auth',  icon: Key,         color: '#0078D4' },
 ];
 
+// GCP data sources shown in architecture diagram
+const GCP_DATA_SOURCES = [
+  { id: 'cloud_monitoring',  label: 'Cloud Monitoring',    sub: 'Metrics + alerts',       icon: BarChart2,   color: '#4285F4' },
+  { id: 'gke_metrics',       label: 'GKE / GCE Metrics',   sub: 'Kubernetes monitoring',  icon: Database,    color: '#4285F4' },
+  { id: 'cloud_trace',       label: 'Cloud Trace',         sub: 'Distributed traces',     icon: GitBranch,   color: '#4285F4' },
+  { id: 'gcp_otel',          label: 'OTel Collector',      sub: 'OTel integration',       icon: Activity,    color: '#4285F4' },
+  { id: 'cloud_logging',     label: 'Cloud Logging',       sub: 'App + system logs',      icon: FileText,    color: '#4285F4' },
+  { id: 'vpc_flow',          label: 'VPC Flow Logs',       sub: 'Network traffic',        icon: Radio,       color: '#4285F4' },
+  { id: 'cloud_audit',       label: 'Cloud Audit Logs',    sub: 'Audit + API events',     icon: BookOpen,    color: '#4285F4' },
+  { id: 'asset_inventory',   label: 'Cloud Asset Inventory', sub: 'Asset tracking & compliance', icon: ShieldCheck, color: '#4285F4' },
+  { id: 'pubsub',            label: 'Cloud Pub/Sub',       sub: 'Real-time log transport',icon: Zap,         color: '#4285F4' },
+  { id: 'eventarc',          label: 'Eventarc',            sub: 'Event routing',          icon: Terminal,    color: '#4285F4' },
+  { id: 'service_account',   label: 'Service Account Key', sub: 'JSON key file auth',     icon: Key,         color: '#4285F4' },
+];
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 async function apiFetch(path: string, options?: RequestInit) {
@@ -541,32 +556,44 @@ function ProviderCard({ provider, connections, onRefresh }: {
 // ─── AWS Data Sources Panel ────────────────────────────────────────────────────
 
 function AWSSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <div className="rounded-xl border border-[#FF9900]/20 bg-[#FF9900]/5 p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="rounded-xl border border-[#FF9900]/20 bg-[#FF9900]/5 overflow-hidden transition-all duration-200">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#FF9900]/10 transition-colors"
+      >
         <Cloud className="h-4 w-4 text-[#FF9900]" />
         <p className="text-sm font-semibold text-[var(--color-text-primary)]">AWS Account — Data Sources</p>
-        {hasConnection
-          ? <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
-          : <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
-        }
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {AWS_DATA_SOURCES.map(src => {
-          const Icon = src.icon;
-          return (
-            <div key={src.id} className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${hasConnection ? 'border-[#FF9900]/20 bg-[#FF9900]/5' : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'}`}>
-              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection ? 'bg-[#FF9900]/15' : 'bg-[var(--color-border)]/30'}`}>
-                <Icon className={`h-3.5 w-3.5 ${hasConnection ? 'text-[#FF9900]' : 'text-[var(--color-text-secondary)]'}`} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
-                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        <div className="ml-auto flex items-center gap-3">
+          {hasConnection
+            ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
+            : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
+          }
+          {isOpen ? <ChevronUp className="h-4 w-4 text-[var(--color-text-secondary)]" /> : <ChevronDown className="h-4 w-4 text-[var(--color-text-secondary)]" />}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-5 pb-5 border-t border-[#FF9900]/10 pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {AWS_DATA_SOURCES.map(src => {
+              const Icon = src.icon;
+              return (
+                <div key={src.id} className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${hasConnection ? 'border-[#FF9900]/20 bg-[#FF9900]/5' : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'}`}>
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection ? 'bg-[#FF9900]/15' : 'bg-[var(--color-border)]/30'}`}>
+                    <Icon className={`h-3.5 w-3.5 ${hasConnection ? 'text-[#FF9900]' : 'text-[var(--color-text-secondary)]'}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
+                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -574,6 +601,7 @@ function AWSSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
 // ─── Azure Data Sources Panel ─────────────────────────────────────────────────
 
 function AzureSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
   // Track which sources are actually implemented vs planned
   const implemented = new Set([
     'azure_monitor', 'container_insights', 'ama_otel',
@@ -581,62 +609,137 @@ function AzureSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
   ]);
 
   return (
-    <div className="rounded-xl border border-[#0078D4]/20 bg-[#0078D4]/5 p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="rounded-xl border border-[#0078D4]/20 bg-[#0078D4]/5 overflow-hidden transition-all duration-200">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#0078D4]/10 transition-colors"
+      >
         <span className="text-lg">⬡</span>
         <p className="text-sm font-semibold text-[var(--color-text-primary)]">Azure — Data Sources</p>
-        {hasConnection
-          ? <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
-          : <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
-        }
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {AZURE_DATA_SOURCES.map(src => {
-          const Icon = src.icon;
-          const isLive = implemented.has(src.id);
-          return (
-            <div
-              key={src.id}
-              className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${
-                hasConnection
-                  ? isLive
-                    ? 'border-[#0078D4]/20 bg-[#0078D4]/5'
-                    : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
-                  : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
-              }`}
-            >
-              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                hasConnection && isLive ? 'bg-[#0078D4]/15' : 'bg-[var(--color-border)]/30'
-              }`}>
-                <Icon className={`h-3.5 w-3.5 ${
-                  hasConnection && isLive ? 'text-[#0078D4]' : 'text-[var(--color-text-secondary)]'
-                }`} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
-                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
-              </div>
-              {hasConnection && !isLive && (
-                <span className="absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold leading-none">SOON</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+        <div className="ml-auto flex items-center gap-3">
+          {hasConnection
+            ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
+            : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
+          }
+          {isOpen ? <ChevronUp className="h-4 w-4 text-[var(--color-text-secondary)]" /> : <ChevronDown className="h-4 w-4 text-[var(--color-text-secondary)]" />}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-5 pb-5 border-t border-[#0078D4]/10 pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {AZURE_DATA_SOURCES.map(src => {
+              const Icon = src.icon;
+              const isLive = implemented.has(src.id);
+              return (
+                <div
+                  key={src.id}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${
+                    hasConnection
+                      ? isLive
+                        ? 'border-[#0078D4]/20 bg-[#0078D4]/5'
+                        : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
+                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
+                  }`}
+                >
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    hasConnection && isLive ? 'bg-[#0078D4]/15' : 'bg-[var(--color-border)]/30'
+                  }`}>
+                    <Icon className={`h-3.5 w-3.5 ${
+                      hasConnection && isLive ? 'text-[#0078D4]' : 'text-[var(--color-text-secondary)]'
+                    }`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
+                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
+                  </div>
+                  {hasConnection && !isLive && (
+                    <span className="absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold leading-none">SOON</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GCPSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+  // Track which sources are actually implemented vs planned
+  const implemented = new Set([
+    'cloud_monitoring', 'gke_metrics', 'cloud_trace',
+    'gcp_otel', 'cloud_logging', 'service_account',
+  ]);
+
+  return (
+    <div className="rounded-xl border border-[#4285F4]/20 bg-[#4285F4]/5 overflow-hidden transition-all duration-200">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-2 p-5 text-left hover:bg-[#4285F4]/10 transition-colors"
+      >
+        <span className="text-lg">◈</span>
+        <p className="text-sm font-semibold text-[var(--color-text-primary)]">GCP — Data Sources</p>
+        <div className="ml-auto flex items-center gap-3">
+          {hasConnection
+            ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
+            : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
+          }
+          {isOpen ? <ChevronUp className="h-4 w-4 text-[var(--color-text-secondary)]" /> : <ChevronDown className="h-4 w-4 text-[var(--color-text-secondary)]" />}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-5 pb-5 border-t border-[#4285F4]/10 pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {GCP_DATA_SOURCES.map(src => {
+              const Icon = src.icon;
+              const isLive = implemented.has(src.id);
+              return (
+                <div
+                  key={src.id}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${
+                    hasConnection
+                      ? isLive
+                        ? 'border-[#4285F4]/20 bg-[#4285F4]/5'
+                        : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
+                      : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
+                  }`}
+                >
+                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    hasConnection && isLive ? 'bg-[#4285F4]/15' : 'bg-[var(--color-border)]/30'
+                  }`}>
+                    <Icon className={`h-3.5 w-3.5 ${
+                      hasConnection && isLive ? 'text-[#4285F4]' : 'text-[var(--color-text-secondary)]'
+                    }`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
+                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
+                  </div>
+                  {hasConnection && !isLive && (
+                    <span className="absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold leading-none">SOON</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Resources Panel ──────────────────────────────────────────────────────────
 
-function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+function ResourcesPanel({ activeProvider }: { activeProvider: Provider }) {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     setLoading(true);
-    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    const qs = `&provider=${activeProvider}`;
     apiFetch(`/api/integrations/resources?limit=500${qs}`)
       .then(d => setResources(d.resources || []))
       .catch(() => setResources([]))
@@ -666,7 +769,7 @@ function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <Server className="h-10 w-10 text-[var(--color-text-secondary)]/30 mb-3" />
       <p className="text-sm font-medium text-[var(--color-text-secondary)]">
-        {activeProvider === 'all' ? 'No resources discovered yet' : `No ${PROVIDER_CONFIG[activeProvider].label} resources yet`}
+        {`No ${PROVIDER_CONFIG[activeProvider].label} resources yet`}
       </p>
       <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1 max-w-xs">
         Connect a cloud provider and click "Sync Now" to discover your infrastructure.
@@ -699,7 +802,6 @@ function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }
             <tr className="border-b border-[var(--color-border)] bg-[var(--color-card-hover)]">
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Resource</th>
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Type</th>
-              {activeProvider === 'all' && <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Cloud</th>}
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Region</th>
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Health</th>
             </tr>
@@ -711,13 +813,6 @@ function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }
                 <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">
                   {RESOURCE_TYPE_ICON[r.resource_type] || '📌'} {r.resource_type.replace(/_/g, ' ')}
                 </td>
-                {activeProvider === 'all' && (
-                  <td className="px-4 py-2.5">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ color: PROVIDER_CONFIG[r.provider]?.color, background: PROVIDER_CONFIG[r.provider]?.bg }}>
-                      {r.provider.toUpperCase()}
-                    </span>
-                  </td>
-                )}
                 <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{r.region}</td>
                 <td className="px-4 py-2.5">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${healthColor(r.health)}`}>
@@ -735,7 +830,7 @@ function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }
 
 // ─── Logs Panel ───────────────────────────────────────────────────────────────
 
-function LogsPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+function LogsPanel({ activeProvider }: { activeProvider: Provider }) {
   const [data, setData] = useState<{ events: LogEvent[]; log_groups: any[]; updated_at: string }>({ events: [], log_groups: [], updated_at: '' });
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<'all' | 'cloudwatch_logs' | 'vpc_flow_logs'>('all');
@@ -743,7 +838,7 @@ function LogsPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
   useEffect(() => {
     setLoading(true);
-    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    const qs = `&provider=${activeProvider}`;
     apiFetch(`/api/integrations/logs?limit=200${qs}`)
       .then(d => setData(d))
       .catch(() => {})
@@ -805,7 +900,7 @@ function LogsPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
 // ─── Traces Panel ─────────────────────────────────────────────────────────────
 
-function TracesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+function TracesPanel({ activeProvider }: { activeProvider: Provider }) {
   const [data, setData] = useState<{ traces: TraceItem[]; service_map: any[]; updated_at: string }>({ traces: [], service_map: [], updated_at: '' });
   const [otelStatus, setOtelStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -815,7 +910,7 @@ function TracesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
   useEffect(() => {
     setLoading(true);
-    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    const qs = `&provider=${activeProvider}`;
     Promise.all([
       apiFetch(`/api/integrations/traces?limit=100${qs}`).catch(() => ({ traces: [], service_map: [], updated_at: '' })),
       apiFetch('/api/otel/status').catch(() => null)
@@ -989,7 +1084,7 @@ function TracesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
 // ─── Audit Events Panel ───────────────────────────────────────────────────────
 
-function AuditPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+function AuditPanel({ activeProvider }: { activeProvider: Provider }) {
   const [data, setData] = useState<{ events: AuditEvent[]; updated_at: string }>({ events: [], updated_at: '' });
   const [loading, setLoading] = useState(true);
   const [severity, setSeverity] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
@@ -997,7 +1092,7 @@ function AuditPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
   useEffect(() => {
     setLoading(true);
-    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    const qs = `&provider=${activeProvider}`;
     apiFetch(`/api/integrations/audit-events?limit=200${qs}`)
       .then(d => setData(d))
       .catch(() => {})
@@ -1068,7 +1163,7 @@ function AuditPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
 
 // ─── Compliance Panel ─────────────────────────────────────────────────────────
 
-function CompliancePanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+function CompliancePanel({ activeProvider }: { activeProvider: Provider }) {
   const [data, setData] = useState<{ rules: ConfigRule[]; non_compliant_resources: any[]; total_rules: number; non_compliant_rule_count: number; updated_at: string }>({
     rules: [], non_compliant_resources: [], total_rules: 0, non_compliant_rule_count: 0, updated_at: ''
   });
@@ -1077,8 +1172,8 @@ function CompliancePanel({ activeProvider }: { activeProvider: Provider | 'all' 
 
   useEffect(() => {
     setLoading(true);
-    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
-    apiFetch(`/api/integrations/config-compliance${qs ? '?' + qs.slice(1) : ''}`)
+    const qs = `provider=${activeProvider}`;
+    apiFetch(`/api/integrations/config-compliance?${qs}`)
       .then(d => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -1153,14 +1248,14 @@ function CompliancePanel({ activeProvider }: { activeProvider: Provider | 'all' 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function CloudIntegrationsPage() {
+export default function CloudAdoptersPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<Record<string, string> | null>(null);
   const [activeTab, setActiveTab] = useState<TelemetryTab>('connect');
   const [lastSync, setLastSync] = useState<string>('');
   // Provider context: clicking a provider card scopes ALL tabs to that provider
-  const [activeProvider, setActiveProvider] = useState<Provider | 'all'>('all');
+  const [activeProvider, setActiveProvider] = useState<Provider>('aws');
 
   const loadConnections = useCallback(async () => {
     try {
@@ -1203,7 +1298,7 @@ export default function CloudIntegrationsPage() {
             <div className="h-9 w-9 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
               <Cloud className="h-5 w-5 text-[var(--color-primary)]" />
             </div>
-            <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Cloud Integrations</h1>
+            <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Cloud Adopters</h1>
           </div>
           <p className="text-sm text-[var(--color-text-secondary)] ml-12">
             Connect AWS, Azure, GCP, and Kubernetes to stream live telemetry into the platform.
@@ -1229,10 +1324,9 @@ export default function CloudIntegrationsPage() {
 
       {/* Provider stats — clickable to scope all tabs */}
       <div className="grid grid-cols-4 gap-3">
-        {(['all', 'aws', 'azure', 'gcp', 'kubernetes'] as (Provider | 'all')[]).map(p => {
-          const isAll = p === 'all';
-          const count = isAll ? connections.length : byProvider(p as Provider).length;
-          const cfg = isAll ? null : PROVIDER_CONFIG[p as Provider];
+        {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => {
+          const count = byProvider(p).length;
+          const cfg = PROVIDER_CONFIG[p];
           const isActive = activeProvider === p;
           return (
             <button
@@ -1244,60 +1338,36 @@ export default function CloudIntegrationsPage() {
                   : 'hover:scale-[1.01]'
               }`}
               style={{
-                borderColor: isAll ? 'var(--color-border)' : (isActive ? cfg!.color : cfg!.border),
-                background: isAll ? 'var(--color-card)' : cfg!.bg,
+                borderColor: isActive ? cfg.color : cfg.border,
+                background: cfg.bg,
               }}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-lg">
-                  {p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : p === 'kubernetes' ? '⎈' : '🌐'}
+                  {p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : '⎈'}
                 </span>
-                {isAll ? (
-                  <Filter className="h-3.5 w-3.5" style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }} />
-                ) : (count > 0
+                {count > 0
                   ? <Wifi className="h-3.5 w-3.5 text-green-400" />
-                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />)
+                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />
                 }
               </div>
               <p className="text-lg font-bold text-[var(--color-text-primary)]">{count}</p>
               <p className="text-[10px] text-[var(--color-text-secondary)]">
-                {isAll ? 'All Clouds' : cfg!.label}
+                {cfg.label}
               </p>
             </button>
           );
         })}
       </div>
 
-      {/* Active provider context banner */}
-      {activeProvider !== 'all' && (
-        <div
-          className="flex items-center justify-between px-4 py-2.5 rounded-xl border text-xs font-medium"
-          style={{
-            borderColor: PROVIDER_CONFIG[activeProvider].border,
-            background: PROVIDER_CONFIG[activeProvider].bg,
-            color: PROVIDER_CONFIG[activeProvider].color,
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-base">
-              {activeProvider === 'aws' ? '☁' : activeProvider === 'azure' ? '⬡' : activeProvider === 'gcp' ? '◈' : '⎈'}
-            </span>
-            <span>Showing <strong>{PROVIDER_CONFIG[activeProvider].label}</strong> data only — all tabs filtered to this cloud</span>
-          </div>
-          <button
-            onClick={() => setActiveProvider('all')}
-            className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
-          >
-            <XCircle className="h-3.5 w-3.5" /> Clear filter
-          </button>
-        </div>
-      )}
-
       {/* AWS data sources architecture */}
       <AWSSourcesPanel hasConnection={hasAWS} />
 
       {/* Azure data sources architecture */}
       <AzureSourcesPanel hasConnection={byProvider('azure').length > 0} />
+
+      {/* GCP data sources architecture */}
+      <GCPSourcesPanel hasConnection={byProvider('gcp').length > 0} />
 
       {/* Sync result */}
       {syncResult && (
