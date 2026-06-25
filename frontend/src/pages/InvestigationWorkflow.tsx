@@ -231,7 +231,6 @@ export default function InvestigationWorkflow() {
     [inv?.steps]
   );
   const showLeftRecommendedFix = !!recommendFixStep && recommendFixStep.status !== 'pending';
-  const isRecommendFixActive = !!recommendFixStep && (recommendFixStep.status === 'in_progress' || inv?.current_step?.toLowerCase().includes('recommend'));
 
   useEffect(() => {
     if (showLeftRecommendedFix) {

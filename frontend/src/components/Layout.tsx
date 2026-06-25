@@ -118,14 +118,13 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        onMouseEnter={() => setSidebarExpanded(true)}
-        onMouseLeave={() => setSidebarExpanded(false)}
+        onClick={() => setSidebarExpanded(prev => !prev)}
         className={cn(
-          'fixed left-0 top-0 h-screen flex flex-col overflow-hidden z-40',
+          'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0 cursor-pointer',
           'border-r border-border bg-card',
           'transition-[width] duration-200 ease-in-out',
           sidebarExpanded ? 'w-[220px]' : 'w-[60px]'
@@ -215,8 +214,7 @@ export default function Layout() {
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      {/* ml-[60px] always matches the collapsed sidebar width */}
-      <div className="ml-[60px] flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-200 ease-in-out">
         <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur-md px-6 py-3">
           <div className="flex items-center gap-4">
             <form onSubmit={handleSearch} className="flex-1 max-w-xl relative">

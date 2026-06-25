@@ -107,6 +107,11 @@ export interface Investigation {
   remediation_result?: { action: string; status: string; message: string };
   rca_result?: RCAResult;
   blast_result?: BlastRadiusResult;
+  input: {
+    alerts: string[];
+    symptoms: string[];
+    service: string;
+  };
 }
 
 export interface Overview {
