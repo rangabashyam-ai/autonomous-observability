@@ -21,6 +21,12 @@ export interface Incident {
   similar_incidents?: string[];
   change_records?: { id: string; title: string; hours_before_incident: number; risk: string }[];
   confidence_training_value?: number;
+  // Hidden enrichment fields from CSV — present in API, not rendered in UI
+  original_id?: string;
+  true_root_cause?: string;
+  component?: string;
+  incident_time?: string;
+  details?: string;
 }
 
 export interface ComponentMetrics {
@@ -152,6 +158,112 @@ export interface IncidentClickAnalysis {
   llm_error?: string;
   // Pre-built chat context from backend agents (compact, optimised for chat)
   chat_context?: string;
+}
+
+export interface RunbookStep {
+  id: string;
+  step: number;
+  category: 'diagnose' | 'mitigate' | 'verify' | 'resolve';
+  action: string;
+  evidence: string;
+  lever: string | null;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface GoldenSignalWindow {
+  sr_avg: number;
+  sr_min: number;
+  mrt_avg: number;
+  mrt_max: number;
+  rr_avg: number;
+  cnt_total: number;
+}
+
+export interface IncidentRunbook {
+  incident_id: string;
+  golden_signals: {
+    baseline: GoldenSignalWindow | null;
+    incident: GoldenSignalWindow | null;
+    deltas: { sr_pp: number; mrt_ms: number; rr_pct: number };
+  };
+  host_saturation: Array<{
+    host: string;
+    cpu_avg: number;
+    cpu_peak: number;
+    status: 'healthy' | 'degraded' | 'critical';
+  }>;
+  gc_pressure: boolean;
+  runbook: RunbookStep[];
+  similar_incidents: Array<{
+    incident_id: string;
+    fix: string;
+    root_cause: string;
+    service: string;
+  }>;
+}
+
+export interface SloBurnAlert {
+  tier: 'P0' | 'P1' | 'P2' | 'P3';
+  firing: boolean;
+  primary_window: string;
+  confirmation_window: string;
+  primary_burn_rate: number;
+  confirmation_burn_rate: number;
+  threshold: number;
+  budget_consumed_pct: number;
+}
+
+export interface ServiceSloBurn {
+  service: string;
+  highest_firing_tier: 'P0' | 'P1' | 'P2' | 'P3' | null;
+  time_to_exhaustion_hours: number | null;
+  max_burn_rate: number;
+  burn_rates: Record<string, number>;
+  window_details: Record<string, { error_rate_pct: number; burn_rate: number; data_points: number }>;
+  alerts: SloBurnAlert[];
+}
+
+export interface IncidentSloBurn {
+  slo_target: number;
+  error_budget_pct: number;
+  error_budget_minutes: number;
+  overall_highest_tier: 'P0' | 'P1' | 'P2' | 'P3' | null;
+  recommended_action: string;
+  services: ServiceSloBurn[];
+}
+
+export interface IncidentTelemetry {
+  service: string;
+  window: { start: string; end: string };
+  metrics: Array<{
+    timestamp: string;
+    request_rate: number;
+    success_rate: number;
+    request_count: number;
+    mean_response_time: number;
+  }>;
+  host_metrics: Array<{
+    timestamp: string;
+    host: string;
+    cpu: number;
+  }>;
+  logs: Array<{
+    timestamp: string;
+    host: string;
+    log_name: string;
+    message: string;
+    severity: 'info' | 'error';
+  }>;
+  traces: Array<{
+    trace_id: string;
+    service: string;
+    host: string;
+    timestamp: string;
+    has_parent: boolean;
+  }>;
+  log_error?: string;
+  metric_error?: string;
+  trace_error?: string;
 }
 
 export interface KnowledgeGraph {

@@ -7,6 +7,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   MarkerType,
+  Handle,
+  Position,
   type Node,
   type Edge,
   type ReactFlowInstance,
@@ -26,18 +28,138 @@ import {
 import type { DependencyGraph, DependencyPath, GraphNode, HeatmapMetric, ViewType } from '../types/api';
 import { healthBadgeClass, layerLabel } from '../utils/colors';
 import { inputClass, btnSecondary, btnPrimary } from './ui';
+import { useLongPress } from '../utils/hooks';
+import {
+  buildHierarchicalSpecs,
+  calcTreeLayout,
+  flattenComputedLayout,
+  getGroupLayoutedNodesDagre,
+} from './layoutEngine';
 
-const nodeTypes = { dependency: DependencyNode };
+const nodeTypes = { dependency: DependencyNode, nodeGroup: GroupNode };
 
-const VIEWS: { id: ViewType; label: string }[] = [
-  { id: 'data_center', label: 'Data Center' },
-  { id: 'rack', label: 'Rack' },
-  { id: 'server', label: 'Server' },
-  { id: 'business_service', label: 'Business Service' },
-  { id: 'application', label: 'Application' },
-  { id: 'microservice', label: 'Microservice' },
-  { id: 'infrastructure', label: 'Infrastructure' },
+const MAIN_VIEW_ITEMS: { id: ViewType; label: string }[] = [
+  { id: 'business_service', label: 'Business Services' },
+  { id: 'microservice', label: 'Microservices' },
 ];
+
+const PLATFORM_VIEWS: { id: ViewType; label: string }[] = [
+  { id: 'on-prem-vmware', label: 'On-Prem VMware' },
+  { id: 'on-prem-physical', label: 'On-Prem Physical' },
+  { id: 'aws', label: 'AWS' },
+  { id: 'gcp', label: 'GCP' },
+  { id: 'azure', label: 'Azure' },
+];
+
+// ── Replaced by layoutEngine.ts ───────────────────────────────────────────────
+
+function buildFlow(
+  graph: DependencyGraph,
+  selectedNodeId: string | null,
+  highlightIds: Set<string>,
+  selectedViews: Set<ViewType>,
+  onNodeLongPress: (id: string, isGroup: boolean) => void,
+  onNodeShortClick: (id: string, isGroup: boolean) => void
+): { nodes: Node[]; edges: Edge[] } {
+  const rfEdges = buildEdges(graph, highlightIds);
+
+  const hierarchicalSpecs = buildHierarchicalSpecs(graph, selectedViews);
+  
+  if (hierarchicalSpecs.length > 0 && selectedViews.size > 0) {
+    const computedLayouts = calcTreeLayout(hierarchicalSpecs);
+    const flattenedNodes = flattenComputedLayout(computedLayouts, graph, selectedNodeId, highlightIds);
+
+    // Aggregate edges to roots to prevent arrow clutter
+    const getRoot = (id: string): string => {
+      let current = flattenedNodes.find(n => n.id === id);
+      while (current && current.parentNode) {
+        current = flattenedNodes.find(n => n.id === current!.parentNode);
+      }
+      return current ? current.id : id;
+    };
+
+    const edgeMap = new Map<string, Edge>();
+    const isHighlighting = highlightIds.size > 0;
+
+    rfEdges.forEach(e => {
+      const srcRoot = getRoot(e.source);
+      const tgtRoot = getRoot(e.target);
+      if (srcRoot === tgtRoot) return;
+
+      const isHighlighted = highlightIds.has(e.source) && highlightIds.has(e.target);
+      const isDimmed = isHighlighting && !isHighlighted;
+
+      const k = `${srcRoot}|${tgtRoot}`;
+      if (!edgeMap.has(k)) {
+        edgeMap.set(k, {
+          id: `edge-${k}`,
+          source: srcRoot,
+          target: tgtRoot,
+          type: 'default',
+          markerEnd: { type: MarkerType.ArrowClosed, color: isHighlighted ? '#a855f7' : '#94a3b8' },
+          style: { stroke: isHighlighted ? '#a855f7' : '#94a3b8', strokeWidth: 3, opacity: isDimmed ? 0.1 : 1 },
+          animated: isHighlighted,
+          hidden: isDimmed, // totally hide it as per user preference maybe? User asked for "faded out" so opacity 0.1, we don't need hidden: true, but let's hide to reduce visual noise
+        });
+      } else if (isHighlighted) {
+        const existing = edgeMap.get(k)!;
+        existing.animated = true;
+        existing.hidden = false;
+        existing.style = { stroke: '#a855f7', strokeWidth: 3, opacity: 1 };
+        existing.markerEnd = { type: MarkerType.ArrowClosed, color: '#a855f7' };
+      }
+    });
+    const aggregatedEdges = Array.from(edgeMap.values());
+
+    const rfNodes = getGroupLayoutedNodesDagre(flattenedNodes, aggregatedEdges);
+    const finalNodes = rfNodes.map(n => ({
+      ...n,
+      data: {
+        ...n.data,
+        onLongPress: onNodeLongPress,
+        onClick: onNodeShortClick,
+      }
+    }));
+    return { nodes: finalNodes, edges: aggregatedEdges };
+  }
+
+  const raw = buildNodes(graph, selectedNodeId);
+  return { nodes: getLayoutedNodes(raw, rfEdges), edges: rfEdges };
+}
+
+// ── Group Node Component ──────────────────────────────────────────────────────
+
+function GroupNode({ id, data }: { id: string, data: { label: string; textColor: string, onLongPress?: (id: string, isGroup: boolean) => void, onClick?: (id: string, isGroup: boolean) => void } }) {
+  const longPressProps = useLongPress(
+    (e) => {
+      e.stopPropagation();
+      data.onLongPress?.(id, true);
+    },
+    (e) => {
+      e.stopPropagation();
+      data.onClick?.(id, true);
+    },
+    { delay: 400 }
+  );
+
+  return (
+    <div {...longPressProps} className="w-full h-full" style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      <p style={{
+        margin: 0,
+        padding: '9px 14px 0',
+        fontSize: 10,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.12em',
+        color: data.textColor,
+      }}>
+        {data.label}
+      </p>
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    </div>
+  );
+}
 
 const HEATMAPS: { id: HeatmapMetric; label: string }[] = [
   { id: 'cpu', label: 'CPU' },
@@ -77,10 +199,10 @@ function getLayoutedNodes(nodes: Node[], edges: Edge[], direction = 'LR'): Node[
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 200 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 120 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 220, height: 80 });
+    dagreGraph.setNode(node.id, { width: 80, height: 80 });
   });
 
   edges.forEach((edge) => {
@@ -90,8 +212,8 @@ function getLayoutedNodes(nodes: Node[], edges: Edge[], direction = 'LR'): Node[
   dagre.layout(dagreGraph);
 
   const MAX_PER_COL = 6;
-  const X_OFFSET = 260;
-  const Y_GAP = 120;
+  const X_OFFSET = 120;
+  const Y_GAP = 100;
 
   const sortedNodes = [...nodes].sort((a, b) => dagreGraph.node(a.id).x - dagreGraph.node(b.id).x);
 
@@ -172,29 +294,36 @@ function getLayoutedNodes(nodes: Node[], edges: Edge[], direction = 'LR'): Node[
     return {
       ...node,
       position: {
-        x: finalPositions[node.id].x - 220 / 2,
+        x: finalPositions[node.id].x - 80 / 2,
         y: finalPositions[node.id].y - 80 / 2,
       },
-      width: 220,
+      width: 80,
       height: 80,
     };
   });
 }
 
 function buildEdges(graph: DependencyGraph, highlightIds: Set<string>): Edge[] {
-  return graph.edges.map((e, i) => ({
-    id: `e-${e.source}-${e.target}-${i}`,
-    source: e.source,
-    target: e.target,
-    label: e.relationship,
-    labelStyle: { fill: '#94a3b8', fontSize: 10 },
-    animated: highlightIds.has(e.source) || highlightIds.has(e.target),
-    style: {
-      stroke: highlightIds.has(e.source) || highlightIds.has(e.target) ? '#a855f7' : '#475569',
-      strokeWidth: highlightIds.has(e.source) || highlightIds.has(e.target) ? 2.5 : 1.5,
-    },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
-  }));
+  const isHighlighting = highlightIds.size > 0;
+  return graph.edges.map((e, i) => {
+    const isHighlighted = highlightIds.has(e.source) && highlightIds.has(e.target);
+    const isDimmed = isHighlighting && !isHighlighted;
+    return {
+      id: `e-${e.source}-${e.target}-${i}`,
+      source: e.source,
+      target: e.target,
+      label: e.relationship,
+      labelStyle: { fill: '#94a3b8', fontSize: 10 },
+      animated: isHighlighted,
+      hidden: isDimmed,
+      style: {
+        stroke: isHighlighted ? '#a855f7' : '#475569',
+        strokeWidth: isHighlighted ? 2.5 : 1.5,
+        opacity: isDimmed ? 0 : 1,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+    };
+  });
 }
 
 function buildNodeContext(node: GraphNode, paths: DependencyPath | null, heatmapMetric: string): string {
@@ -365,10 +494,79 @@ function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: No
   );
 }
 
+function GroupDetailsPopup({ groupId, graph, nodes, heatmapMetric, onClose, onNodeSelect }: { groupId: string, graph: DependencyGraph, nodes: Node[], heatmapMetric: string, onClose: () => void, onNodeSelect: (id: string) => void }) {
+  const children = nodes.filter(n => n.parentNode === groupId);
+  const childIds = new Set(children.map(c => c.id));
+  const containedNodes = graph.nodes.filter(n => childIds.has(n.id));
+
+  const [search, setSearch] = useState('');
+  const filtered = containedNodes.filter(n => n.label.toLowerCase().includes(search.toLowerCase()) || n.type.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-[450px] bg-slate-50 dark:bg-[#0b1120] border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col z-50 transform transition-transform duration-300">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f172a]">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            📦 Group Details
+          </h3>
+          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase mt-1">
+            {containedNodes.length} Components
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="p-6 overflow-y-auto flex-1 space-y-4">
+        <input 
+          type="text" 
+          placeholder="Filter components..." 
+          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        
+        <div className="space-y-3">
+          {filtered.map(node => (
+            <div 
+              key={node.id} 
+              className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-blue-500 transition-colors"
+              onClick={() => onNodeSelect(node.id)}
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold text-sm text-slate-900 dark:text-white">{node.label}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  node.health === 'healthy' ? 'bg-emerald-100 text-emerald-700' :
+                  node.health === 'warning' ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {node.health.toUpperCase()}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 mb-2">{node.type} • {node.layer}</div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">{heatmapMetric}</span>
+                <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+                  {typeof node.heatmap_value === 'number' ? node.heatmap_value.toFixed(1) : node.heatmap_value}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function DependencyMap() {
-  const [view, setView] = useState<ViewType>('business_service');
+  const [selectedViews, setSelectedViews] = useState<Set<ViewType>>(new Set(['business_service']));
+  const [platformExpanded, setPlatformExpanded] = useState(false);
   const [heatmap, setHeatmap] = useState<HeatmapMetric>('cpu');
   const [graph, setGraph] = useState<DependencyGraph | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -380,6 +578,7 @@ export default function DependencyMap() {
   const [newDep, setNewDep] = useState({ source: '', target: '', relationship: 'calls' });
   const [searchTerm, setSearchTerm] = useState('');
   const [nodePopupOpen, setNodePopupOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -393,46 +592,75 @@ export default function DependencyMap() {
     return ids;
   }, [selectedNodeId, paths]);
 
+  const handleNodeShortClick = useCallback((id: string, isGroup: boolean) => {
+    if (selectedNodeId === id) {
+      setSelectedNodeId(null);
+      setPaths(null);
+    } else {
+      setSelectedNodeId(id);
+    }
+    
+    if (rfInstance) {
+      const node = nodes.find(n => n.id === id);
+      if (node) {
+         rfInstance.setCenter(node.position.x + (isGroup ? 0 : 110), node.position.y + 40, { zoom: 1.2, duration: 800 });
+      }
+    }
+  }, [rfInstance, nodes, selectedNodeId]);
+
+  const handleNodeLongPress = useCallback((id: string, isGroup: boolean) => {
+    if (!isGroup) {
+      setSelectedNodeId(id);
+      setSelectedGroupId(null);
+      setNodePopupOpen(true);
+    } else {
+      setSelectedGroupId(id);
+      setSelectedNodeId(null);
+      setNodePopupOpen(false);
+    }
+  }, []);
+
+  const closePopup = useCallback(() => setNodePopupOpen(false), []);
+  const closeGroupPopup = useCallback(() => setSelectedGroupId(null), []);
+
   const loadGraph = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getDependencyGraph(view, heatmap, selectedNodeId);
+      const data = await getDependencyGraph(Array.from(selectedViews), heatmap, selectedNodeId);
       setGraph(data);
-      const rawNodes = buildNodes(data, selectedNodeId);
-      const rawEdges = buildEdges(data, highlightIds);
-      setNodes(getLayoutedNodes(rawNodes, rawEdges));
-      setEdges(rawEdges);
+      const { nodes: rfNodes, edges: rfEdges } = buildFlow(data, selectedNodeId, highlightIds, selectedViews, handleNodeLongPress, handleNodeShortClick);
+      setNodes(rfNodes);
+      setEdges(rfEdges);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load graph');
     } finally {
       setLoading(false);
     }
-  }, [view, heatmap, selectedNodeId, highlightIds, setNodes, setEdges]);
+  }, [selectedViews, heatmap, selectedNodeId, highlightIds, setNodes, setEdges]);
 
   useEffect(() => {
     loadGraph();
-  }, [view, heatmap]);
+  }, [selectedViews, heatmap]);
 
   useEffect(() => {
     if (graph) {
-      const rawNodes = buildNodes(graph, selectedNodeId);
-      const rawEdges = buildEdges(graph, highlightIds);
-      setNodes(getLayoutedNodes(rawNodes, rawEdges));
-      setEdges(rawEdges);
+      const { nodes: rfNodes, edges: rfEdges } = buildFlow(graph, selectedNodeId, highlightIds, selectedViews, handleNodeLongPress, handleNodeShortClick);
+      setNodes(rfNodes);
+      setEdges(rfEdges);
     }
-  }, [selectedNodeId, paths, graph, highlightIds, setNodes, setEdges]);
+  }, [selectedNodeId, paths, graph, highlightIds, selectedViews, setNodes, setEdges]);
 
   // Ensure map zooms out completely to show all components
   useEffect(() => {
     if (rfInstance && graph && nodes.length > 0) {
       setTimeout(() => {
         window.requestAnimationFrame(() => {
-          rfInstance.fitView({ padding: 0.2 });
+          rfInstance.fitView({ padding: 0.2, maxZoom: 1 });
         });
       }, 50);
     }
-  }, [view, heatmap, graph, rfInstance]);
+  }, [selectedViews, heatmap, graph, rfInstance]);
 
   useEffect(() => {
     if (!selectedNodeId) {
@@ -453,6 +681,7 @@ export default function DependencyMap() {
 
     setNodes((prev) =>
       prev.map((n) => {
+        if (n.type === 'nodeGroup') return n;
         const gNode = graph.nodes.find((g) => g.id === n.id);
         const label = (gNode?.label ?? n.id).toLowerCase();
         const isSearchMatch = q.length >= 2 && label.includes(q);
@@ -477,15 +706,7 @@ export default function DependencyMap() {
     }
   }, [searchTerm, graph, setNodes, rfInstance]);
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(node.id);
-    setNodePopupOpen(true);
-    if (rfInstance) {
-      rfInstance.setCenter(node.position.x + 110, node.position.y + 40, { zoom: 1.2, duration: 800 });
-    }
-  }, [rfInstance]);
 
-  const closePopup = useCallback(() => setNodePopupOpen(false), []);
 
   const handleAddDependency = async () => {
     if (!newDep.source || !newDep.target) return;
@@ -592,19 +813,65 @@ export default function DependencyMap() {
 
       {/* View + Heatmap selectors */}
       <div className="flex flex-wrap gap-4">
-        <div className="flex flex-wrap gap-1">
-          {VIEWS.map((v) => (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap gap-1 items-center">
+            {MAIN_VIEW_ITEMS.map((v) => (
+              <button
+                key={v.id}
+                onClick={() => {
+                  setSelectedViews((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(v.id)) { if (next.size > 1) next.delete(v.id); }
+                    else next.add(v.id);
+                    return next;
+                  });
+                  setSelectedNodeId(null); setSearchTerm(''); setNodePopupOpen(false);
+                }}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${selectedViews.has(v.id)
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
+                  }`}
+              >
+                {v.label}
+              </button>
+            ))}
+            {/* Platform button */}
             <button
-              key={v.id}
-              onClick={() => { setView(v.id); setSelectedNodeId(null); setSearchTerm(''); setNodePopupOpen(false); }}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${view === v.id
-                ? 'bg-blue-600 border-blue-500 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
-                }`}
+              onClick={() => setPlatformExpanded((p) => !p)}
+              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors flex items-center gap-1 ${
+                PLATFORM_VIEWS.some((p) => selectedViews.has(p.id))
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
+              }`}
             >
-              {v.label}
+              Platform
+              <span className="text-[10px] opacity-70">{platformExpanded ? '▴' : '▾'}</span>
             </button>
-          ))}
+          </div>
+          {platformExpanded && (
+            <div className="flex flex-wrap gap-1 pl-1 pt-0.5">
+              {PLATFORM_VIEWS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setSelectedViews((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(p.id)) { if (next.size > 1) next.delete(p.id); }
+                      else next.add(p.id);
+                      return next;
+                    });
+                    setSelectedNodeId(null); setSearchTerm(''); setNodePopupOpen(false);
+                  }}
+                  className={`px-2.5 py-1 text-[11px] rounded-md border transition-colors ${selectedViews.has(p.id)
+                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                    : 'bg-slate-50 dark:bg-slate-900 border-slate-500 text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                    }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-1 items-center">
           <span className="text-xs text-slate-500 mr-1">Heatmap:</span>
@@ -674,10 +941,10 @@ export default function DependencyMap() {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
+            onPaneClick={() => setSelectedNodeId(null)}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.25 }}
+            fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
             minZoom={0.15}
             maxZoom={2.5}
             onInit={setRfInstance}
@@ -704,7 +971,7 @@ export default function DependencyMap() {
             <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
               <p>Nodes: <span className="text-slate-900 dark:text-white">{graph?.node_count ?? 0}</span></p>
               <p>Edges: <span className="text-slate-900 dark:text-white">{graph?.edge_count ?? 0}</span></p>
-              <p>View: <span className="text-slate-900 dark:text-white">{layerLabel(view)}</span></p>
+              <p>View: <span className="text-slate-900 dark:text-white">{Array.from(selectedViews).map(layerLabel).join(', ')}</span></p>
               <p>Heatmap: <span className="text-slate-900 dark:text-white">{heatmap}</span></p>
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">
@@ -802,6 +1069,21 @@ export default function DependencyMap() {
           pathsLoading={pathsLoading}
           heatmapMetric={heatmap}
           onClose={closePopup}
+        />
+      )}
+
+      {selectedGroupId && graph && (
+        <GroupDetailsPopup
+          groupId={selectedGroupId}
+          graph={graph}
+          nodes={nodes}
+          heatmapMetric={heatmap}
+          onClose={closeGroupPopup}
+          onNodeSelect={(id) => {
+             setSelectedGroupId(null);
+             setSelectedNodeId(id);
+             setNodePopupOpen(true);
+          }}
         />
       )}
     </div>

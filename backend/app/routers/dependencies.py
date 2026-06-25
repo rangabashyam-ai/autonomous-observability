@@ -17,12 +17,25 @@ LAYER_VIEW_MAP = {
     "application": ["application", "business_service"],
     "microservice": ["microservice", "application"],
     "infrastructure": ["platform", "network", "server", "rack"],
+    "aws": [],
+    "gcp": [],
+    "azure": [],
+    "on-prem-vmware": [],
+    "on-prem-physical": [],
 }
 
 
 def _get_all_nodes() -> dict[str, dict]:
     services_data = read_json("dependencies/services.json")
-    infra_data = read_json("dependencies/infrastructure.json")
+    infra_data    = read_json("dependencies/infrastructure.json")
+
+    if not services_data or not infra_data:
+        from app import parquet_store
+        if not services_data:
+            services_data = parquet_store.query("dependencies/services.json")
+        if not infra_data:
+            infra_data    = parquet_store.query("dependencies/infrastructure.json")
+
     nodes = {}
     for svc in services_data.get("services", []):
         nodes[svc["id"]] = svc
@@ -33,6 +46,9 @@ def _get_all_nodes() -> dict[str, dict]:
 
 def _get_edges() -> list[dict]:
     data = read_json("dependencies/dependency_graph.json")
+    if not data:
+        from app import parquet_store
+        data = parquet_store.query("dependencies/dependency_graph.json")
     return data.get("edges", [])
 
 
@@ -60,7 +76,14 @@ def get_dependency_graph(
 ):
     nodes_map = _get_all_nodes()
     edges = _get_edges()
-    allowed_layers = LAYER_VIEW_MAP.get(view, ["business_service", "application", "microservice"])
+    allowed_layers = set()
+    views = view.split(",")
+    for v in views:
+        layers = LAYER_VIEW_MAP.get(v, ["business_service", "application", "microservice"])
+        allowed_layers.update(layers)
+    
+    # We also need to keep track of platforms requested directly
+    requested_platforms = set(views)
 
     if focus_node and focus_node in nodes_map:
         connected = {focus_node}
@@ -78,7 +101,7 @@ def get_dependency_graph(
     else:
         filtered_nodes = {
             k: v for k, v in nodes_map.items()
-            if v.get("layer") in allowed_layers or v.get("type") in allowed_layers
+            if v.get("layer") in allowed_layers or v.get("type") in allowed_layers or v.get("platform") in requested_platforms
         }
 
     node_ids = set(filtered_nodes.keys())
@@ -99,6 +122,7 @@ def get_dependency_graph(
             "health": node.get("health", _health_from_metric(heat_value)),
             "metrics": metrics,
             "heatmap_value": heat_value,
+            "platform": node.get("platform"),
         })
 
     return {

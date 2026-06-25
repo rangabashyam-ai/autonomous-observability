@@ -6,14 +6,31 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, rca_engine
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
+def _warm_parquet_cache() -> None:
+    """Pre-load parquet files into memory so the first HTTP request is instant."""
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        from app import parquet_store
+        log.info("[startup] Pre-warming parquet cache...")
+        parquet_store._svc_host_map()
+        parquet_store._metric_app()
+        parquet_store._metric_cpu()
+        log.info("[startup] Parquet cache ready.")
+    except Exception as exc:
+        log.warning(f"[startup] Parquet pre-warm failed (non-fatal): {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start background scheduler on startup; stop it on shutdown."""
+    import asyncio, logging
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _warm_parquet_cache)
     from app.integrations.scheduler import start_scheduler, stop_scheduler
     start_scheduler()
     yield
@@ -42,6 +59,7 @@ app.include_router(intelligence.router)
 app.include_router(admin.router)
 app.include_router(copilot.router)
 app.include_router(integrations.router)
+app.include_router(rca_engine.router)
 
 
 @app.get("/api/health")
