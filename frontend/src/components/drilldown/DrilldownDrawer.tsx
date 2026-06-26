@@ -1,4 +1,4 @@
-import { X, ExternalLink, AlertTriangle, TrendingUp, Activity, Zap } from 'lucide-react';
+import { X, ExternalLink, AlertTriangle, TrendingUp, Activity, Zap, ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface DrilldownDrawerProps {
@@ -10,11 +10,12 @@ interface DrilldownDrawerProps {
   health?: 'healthy' | 'warning' | 'critical';
   children: ReactNode;
   actions?: ReactNode;
+  onBack?: () => void;
 }
 
 function getHealthBadge(health?: string) {
   if (!health) return null;
-  
+
   const styles = {
     healthy: 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/40',
     warning: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40',
@@ -58,6 +59,7 @@ export default function DrilldownDrawer({
   health,
   children,
   actions,
+  onBack,
 }: DrilldownDrawerProps) {
   if (!isOpen) return null;
 
@@ -75,6 +77,15 @@ export default function DrilldownDrawer({
         <div className="sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-6 z-10">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors mr-1 cursor-pointer"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                </button>
+              )}
               <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400">
                 {getTypeIcon(type)}
               </div>
