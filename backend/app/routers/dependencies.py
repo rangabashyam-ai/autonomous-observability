@@ -1,11 +1,12 @@
 import csv
 import io
+from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from app.data_store import read_json, write_json
-from app.models import DependencyEdgeCreate, DependencyUploadJSON
+from app.models import DependencyEdgeCreate, DependencyUploadJSON, NodeCreate
 
 router = APIRouter(prefix="/api/dependencies", tags=["dependencies"])
 
@@ -17,12 +18,27 @@ LAYER_VIEW_MAP = {
     "application": ["application", "business_service"],
     "microservice": ["microservice", "application"],
     "infrastructure": ["platform", "network", "server", "rack"],
+    "aws": [],
+    "gcp": [],
+    "azure": [],
+    "on-prem-vmware": [],
+    "on-prem-physical": [],
 }
 
 
+@lru_cache(maxsize=1)
 def _get_all_nodes() -> dict[str, dict]:
+    """Load node data from pre-built JSON files (cached in-process after first call)."""
     services_data = read_json("dependencies/services.json")
-    infra_data = read_json("dependencies/infrastructure.json")
+    infra_data    = read_json("dependencies/infrastructure.json")
+
+    if not services_data or not infra_data:
+        from app import parquet_store
+        if not services_data:
+            services_data = parquet_store.query("dependencies/services.json")
+        if not infra_data:
+            infra_data    = parquet_store.query("dependencies/infrastructure.json")
+
     nodes = {}
     for svc in services_data.get("services", []):
         nodes[svc["id"]] = svc
@@ -31,9 +47,28 @@ def _get_all_nodes() -> dict[str, dict]:
     return nodes
 
 
+@lru_cache(maxsize=1)
 def _get_edges() -> list[dict]:
+    """Load edges from pre-built JSON file (cached in-process after first call)."""
     data = read_json("dependencies/dependency_graph.json")
+    if not data:
+        from app import parquet_store
+        data = parquet_store.query("dependencies/dependency_graph.json")
     return data.get("edges", [])
+
+
+_SERVICE_LAYERS = {'business_service', 'application', 'microservice'}
+
+
+def _save_nodes_to_files(nodes_map: dict[str, dict]) -> None:
+    """Persist all nodes back to JSON files and clear the in-process cache."""
+    from datetime import datetime
+    ts = datetime.utcnow().isoformat() + "Z"
+    services = [v for v in nodes_map.values() if v.get("layer") in _SERVICE_LAYERS]
+    infra = [v for v in nodes_map.values() if v.get("layer") not in _SERVICE_LAYERS]
+    write_json("dependencies/services.json", {"services": services, "generated_at": ts})
+    write_json("dependencies/infrastructure.json", {"nodes": infra, "generated_at": ts})
+    _get_all_nodes.cache_clear()
 
 
 def _save_edges(edges: list[dict]) -> None:
@@ -42,6 +77,7 @@ def _save_edges(edges: list[dict]) -> None:
         "edges": edges,
         "generated_at": datetime.utcnow().isoformat() + "Z",
     })
+    _get_edges.cache_clear()  # invalidate in-process cache after manual edit
 
 
 def _health_from_metric(value: float) -> str:
@@ -60,7 +96,14 @@ def get_dependency_graph(
 ):
     nodes_map = _get_all_nodes()
     edges = _get_edges()
-    allowed_layers = LAYER_VIEW_MAP.get(view, ["business_service", "application", "microservice"])
+    allowed_layers = set()
+    views = view.split(",")
+    for v in views:
+        layers = LAYER_VIEW_MAP.get(v, ["business_service", "application", "microservice"])
+        allowed_layers.update(layers)
+    
+    # We also need to keep track of platforms requested directly
+    requested_platforms = set(views)
 
     if focus_node and focus_node in nodes_map:
         connected = {focus_node}
@@ -78,7 +121,7 @@ def get_dependency_graph(
     else:
         filtered_nodes = {
             k: v for k, v in nodes_map.items()
-            if v.get("layer") in allowed_layers or v.get("type") in allowed_layers
+            if v.get("layer") in allowed_layers or v.get("type") in allowed_layers or v.get("platform") in requested_platforms
         }
 
     node_ids = set(filtered_nodes.keys())
@@ -99,6 +142,7 @@ def get_dependency_graph(
             "health": node.get("health", _health_from_metric(heat_value)),
             "metrics": metrics,
             "heatmap_value": heat_value,
+            "platform": node.get("platform"),
         })
 
     return {
@@ -192,6 +236,25 @@ def list_nodes(layer: Optional[str] = None):
     if layer:
         nodes = [n for n in nodes if n.get("layer") == layer]
     return {"nodes": nodes, "count": len(nodes)}
+
+
+@router.post("/nodes")
+def add_node(node: NodeCreate):
+    """Upsert a node into the dependency graph JSON files."""
+    nodes_map = dict(_get_all_nodes())
+    new_node: dict = {
+        "id": node.id,
+        "name": node.name,
+        "type": node.type,
+        "layer": node.layer,
+        "health": node.health,
+        "metrics": node.metrics or {},
+    }
+    if node.platform:
+        new_node["platform"] = node.platform
+    nodes_map[node.id] = new_node
+    _save_nodes_to_files(nodes_map)
+    return {"message": "Node saved", "node": new_node}
 
 
 @router.get("/edges")

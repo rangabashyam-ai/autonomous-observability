@@ -18,6 +18,8 @@ export interface GraphNode {
   health: 'healthy' | 'warning' | 'critical';
   metrics: NodeMetrics;
   heatmap_value: number;
+  platform?: string;
+  region?: string;
 }
 
 export interface GraphEdge {
@@ -101,15 +103,15 @@ export type ViewType =
   | 'business_service'
   | 'application'
   | 'microservice'
-  | 'infrastructure';
+  | 'infrastructure'
+  | 'on-prem-vmware'
+  | 'on-prem-physical'
+  | 'aws'
+  | 'gcp'
+  | 'azure';
 
 export type HeatmapMetric =
-  | 'cpu'
-  | 'memory'
-  | 'storage'
-  | 'io'
-  | 'network'
   | 'latency'
-  | 'error_rate'
-  | 'incident_count'
-  | 'risk_score';
+  | 'traffic'
+  | 'errors'
+  | 'saturation';

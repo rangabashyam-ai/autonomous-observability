@@ -31,13 +31,19 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 // --- Dependencies ---
 export async function getDependencyGraph(
-  view: ViewType,
+  views: ViewType[],
   heatmap: HeatmapMetric,
   focusNode?: string | null
 ): Promise<DependencyGraph> {
-  const params = new URLSearchParams({ view, heatmap });
+  const params = new URLSearchParams({ view: views.join(','), heatmap });
   if (focusNode) params.set('focus_node', focusNode);
-  return fetchJson(`${BASE}/dependencies/graph?${params}`);
+  
+  try {
+    const result = await fetchJson<DependencyGraph>(`${BASE}/dependencies/graph?${params}`);
+    return result;
+  } catch (err) {
+    return { view: views.join(','), heatmap, focus_node: focusNode ?? null, nodes: [], edges: [], node_count: 0, edge_count: 0 };
+  }
 }
 
 export async function getDependencyPaths(nodeId: string): Promise<DependencyPath> {
@@ -50,6 +56,31 @@ export async function addDependency(source: string, target: string, relationship
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source, target, relationship }),
   });
+}
+
+export async function addCustomNode(node: {
+  id: string; name: string; type: string; layer: string; platform?: string;
+}) {
+  try {
+    await fetchJson(`${BASE}/dependencies/nodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ health: 'healthy', metrics: {}, ...node }),
+    });
+  } catch {
+    // best-effort — the node is already visible in the UI
+  }
+}
+
+export async function listAllNodes(): Promise<{ id: string; name: string; type: string; layer: string; platform?: string }[]> {
+  try {
+    const data = await fetchJson<{ nodes: { id: string; name: string; type: string; layer: string; platform?: string }[] }>(
+      `${BASE}/dependencies/nodes`
+    );
+    return data.nodes;
+  } catch {
+    return [];
+  }
 }
 
 export async function deleteDependency(source: string, target: string) {
@@ -160,6 +191,59 @@ export async function getIncidentChangeRequests(id: string): Promise<{
   return fetchJson(`${BASE}/incidents/${id}/change-requests`);
 }
 
+export async function getIncidentSloBurn(
+  id: string,
+  sloTarget = 99.9
+): Promise<import('../types/intelligence').IncidentSloBurn> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/slo-burn?slo_target=${sloTarget}`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('SLO burn query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getIncidentRunbook(id: string): Promise<import('../types/intelligence').IncidentRunbook> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/runbook`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Runbook query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function resolveIncident(
+  id: string,
+  notes?: string
+): Promise<import('../types/intelligence').Incident> {
+  return fetchJson(`${BASE}/incidents/${id}/resolve`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resolution_notes: notes ?? '' }),
+  });
+}
+
+export async function getIncidentTelemetry(id: string): Promise<import('../types/intelligence').IncidentTelemetry> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/telemetry`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Telemetry query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function analyzeRCA(body: {
   alerts: string[];
   symptoms: string[];
@@ -172,6 +256,47 @@ export async function analyzeRCA(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export type RCAWindowResult = {
+  timestamp: number;
+  component: string;
+  reason: string;
+  confidence: number;
+  evidence: string[];
+  datetime_utc8: string;
+  llm_analysis: string;
+};
+
+export type RCAWindowResponse = {
+  results: RCAWindowResult[];
+  window_start: number;
+  window_end: number;
+  analysis_time_ms: number;
+};
+
+export async function analyzeRCAWindow(body: {
+  t_start: number;
+  t_end: number;
+  num_failures?: number;
+  use_traces?: boolean;
+  use_llm?: boolean;
+}): Promise<RCAWindowResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    return await fetchJson<RCAWindowResponse>(`${BASE}/rca/window`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ num_failures: 1, use_traces: false, use_llm: false, ...body }),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('RCA analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeRCAWithAgent(body: {
@@ -197,6 +322,38 @@ export async function analyzeRCAWithAgent(body: {
   }
 }
 
+export async function clearIncidentChatMemory(incidentId: string): Promise<void> {
+  try {
+    await fetchJson(`${BASE}/agents/incident-chat/${encodeURIComponent(incidentId)}/memory`, {
+      method: 'DELETE',
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+export async function askIncidentChat(body: {
+  incident_id: string;
+  question: string;
+  history: { role: string; content: string }[];
+}): Promise<{ answer: string | null; tools_called: string[]; error: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    return await fetchJson(`${BASE}/agents/incident-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Response timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function askReportChat(body: {
   question: string;
   report_context: string;
@@ -204,7 +361,7 @@ export async function askReportChat(body: {
   history: { role: string; content: string }[];
 }): Promise<{ answer: string | null; error: string | null }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 32000);
+  const timer = setTimeout(() => controller.abort(), 55000);
   try {
     return await fetchJson(`${BASE}/agents/report-chat`, {
       method: 'POST',
@@ -217,6 +374,23 @@ export async function askReportChat(body: {
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+export async function fetchIncidentTelemetry(
+  tStart: number,
+  tEnd: number,
+  entities: string[],
+): Promise<Record<string, any>> {
+  const params = new URLSearchParams({
+    t_start: String(tStart),
+    t_end: String(tEnd),
+    entities: entities.join(','),
+  });
+  try {
+    return await fetchJson(`${BASE}/rca/incident-telemetry?${params}`);
+  } catch {
+    return {};
   }
 }
 

@@ -112,6 +112,69 @@ def report_chat(req: ReportChatRequest):
     )
 
 
+class IncidentChatRequest(BaseModel):
+    incident_id: str
+    question: str
+    history: list[dict] = []
+
+
+@router.post("/agents/incident-chat")
+def incident_chat(req: IncidentChatRequest):
+    """
+    Agentic chat for an incident: the LLM reasons about which telemetry
+    tool to call (metrics / logs / traces / host_cpu / slo_burn), runs it
+    server-side, and returns the final answer together with the tools used.
+
+    Supports two incident ID formats:
+      INC-0001 … INC-0136  → bank sentinel incidents (openRCA_Bank/incidents/)
+      IN-XXXX / INC-1XXX   → parquet/CSV incidents
+    """
+    from app.routers.incidents import (
+        _find_incident, _parse_ts,
+        _load_bank_incident, resolve_bank_incident_meta,
+    )
+    from app.agents.incident_chat_agent import run_incident_chat
+
+    meta: dict | None = None
+
+    # Try bank incident JSON first (INC-0001 … INC-0136 pattern)
+    bank_raw = _load_bank_incident(req.incident_id)
+    if bank_raw:
+        meta = resolve_bank_incident_meta(bank_raw)
+    else:
+        # Fall back to CSV/parquet incident store
+        incident = _find_incident(req.incident_id)
+        if not incident:
+            return {"answer": None, "tools_called": [], "error": f"Incident {req.incident_id} not found"}
+
+        start_ts = _parse_ts(incident.get("parquet_start_time") or incident.get("start_time", ""))
+        end_ts   = _parse_ts(incident.get("parquet_end_time")   or incident.get("end_time", ""))
+        if end_ts <= start_ts:
+            end_ts = start_ts + 7200
+
+        meta = {
+            "title":               incident.get("title", ""),
+            "service":             incident.get("service") or incident.get("service_id", ""),
+            "severity":            incident.get("severity", ""),
+            "root_cause":          incident.get("root_cause", ""),
+            "impacted_components": incident.get("impacted_components", []),
+            "start_time":          incident.get("start_time", ""),
+            "end_time":            incident.get("end_time", ""),
+            "start_ts":            start_ts,
+            "end_ts":              end_ts,
+        }
+
+    return run_incident_chat(req.incident_id, req.question, req.history, meta)
+
+
+@router.delete("/agents/incident-chat/{incident_id}/memory")
+def clear_incident_memory(incident_id: str):
+    """Clear server-side conversation memory for this incident."""
+    from app.agents.incident_chat_agent import clear_memory
+    clear_memory(incident_id)
+    return {"cleared": True, "incident_id": incident_id}
+
+
 @router.post("/blast-radius/analyze")
 def blast_radius_analyze(req: BlastRadiusRequest):
     return analyze_blast_radius(

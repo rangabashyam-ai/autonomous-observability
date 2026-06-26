@@ -31,7 +31,7 @@ export default function ExecutiveCommandCenter() {
   }, []);
 
   const exec = monitoring?.executive;
-  const services = monitoring?.service.services ?? [];
+  const services = monitoring?.service?.services ?? [];
 
   const businessHealth = useMemo(() => {
     if (!exec) return 0;
@@ -87,7 +87,7 @@ export default function ExecutiveCommandCenter() {
 
   useRegisterCopilotContext(copilotContext);
 
-  if (!monitoring || !overview) {
+  if (!monitoring || !overview || !exec) {
     return <p className="text-text-secondary text-sm">Loading executive command center...</p>;
   }
 
