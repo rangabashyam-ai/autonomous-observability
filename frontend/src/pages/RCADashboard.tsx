@@ -322,7 +322,7 @@ export default function RCADashboard() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Bank RCA Incidents" description="Loading incidents…" />
+        <PageHeader title="Root Cause Analysis" description="Loading incidents…" />
         <p className="py-12 text-center text-slate-400 dark:text-slate-500">Loading…</p>
       </div>
     );
@@ -331,7 +331,7 @@ export default function RCADashboard() {
   return (
     <div className="flex flex-col h-[calc(100vh-80px)]">
       <PageHeader
-        title="Bank RCA Incidents"
+        title="Root Cause Analysis"
         description="Select an incident to view full details and run root cause analysis"
       />
 

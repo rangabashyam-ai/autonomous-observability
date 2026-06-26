@@ -58,6 +58,31 @@ export async function addDependency(source: string, target: string, relationship
   });
 }
 
+export async function addCustomNode(node: {
+  id: string; name: string; type: string; layer: string; platform?: string;
+}) {
+  try {
+    await fetchJson(`${BASE}/dependencies/nodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ health: 'healthy', metrics: {}, ...node }),
+    });
+  } catch {
+    // best-effort — the node is already visible in the UI
+  }
+}
+
+export async function listAllNodes(): Promise<{ id: string; name: string; type: string; layer: string; platform?: string }[]> {
+  try {
+    const data = await fetchJson<{ nodes: { id: string; name: string; type: string; layer: string; platform?: string }[] }>(
+      `${BASE}/dependencies/nodes`
+    );
+    return data.nodes;
+  } catch {
+    return [];
+  }
+}
+
 export async function deleteDependency(source: string, target: string) {
   const params = new URLSearchParams({ source, target });
   await fetchJson(`${BASE}/dependencies/edges?${params}`, { method: 'DELETE' });
@@ -297,6 +322,38 @@ export async function analyzeRCAWithAgent(body: {
   }
 }
 
+export async function clearIncidentChatMemory(incidentId: string): Promise<void> {
+  try {
+    await fetchJson(`${BASE}/agents/incident-chat/${encodeURIComponent(incidentId)}/memory`, {
+      method: 'DELETE',
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+export async function askIncidentChat(body: {
+  incident_id: string;
+  question: string;
+  history: { role: string; content: string }[];
+}): Promise<{ answer: string | null; tools_called: string[]; error: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    return await fetchJson(`${BASE}/agents/incident-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Response timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function askReportChat(body: {
   question: string;
   report_context: string;
@@ -304,7 +361,7 @@ export async function askReportChat(body: {
   history: { role: string; content: string }[];
 }): Promise<{ answer: string | null; error: string | null }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 32000);
+  const timer = setTimeout(() => controller.abort(), 55000);
   try {
     return await fetchJson(`${BASE}/agents/report-chat`, {
       method: 'POST',
@@ -317,6 +374,23 @@ export async function askReportChat(body: {
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+export async function fetchIncidentTelemetry(
+  tStart: number,
+  tEnd: number,
+  entities: string[],
+): Promise<Record<string, any>> {
+  const params = new URLSearchParams({
+    t_start: String(tStart),
+    t_end: String(tEnd),
+    entities: entities.join(','),
+  });
+  try {
+    return await fetchJson(`${BASE}/rca/incident-telemetry?${params}`);
+  } catch {
+    return {};
   }
 }
 

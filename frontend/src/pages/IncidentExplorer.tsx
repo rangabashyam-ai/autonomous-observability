@@ -4,7 +4,7 @@ import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeR
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Incident, IncidentClickAnalysis, ComponentMetrics, IncidentTelemetry, IncidentRunbook, IncidentSloBurn } from '../types/intelligence';
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary, StatCard } from '../components/ui';
-import { analyzeRCAWindow } from '../api/client';
+import { analyzeRCAWindow, fetchIncidentTelemetry } from '../api/client';
 import type { RCAWindowResult } from '../api/client';
 import { ReportChat } from '../components/ReportChat';
 
@@ -1725,6 +1725,14 @@ export function BankRCAPanel({ timeWindow }: { timeWindow: { start: string; end:
   const [results, setResults] = useState<RCAWindowResult[]>([]);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowModal(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showModal]);
 
   const runRCA = () => {
     const t_start = Math.floor(new Date(timeWindow.start).getTime() / 1000);
@@ -1733,142 +1741,183 @@ export function BankRCAPanel({ timeWindow }: { timeWindow: { start: string; end:
     setResults([]);
     setErrorMsg('');
     analyzeRCAWindow({ t_start, t_end, num_failures: 1, use_llm: true })
-      .then((res) => { setResults(res.results); setElapsedMs(res.analysis_time_ms); setStatus('done'); })
+      .then((res) => {
+        setResults(res.results);
+        setElapsedMs(res.analysis_time_ms);
+        setStatus('done');
+        if (res.results.length > 0) setShowModal(true);
+      })
       .catch((e: Error) => { setErrorMsg(e.message ?? 'Analysis failed'); setStatus('error'); });
   };
 
-  return (
-    <div className="border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          RCA Analysis
-        </p>
-        {status === 'done' && results.length > 0 && (
-          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{elapsedMs.toFixed(0)} ms</span>
+  const ResultCard = ({ r, idx }: { r: RCAWindowResult; idx: number }) => {
+    const displayReason = cleanReason(r.reason);
+    const color = REASON_COLOR[displayReason] ?? DEFAULT_REASON_COLOR;
+    const parsedEvidence = r.evidence.map(parseEvidenceSignal);
+    const explanation = r.llm_analysis && !isRawDump(r.llm_analysis) ? r.llm_analysis : null;
+    return (
+      <div className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden`}>
+        <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+          <span className="shrink-0 w-6 h-6 rounded-full bg-white dark:bg-black/30 border border-current/30 flex items-center justify-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
+            {idx + 1}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-bold font-mono ${color.text}`}>{r.component}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${color.badge}`}>
+                {displayReason}
+              </span>
+            </div>
+            {r.datetime_utc8 && (
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                Peak anomaly at {r.datetime_utc8}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Confidence</span>
+          </div>
+          <ConfBar value={r.confidence} />
+        </div>
+        {parsedEvidence.some(Boolean) && (
+          <div className="border-t border-current/10 px-3 py-2">
+            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+              Evidence Signals ({r.evidence.length})
+            </p>
+            <div className="space-y-1">
+              {parsedEvidence.map((parsed, ei) =>
+                !parsed ? (
+                  <div key={ei} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                    {r.evidence[ei]}
+                  </div>
+                ) : (
+                  <div key={ei} className="flex items-center gap-2 bg-white/60 dark:bg-black/20 rounded-lg px-2 py-1">
+                    <span className="text-[10px] font-mono font-semibold text-slate-700 dark:text-slate-200 shrink-0 min-w-[80px]">
+                      {parsed.kpi}
+                    </span>
+                    <span className="flex-1 text-[10px] text-slate-600 dark:text-slate-300 truncate">
+                      {parsed.reason}
+                    </span>
+                    {parsed.zscore && <ZBadge z={parsed.zscore} />}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+        {explanation && (
+          <div className="border-t border-current/10 px-3 py-2.5">
+            <div className="flex items-start gap-2">
+              <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed italic">{explanation}</p>
+            </div>
+          </div>
         )}
       </div>
+    );
+  };
 
-      {/* Run button */}
-      <button
-        onClick={runRCA}
-        disabled={status === 'loading'}
-        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60 transition-colors"
-      >
-        {status === 'loading' ? (
-          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Analyzing…</>
-        ) : (
-          <>
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-            {status === 'done' ? 'Re-run RCA' : 'Run RCA Analysis'}
-          </>
-        )}
-      </button>
-
-      {/* Error */}
-      {status === 'error' && (
-        <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">
-          {errorMsg}
-        </div>
-      )}
-
-      {/* No results */}
-      {status === 'done' && results.length === 0 && (
-        <p className="text-[11px] text-slate-400 italic">No anomalies detected in this time window.</p>
-      )}
-
-      {/* Results */}
-      {status === 'done' && results.length > 0 && (
-        <div className="space-y-3">
-          {results.map((r, idx) => {
-            const displayReason = cleanReason(r.reason);
-            const color = REASON_COLOR[displayReason] ?? DEFAULT_REASON_COLOR;
-            const parsedEvidence = r.evidence.map(parseEvidenceSignal);
-            const explanation = r.llm_analysis && !isRawDump(r.llm_analysis) ? r.llm_analysis : null;
-
-            return (
-              <div key={idx} className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden`}>
-
-                {/* Card header */}
-                <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-white dark:bg-black/30 border border-current/30 flex items-center justify-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                    {idx + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-bold font-mono ${color.text}`}>{r.component}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${color.badge}`}>
-                        {displayReason}
-                      </span>
-                    </div>
-                    {r.datetime_utc8 && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
-                        Peak anomaly at {r.datetime_utc8}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Confidence */}
-                <div className="px-3 pb-2">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Confidence</span>
-                  </div>
-                  <ConfBar value={r.confidence} />
-                </div>
-
-                {/* Evidence signals */}
-                {parsedEvidence.some(Boolean) && (
-                  <div className="border-t border-current/10 px-3 py-2">
-                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                      Evidence Signals ({r.evidence.length})
-                    </p>
-                    <div className="space-y-1">
-                      {parsedEvidence.map((parsed, ei) => {
-                        if (!parsed) {
-                          return (
-                            <div key={ei} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                              {r.evidence[ei]}
-                            </div>
-                          );
-                        }
-                        return (
-                          <div key={ei} className="flex items-center gap-2 bg-white/60 dark:bg-black/20 rounded-lg px-2 py-1">
-                            <span className="text-[10px] font-mono font-semibold text-slate-700 dark:text-slate-200 shrink-0 min-w-[80px]">
-                              {parsed.kpi}
-                            </span>
-                            <span className="flex-1 text-[10px] text-slate-600 dark:text-slate-300 truncate">
-                              {parsed.reason}
-                            </span>
-                            {parsed.zscore && <ZBadge z={parsed.zscore} />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* AI Explanation */}
-                {explanation && (
-                  <div className="border-t border-current/10 px-3 py-2.5">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed italic">
-                        {explanation}
-                      </p>
-                    </div>
-                  </div>
-                )}
+  return (
+    <>
+      {/* Results modal */}
+      {showModal && results.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="relative z-10 w-full max-w-2xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">RCA Analysis Results</h2>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                  {results.length} finding{results.length !== 1 ? 's' : ''} · {elapsedMs.toFixed(0)} ms
+                </span>
               </div>
-            );
-          })}
+              <button
+                onClick={() => setShowModal(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Modal body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {results.map((r, idx) => <ResultCard key={idx} r={r} idx={idx} />)}
+            </div>
+            {/* Modal footer */}
+            <div className="shrink-0 px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                Investigation window: {timeWindow.start.replace('T', ' ')} — {timeWindow.end.replace('T', ' ')}
+              </span>
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+
+      {/* Inline trigger area */}
+      <div className="border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            RCA Analysis
+          </p>
+          {status === 'done' && results.length > 0 && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            >
+              View results →
+            </button>
+          )}
+        </div>
+
+        <button
+          onClick={runRCA}
+          disabled={status === 'loading'}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60 transition-colors"
+        >
+          {status === 'loading' ? (
+            <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Analyzing…</>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              {status === 'done' ? 'Re-run RCA' : 'Run RCA Analysis'}
+            </>
+          )}
+        </button>
+
+        {status === 'error' && (
+          <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">
+            {errorMsg}
+          </div>
+        )}
+
+        {status === 'done' && results.length === 0 && (
+          <p className="text-[11px] text-slate-400 italic">No anomalies detected in this time window.</p>
+        )}
+
+        {status === 'done' && results.length > 0 && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {results.length} anomal{results.length === 1 ? 'y' : 'ies'} detected — results shown in popup.
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -1885,21 +1934,114 @@ function buildBankIncidentContext(inc: BankIncident): string {
     `ALERT_COUNT: ${inc.alerts.count}`,
   ];
   if (inc.alerts.items.length > 0) {
-    lines.push('TOP_ALERTS:');
+    lines.push('ALERT_SAMPLES:');
     const top = inc.alerts.items
       .slice()
       .sort((a, b) => (a.severity < b.severity ? -1 : 1))
       .slice(0, 10);
     top.forEach((a) => {
       const comp = a.alertRule.split('-').slice(1, -1).join('-');
-      lines.push(`  [${a.severity}] ${comp}: ${a.description}`);
+      lines.push(`  [${a.severity}][${a.signalType}] ${comp}: ${a.description}`);
     });
   }
   return lines.join('\n');
 }
 
+function buildTelemetryContext(tel: Record<string, any>): string {
+  if (!tel || Object.keys(tel).length === 0) return '';
+  const lines: string[] = ['', '=== TELEMETRY (live parquet scan) ==='];
+
+  // Metrics
+  const metrics: any[] = tel.metrics ?? [];
+  if (metrics.length > 0) {
+    lines.push('METRICS (metric_app — per service):');
+    metrics.forEach((m: any) => {
+      lines.push(
+        `  ${m.service}: sr_avg=${m.avg_success_rate_pct}% sr_min=${m.min_success_rate_pct}% ` +
+        `rps=${m.avg_request_rate_rps} mrt_avg=${m.avg_response_time_ms}ms mrt_max=${m.max_response_time_ms}ms ` +
+        `error_ivl=${m.error_intervals}/${m.samples} slow_ivl=${m.slow_intervals}/${m.samples} ` +
+        `total_reqs=${m.total_requests} worst_sr_at=${m.worst_sr_at}`
+      );
+    });
+  } else {
+    lines.push('METRICS: no service metrics in this window');
+  }
+
+  // Infra
+  const infra: any[] = tel.infra_metrics ?? [];
+  if (infra.length > 0) {
+    lines.push('INFRA_METRICS (metric_container — CPU per host):');
+    infra.slice(0, 8).forEach((h: any) => {
+      lines.push(
+        `  ${h.host}: cpu_avg=${h.avg_cpu_pct}% cpu_max=${h.max_cpu_pct}% ` +
+        `high_cpu_intervals=${h.high_cpu_intervals}/${h.samples}`
+      );
+    });
+  }
+
+  // Logs
+  const logs = tel.logs ?? {};
+  if (logs.error) {
+    lines.push(`LOGS: scan error — ${logs.error}`);
+  } else if (logs.total_entries != null) {
+    lines.push(
+      `LOGS (log_service): total=${logs.total_entries} across ${logs.unique_hosts} hosts, ` +
+      `error_entries=${logs.error_entries} (${logs.error_rate_pct}% error rate)`
+    );
+    const topErr = (logs.top_log_types ?? []).filter((t: any) => t.is_error).slice(0, 6);
+    if (topErr.length > 0) {
+      lines.push('  Top error log types:');
+      topErr.forEach((t: any) => lines.push(`    [${t.host}] ${t.log_type} ×${t.count}`));
+    }
+    const topInfo = (logs.top_log_types ?? []).filter((t: any) => !t.is_error).slice(0, 4);
+    if (topInfo.length > 0) {
+      lines.push('  Top info log types:');
+      topInfo.forEach((t: any) => lines.push(`    [${t.host}] ${t.log_type} ×${t.count}`));
+    }
+  } else {
+    lines.push('LOGS: no log data in this window');
+  }
+
+  // Traces
+  const traces = tel.traces ?? {};
+  if (traces.error) {
+    lines.push(`TRACES: scan error — ${traces.error}`);
+  } else if (traces.total_spans != null && traces.total_spans > 0) {
+    lines.push(
+      `TRACES (trace_span): total_spans=${traces.total_spans} unique_traces=${traces.unique_traces} ` +
+      `avg=${traces.avg_duration_ms}ms median=${traces.median_duration_ms}ms ` +
+      `p95=${traces.p95_duration_ms}ms p99=${traces.p99_duration_ms}ms max=${traces.max_duration_ms}ms`
+    );
+    lines.push(
+      `  slow_spans(>p95)=${traces.slow_span_count} (${traces.slow_span_pct}%) ` +
+      `hosts_with_slow_spans=${(traces.hosts_with_slow_spans ?? []).join(', ') || 'none'}`
+    );
+    if ((traces.spans_per_host ?? []).length > 0) {
+      lines.push('  span_count_per_host: ' +
+        traces.spans_per_host.slice(0, 5).map((h: any) => `${h.host}=${h.span_count}`).join(', '));
+    }
+  } else {
+    lines.push('TRACES: no trace spans in this window');
+  }
+
+  lines.push('=== END TELEMETRY ===');
+  return lines.join('\n');
+}
+
 function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClose: () => void }) {
   const [showFullDetails, setShowFullDetails] = useState(false);
+  const [telemetry, setTelemetry] = useState<Record<string, any>>({});
+  const [telLoading, setTelLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch live telemetry for this incident's time window
+    const tStart = Math.floor(new Date(incident.timeWindow.start).getTime() / 1000);
+    const tEnd   = Math.floor(new Date(incident.timeWindow.end).getTime()   / 1000);
+    setTelLoading(true);
+    fetchIncidentTelemetry(tStart, tEnd, incident.entities)
+      .then((data) => { setTelemetry(data); setTelLoading(false); })
+      .catch(() => setTelLoading(false));
+  }, [incident.incidentId]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -2021,12 +2163,15 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
             <ReportChat
               reportContext={buildBankIncidentContext(incident)}
               reportType="bank_incident"
-              subtitle="Scoped to Incidents"
+              incidentId={incident.incidentId}
+              subtitle="Metrics · Logs · Traces · Incidents"
               entityName={`Incident ${incident.incidentId}`}
               suggestedQuestions={[
                 'Summarize this incident',
+                'Which service had the most errors?',
+                'Were there any slow traces?',
+                'Show me log error patterns',
                 'What is the root cause?',
-                'Which components are most affected?',
                 'How can I resolve this?',
               ]}
             />
@@ -2436,16 +2581,22 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
             )}
           </div>
 
-          {/* Chat — only once analysis has loaded */}
-          {!analysisLoading && analysis && (
-            <ReportChat
-              reportContext={buildIncidentContext(incident, analysis, changeRequests)}
-              reportType={analysis.type}
-              subtitle="Scoped to Incidents"
-              entityName={`Incident ${incident.incident_id}`}
-              suggestedQuestions={['Summarize this incident', 'What is the root cause?', 'How can I resolve this?']}
-            />
-          )}
+          {/* Chat */}
+          <ReportChat
+            reportContext={buildIncidentContext(incident, analysis ?? {}, changeRequests)}
+            reportType={analysis?.type ?? 'incident'}
+            incidentId={incident.incident_id}
+            subtitle="Metrics · Logs · Traces · Incidents"
+            entityName={`Incident ${incident.incident_id}`}
+            suggestedQuestions={[
+              'Summarize this incident',
+              'What is the root cause?',
+              'Were there any slow traces?',
+              'Which hosts had high CPU?',
+              'Show me log errors',
+              'How can I resolve this?',
+            ]}
+          />
         </div>
       </div>
 

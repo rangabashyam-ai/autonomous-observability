@@ -1,13 +1,34 @@
 import type { HeatmapMetric } from '../types/api';
 
+/**
+ * Map a golden-signal score to a green→red colour.
+ *
+ * Each signal has its own scale so "healthy" always maps to green:
+ *
+ *  latency    0-100  (0=fast=green, 100=very slow=red)         — P90 ms / 10
+ *  traffic    0-100  INVERTED: high traffic = system serving = green,
+ *                    low traffic = potential outage = red       — avg rr (0-100 unit)
+ *  errors     0-100  amplified ×10 so 1 % error ≈ lime-green,
+ *                    10 % error = red                          — (100-sr) %
+ *  saturation 0-100  direct CPU %                              — cpu %
+ */
 export function heatmapColor(value: number, metric: HeatmapMetric): string {
-  let normalized = value;
-  if (metric === 'incident_count') normalized = Math.min(value * 10, 100);
-  if (metric === 'error_rate') normalized = Math.min(value * 20, 100);
+  let score = value;
 
-  if (normalized >= 80) return '#ef4444';
-  if (normalized >= 60) return '#eab308';
-  return '#22c55e';
+  if (metric === 'traffic') {
+    // Invert: traffic near 100 = healthy green; dropping traffic = red
+    score = 100 - value;
+  } else if (metric === 'errors') {
+    // Amplify: 1 % → 10, 5 % → 50, 10 % → 100
+    score = Math.min(value * 10, 100);
+  }
+  // latency and saturation: use raw 0-100 value directly
+
+  if (score >= 80) return '#ef4444'; // red
+  if (score >= 60) return '#f97316'; // orange
+  if (score >= 40) return '#eab308'; // yellow
+  if (score >= 20) return '#84cc16'; // lime
+  return '#22c55e';                  // green
 }
 
 export function healthBadgeClass(health: string): string {

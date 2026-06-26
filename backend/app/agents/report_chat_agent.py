@@ -3,40 +3,16 @@
 from __future__ import annotations
 
 _SYSTEM_PROMPT = """\
-You are an SRE assistant. The user is reviewing an incident, RCA, or component report.
-Answer using ONLY the facts in the provided context.
+You are an SRE assistant. You have been given an incident report with telemetry data.
+Answer the user's question using ONLY the facts in the provided report context.
+Do not invent numbers, service names, or findings not present in the data.
 
-Rules (follow in order):
+Rules:
+- If the question is vague (single word, no IT context): ask one short clarifying question.
+- If the question is about this incident (health, root cause, metrics, logs, traces, fix, impact): answer in plain prose or 2-4 short bullets, under 120 words, using specific numbers from the context.
+- If the question is completely unrelated to IT operations: reply "Please ask a question relevant to this incident."
 
-1. VAGUE question — a single bare word or phrase with zero operational specificity \
-(e.g. "status?", "okay?", "fine?", "good?"). \
-Questions that reference the component, service, API, health, metrics, performance, \
-expected behaviour, working state, or any operational concept are NOT vague — \
-treat them as Rule 2. \
-→ Only if truly vague: ask ONE short clarifying question. \
-Example: "Could you be more specific — are you asking about a particular metric, \
-dependency impact, health status, or recommended action?"
-
-2. SPECIFIC question about the report — ANY question touching: \
-health, status, performance, whether something is working as expected, \
-root cause, where the issue originated, why it arose, why an action was prescribed, \
-alerts, symptoms, components, metrics, anomalies, applied fix, suggestions, \
-recommendations, post-fix incidents, similar incidents, caution level, dependency path, \
-AI analysis, reasoning, or any other operational data shown in the report \
-→ answer in under 80 words. Plain prose or 2–3 bullets. No markdown headers. \
-Always reference the concrete metric values and HEALTH field from the context.
-
-   Key mappings (use when the field is present in context):
-   - "working as expected?" / "status?" / "how is it doing?" → HEALTH + key METRICS (cpu, error_rate, latency) + incident_count
-   - "where did it start?" / "origin?" → ORIGIN_COMPONENT from DEPENDENCY_PATH
-   - "why did it arise?" / "root cause?" → ALERTS + SYMPTOMS + ROOT_CAUSE + REASONING
-   - "why was this action prescribed?" → RECOMMENDATIONS + REASONING + CAUTION_LEVEL + AI_ANALYSIS
-
-3. COMPLETELY UNRELATED question — weather, geography, sports, creative writing, \
-or topics with zero connection to IT operations or this report \
-→ reply exactly: "Please ask a question relevant to this report."
-
-Never invent data not in the context.
+When answering root-cause or summary questions, combine: degraded services (low success_rate), high-CPU hosts, log error hosts, and slow trace spans into one concise narrative.
 """
 
 
@@ -48,30 +24,31 @@ def answer_report_question(
 ) -> dict:
     from app.services.groq_client import chat_completion, FAST_MODEL
 
-    messages: list[dict] = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"Report type: {report_type}\n\n"
-                f"--- REPORT CONTEXT ---\n{report_context}\n--- END CONTEXT ---\n\n"
-                "I will now answer questions about this report."
-            ),
-        },
-        {
-            "role": "assistant",
-            "content": "Understood. I have reviewed the report. What would you like to know?",
-        },
-    ]
+    # Build the user turn that carries all context.
+    # The Qwen server wraps this as the user message in its chat template,
+    # so we embed system instructions, report data, history, and the question here.
+    context_block = (
+        f"[Instructions]\n{_SYSTEM_PROMPT}\n\n"
+        f"[Report Type]\n{report_type}\n\n"
+        f"[Report Context]\n{report_context}\n\n"
+    )
 
-    # Append last 8 turns of conversation history
-    for turn in history[-8:]:
+    # Append last 6 turns of conversation history
+    history_lines: list[str] = []
+    for turn in history[-6:]:
         role = turn.get("role", "user")
-        content = turn.get("content", "")
+        content = (turn.get("content") or "").strip()
         if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": content})
+            history_lines.append(f"{'User' if role == 'user' else 'Assistant'}: {content}")
 
-    messages.append({"role": "user", "content": question})
+    if history_lines:
+        context_block += "[Previous conversation]\n" + "\n".join(history_lines) + "\n\n"
+
+    context_block += f"[Question]\n{question}\n\nAnswer:"
+
+    messages: list[dict] = [
+        {"role": "user", "content": context_block},
+    ]
 
     import time
 
@@ -81,16 +58,17 @@ def answer_report_question(
             resp = chat_completion(
                 messages=messages,
                 model=FAST_MODEL,
-                temperature=0.2,
-                max_tokens=180,
-                timeout=28,
+                temperature=0.3,
+                max_tokens=300,
+                timeout=45,
             )
-            answer = resp["choices"][0]["message"]["content"]
+            answer = (resp["choices"][0]["message"]["content"] or "").strip()
+            if not answer:
+                return {"answer": None, "error": "The model returned an empty response."}
             return {"answer": answer, "error": None}
         except Exception as exc:
             last_exc = exc
             err_str = str(exc).lower()
-            # Retry once on transient rate-limit or timeout errors
             if attempt == 0 and ("429" in err_str or "timeout" in err_str or "timed out" in err_str):
                 time.sleep(2)
                 continue

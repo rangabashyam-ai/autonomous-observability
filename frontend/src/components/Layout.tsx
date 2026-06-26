@@ -33,7 +33,7 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
-  { to: '/dependencies', label: 'Map', icon: Map },
+  { to: '/dependencies', label: 'Dependency Map', icon: Map },
   { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
   { to: '/rca', label: 'RCA', icon: FileSearch },
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },

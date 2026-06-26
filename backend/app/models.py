@@ -30,6 +30,16 @@ class GraphNode(BaseModel):
     health: Optional[str] = "healthy"
 
 
+class NodeCreate(BaseModel):
+    id: str
+    name: str
+    type: str
+    layer: str
+    health: str = "healthy"
+    metrics: Optional[dict] = None
+    platform: Optional[str] = None
+
+
 class HealthMetric(BaseModel):
     cpu: float = 0
     memory: float = 0
