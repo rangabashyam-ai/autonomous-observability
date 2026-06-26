@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 PARQUET_DIR = Path(
     os.environ.get(
         "PARQUET_DIR",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\parquet",
+        str(Path(__file__).resolve().parent.parent.parent / "data" / "parquet"),
     )
 )
 

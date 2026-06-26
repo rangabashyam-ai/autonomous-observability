@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Cloud, Trash2, RefreshCw, CheckCircle2, XCircle,
   AlertTriangle, ChevronDown, ChevronUp, Server,
   Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff,
-  Database, Archive, Zap, Play, BarChart2, Radio,
-  Activity, Network, GitBranch, Share2, Folder, Globe,
-  HardDrive, Cpu,
+  Activity, FileText, GitBranch, ShieldCheck, Key,
+  Database, Zap, Radio, Clock, Filter, Search,
+  BarChart2, Terminal, BookOpen, AlertOctagon
 } from 'lucide-react';
 
 const API = 'http://localhost:8000';
@@ -13,6 +13,7 @@ const API = 'http://localhost:8000';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Provider = 'aws' | 'azure' | 'gcp' | 'kubernetes';
+type TelemetryTab = 'connect' | 'resources' | 'logs' | 'traces' | 'audit' | 'compliance';
 
 interface Connection {
   connection_id: string;
@@ -32,28 +33,95 @@ interface Resource {
   health: 'healthy' | 'warning' | 'critical';
 }
 
-interface SyncStatus {
-  resources: string;
-  metrics: string;
-  alerts: string;
+interface LogEvent {
+  log_group: string;
+  log_stream: string;
+  message: string;
+  timestamp: string;
+  source: string;
+  region: string;
+}
+
+interface TraceItem {
+  trace_id: string;
+  duration_ms: number;
+  has_error: boolean;
+  has_fault: boolean;
+  has_throttle: boolean;
+  http_status?: number;
+  http_url: string;
+  root_service: string;
+  services: string[];
+  timestamp: string;
+}
+
+interface AuditEvent {
+  event_id: string;
+  event_name: string;
+  event_source: string;
+  username: string;
+  source_ip: string;
+  severity: string;
+  resources: { type: string; name: string }[];
+  timestamp: string;
+}
+
+interface ConfigRule {
+  rule_name: string;
+  description: string;
+  is_compliant: boolean;
+  state: string;
+  source_identifier: string;
 }
 
 // ─── Provider brand config ─────────────────────────────────────────────────────
 
 const PROVIDER_CONFIG: Record<Provider, { label: string; color: string; bg: string; border: string }> = {
-  aws:        { label: 'Amazon AWS',       color: '#FF9900', bg: 'rgba(255,153,0,0.08)',   border: 'rgba(255,153,0,0.25)' },
-  azure:      { label: 'Microsoft Azure',  color: '#0078D4', bg: 'rgba(0,120,212,0.08)',   border: 'rgba(0,120,212,0.25)' },
-  gcp:        { label: 'Google Cloud',     color: '#4285F4', bg: 'rgba(66,133,244,0.08)',  border: 'rgba(66,133,244,0.25)' },
-  kubernetes: { label: 'Kubernetes',       color: '#326CE5', bg: 'rgba(50,108,229,0.08)',  border: 'rgba(50,108,229,0.25)' },
+  aws: { label: 'Amazon AWS', color: '#FF9900', bg: 'rgba(255,153,0,0.08)', border: 'rgba(255,153,0,0.25)' },
+  azure: { label: 'Microsoft Azure', color: '#0078D4', bg: 'rgba(0,120,212,0.08)', border: 'rgba(0,120,212,0.25)' },
+  gcp: { label: 'Google Cloud', color: '#4285F4', bg: 'rgba(66,133,244,0.08)', border: 'rgba(66,133,244,0.25)' },
+  kubernetes: { label: 'Kubernetes', color: '#326CE5', bg: 'rgba(50,108,229,0.08)', border: 'rgba(50,108,229,0.25)' },
 };
 
 const RESOURCE_TYPE_ICON: Record<string, string> = {
   ec2_instance: '🖥️', eks_cluster: '⎈', rds_instance: '🗄️', load_balancer: '⚖️',
+  ecs_cluster: '📦', ecs_service: '🐳', kinesis_stream: '🌊', event_bus: '📡',
+  event_rule: '📋', eks_node: '🖧',
   azure_vm: '🖥️', aks_cluster: '⎈', azure_sql: '🗄️',
   gce_instance: '🖥️', gke_cluster: '⎈', cloud_sql: '🗄️',
   k8s_pod: '📦', k8s_node: '🖧', k8s_deployment: '🚀', k8s_service: '🔗',
   k8s_namespace: '📁', k8s_ingress: '🌐',
 };
+
+// AWS data sources shown in architecture diagram
+const AWS_DATA_SOURCES = [
+  { id: 'cloudwatch', label: 'CloudWatch', sub: 'Metrics + Alarms', icon: BarChart2, color: '#FF9900' },
+  { id: 'container_insights', label: 'Container Insights', sub: 'ECS/EKS metrics', icon: Database, color: '#FF9900' },
+  { id: 'xray', label: 'X-Ray', sub: 'Distributed traces', icon: GitBranch, color: '#FF9900' },
+  { id: 'adot', label: 'ADOT', sub: 'OTel collector', icon: Activity, color: '#FF9900' },
+  { id: 'cw_logs', label: 'CloudWatch Logs', sub: 'App + system logs', icon: FileText, color: '#FF9900' },
+  { id: 'vpc_flow', label: 'VPC Flow Logs', sub: 'Network traffic', icon: Radio, color: '#FF9900' },
+  { id: 'cloudtrail', label: 'CloudTrail', sub: 'Audit + API events', icon: BookOpen, color: '#FF9900' },
+  { id: 'aws_config', label: 'AWS Config', sub: 'Config changes', icon: ShieldCheck, color: '#FF9900' },
+  { id: 'kinesis', label: 'Kinesis Streams', sub: 'Real-time transport', icon: Zap, color: '#FF9900' },
+  { id: 'eventbridge', label: 'EventBridge', sub: 'Event routing', icon: Terminal, color: '#FF9900' },
+  { id: 'iam', label: 'IAM Access Key', sub: 'Single API key auth', icon: Key, color: '#FF9900' },
+];
+
+// Azure data sources shown in architecture diagram
+const AZURE_DATA_SOURCES = [
+  { id: 'azure_monitor', label: 'Azure Monitor', sub: 'Metrics + alerts', icon: BarChart2, color: '#0078D4' },
+  { id: 'container_insights', label: 'Container Insights', sub: 'AKS / ACI metrics', icon: Database, color: '#0078D4' },
+  { id: 'app_insights', label: 'App Insights', sub: 'Distributed traces', icon: GitBranch, color: '#0078D4' },
+  { id: 'ama_otel', label: 'AMA + OTel', sub: 'OTel collector', icon: Activity, color: '#0078D4' },
+  { id: 'log_analytics', label: 'Log Analytics', sub: 'App + system logs', icon: FileText, color: '#0078D4' },
+  { id: 'nsg_flow', label: 'NSG Flow Logs', sub: 'Network traffic', icon: Radio, color: '#0078D4' },
+  { id: 'activity_log', label: 'Activity Log', sub: 'Audit + API events', icon: BookOpen, color: '#0078D4' },
+  { id: 'azure_policy', label: 'Azure Policy', sub: 'Config changes', icon: ShieldCheck, color: '#0078D4' },
+  { id: 'event_hubs', label: 'Event Hubs', sub: 'Real-time log transport', icon: Zap, color: '#0078D4' },
+  { id: 'event_grid', label: 'Event Grid', sub: 'Event routing', icon: Terminal, color: '#0078D4' },
+  { id: 'service_principal', label: 'Service Principal', sub: 'App registration auth', icon: Key, color: '#0078D4' },
+];
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -64,403 +132,6 @@ async function apiFetch(path: string, options?: RequestInit) {
     throw new Error(err.detail || res.statusText);
   }
   return res.json();
-}
-
-// ─── Resources per provider ────────────────────────────────────────────────────
-
-type ResourceDef = { id: string; label: string; Icon: React.FC<{ className?: string }> };
-
-const PROVIDER_RESOURCES: Record<Provider, ResourceDef[]> = {
-  aws: [
-    { id: 'ec2',        label: 'EC2 Instances',  Icon: Server    },
-    { id: 'eks',        label: 'EKS Clusters',   Icon: Layers    },
-    { id: 'rds',        label: 'RDS Databases',  Icon: Database  },
-    { id: 's3',         label: 'S3 Buckets',     Icon: Archive   },
-    { id: 'lambda',     label: 'Lambda',         Icon: Zap       },
-    { id: 'elb',        label: 'Load Balancers', Icon: Network   },
-    { id: 'ecs',        label: 'ECS Services',   Icon: Box       },
-    { id: 'cloudwatch', label: 'CloudWatch',     Icon: Activity  },
-  ],
-  azure: [
-    { id: 'vm',        label: 'Virtual Machines', Icon: Server   },
-    { id: 'aks',       label: 'AKS Clusters',     Icon: Layers   },
-    { id: 'sql',       label: 'Azure SQL',        Icon: Database },
-    { id: 'storage',   label: 'Blob Storage',     Icon: Archive  },
-    { id: 'functions', label: 'Functions',        Icon: Zap      },
-    { id: 'lb',        label: 'Load Balancers',   Icon: Network  },
-    { id: 'cosmos',    label: 'Cosmos DB',        Icon: Globe    },
-    { id: 'monitor',   label: 'Azure Monitor',    Icon: Activity },
-  ],
-  gcp: [
-    { id: 'gce',        label: 'Compute Engine',  Icon: Server   },
-    { id: 'gke',        label: 'GKE Clusters',    Icon: Layers   },
-    { id: 'cloud_sql',  label: 'Cloud SQL',       Icon: Database },
-    { id: 'gcs',        label: 'Cloud Storage',   Icon: Archive  },
-    { id: 'functions',  label: 'Cloud Functions', Icon: Zap      },
-    { id: 'cloud_run',  label: 'Cloud Run',       Icon: Play     },
-    { id: 'bigquery',   label: 'BigQuery',        Icon: BarChart2},
-    { id: 'pubsub',     label: 'Pub/Sub',         Icon: Radio    },
-    { id: 'monitoring', label: 'Monitoring',      Icon: Activity },
-  ],
-  kubernetes: [
-    { id: 'pods',         label: 'Pods',         Icon: Box       },
-    { id: 'nodes',        label: 'Nodes',        Icon: Server    },
-    { id: 'deployments',  label: 'Deployments',  Icon: GitBranch },
-    { id: 'services',     label: 'Services',     Icon: Share2    },
-    { id: 'namespaces',   label: 'Namespaces',   Icon: Folder    },
-    { id: 'ingresses',    label: 'Ingresses',    Icon: Globe     },
-    { id: 'daemonsets',   label: 'DaemonSets',   Icon: Cpu       },
-    { id: 'statefulsets', label: 'StatefulSets', Icon: HardDrive },
-  ],
-};
-
-// ─── GCP regions ──────────────────────────────────────────────────────────────
-
-const GCP_REGIONS = [
-  { value: 'us-central1',            label: 'us-central1 — Iowa, USA'            },
-  { value: 'us-east1',               label: 'us-east1 — South Carolina, USA'     },
-  { value: 'us-east4',               label: 'us-east4 — N. Virginia, USA'        },
-  { value: 'us-east5',               label: 'us-east5 — Columbus, USA'           },
-  { value: 'us-south1',              label: 'us-south1 — Dallas, USA'            },
-  { value: 'us-west1',               label: 'us-west1 — Oregon, USA'             },
-  { value: 'us-west2',               label: 'us-west2 — Los Angeles, USA'        },
-  { value: 'us-west3',               label: 'us-west3 — Salt Lake City, USA'     },
-  { value: 'us-west4',               label: 'us-west4 — Las Vegas, USA'          },
-  { value: 'northamerica-northeast1', label: 'northamerica-northeast1 — Montréal' },
-  { value: 'northamerica-northeast2', label: 'northamerica-northeast2 — Toronto'  },
-  { value: 'southamerica-east1',     label: 'southamerica-east1 — São Paulo'     },
-  { value: 'southamerica-west1',     label: 'southamerica-west1 — Santiago'      },
-  { value: 'europe-west1',           label: 'europe-west1 — Belgium'             },
-  { value: 'europe-west2',           label: 'europe-west2 — London, UK'          },
-  { value: 'europe-west3',           label: 'europe-west3 — Frankfurt, Germany'  },
-  { value: 'europe-west4',           label: 'europe-west4 — Netherlands'         },
-  { value: 'europe-west6',           label: 'europe-west6 — Zurich, Switzerland' },
-  { value: 'europe-west8',           label: 'europe-west8 — Milan, Italy'        },
-  { value: 'europe-west9',           label: 'europe-west9 — Paris, France'       },
-  { value: 'europe-west10',          label: 'europe-west10 — Berlin, Germany'    },
-  { value: 'europe-west12',          label: 'europe-west12 — Turin, Italy'       },
-  { value: 'europe-north1',          label: 'europe-north1 — Finland'            },
-  { value: 'europe-central2',        label: 'europe-central2 — Warsaw, Poland'   },
-  { value: 'europe-southwest1',      label: 'europe-southwest1 — Madrid, Spain'  },
-  { value: 'asia-east1',             label: 'asia-east1 — Taiwan'                },
-  { value: 'asia-east2',             label: 'asia-east2 — Hong Kong'             },
-  { value: 'asia-northeast1',        label: 'asia-northeast1 — Tokyo, Japan'     },
-  { value: 'asia-northeast2',        label: 'asia-northeast2 — Osaka, Japan'     },
-  { value: 'asia-northeast3',        label: 'asia-northeast3 — Seoul, Korea'     },
-  { value: 'asia-south1',            label: 'asia-south1 — Mumbai, India'        },
-  { value: 'asia-south2',            label: 'asia-south2 — Delhi, India'         },
-  { value: 'asia-southeast1',        label: 'asia-southeast1 — Singapore'        },
-  { value: 'asia-southeast2',        label: 'asia-southeast2 — Jakarta, Indonesia'},
-  { value: 'australia-southeast1',   label: 'australia-southeast1 — Sydney'      },
-  { value: 'australia-southeast2',   label: 'australia-southeast2 — Melbourne'   },
-  { value: 'me-west1',               label: 'me-west1 — Tel Aviv, Israel'        },
-  { value: 'me-central1',            label: 'me-central1 — Doha, Qatar'          },
-  { value: 'me-central2',            label: 'me-central2 — Dammam, Saudi Arabia' },
-  { value: 'africa-south1',          label: 'africa-south1 — Johannesburg'       },
-];
-
-// ─── Resource selector component ──────────────────────────────────────────────
-
-function ResourceSelector({ provider, selected, onChange }: {
-  provider: Provider;
-  selected: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const resources = PROVIDER_RESOURCES[provider];
-  const allSelected = selected.length === resources.length;
-
-  const toggle = (id: string) =>
-    onChange(selected.includes(id) ? selected.filter(s => s !== id) : [...selected, id]);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)]">
-          Resources to Observe
-        </label>
-        <button
-          type="button"
-          onClick={() => onChange(allSelected ? [] : resources.map(r => r.id))}
-          className="text-[10px] text-[var(--color-primary)] hover:underline"
-        >
-          {allSelected ? 'Deselect all' : 'Select all'}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {resources.map(r => {
-          const active = selected.includes(r.id);
-          return (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => toggle(r.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
-                active
-                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
-                  : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-card-hover)]'
-              }`}
-            >
-              <r.Icon className="h-3 w-3 shrink-0" />
-              {r.label}
-            </button>
-          );
-        })}
-      </div>
-      {selected.length === 0 && (
-        <p className="text-[10px] text-yellow-400 mt-1">Select at least one resource type to observe.</p>
-      )}
-    </div>
-  );
-}
-
-// ─── Form fields per provider ─────────────────────────────────────────────────
-
-function AWSForm({ onSuccess }: { onSuccess: () => void }) {
-  const allAwsIds = PROVIDER_RESOURCES.aws.map(r => r.id);
-  const [form, setForm] = useState({ connection_name: '', role_arn: '', region: 'us-east-1', external_id: '', account_alias: '' });
-  const [resources, setResources] = useState<string[]>(allAwsIds);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError('');
-    try {
-      await apiFetch('/api/integrations/aws/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, resources_to_observe: resources }),
-      });
-      onSuccess();
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-aws" required />
-      <FormField label="Account Alias (optional)" value={form.account_alias} onChange={v => setForm(p => ({ ...p, account_alias: v }))} placeholder="e.g. my-org-prod" />
-      <FormField label="IAM Role ARN" value={form.role_arn} onChange={v => setForm(p => ({ ...p, role_arn: v }))} placeholder="arn:aws:iam::123456789012:role/MyRole" />
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Region" value={form.region} onChange={v => setForm(p => ({ ...p, region: v }))} placeholder="us-east-1" />
-        <FormField label="External ID (optional)" value={form.external_id} onChange={v => setForm(p => ({ ...p, external_id: v }))} placeholder="optional" />
-      </div>
-      <ResourceSelector provider="aws" selected={resources} onChange={setResources} />
-      <FormActions loading={loading} error={error} label="Connect AWS" />
-    </form>
-  );
-}
-
-function AzureForm({ onSuccess }: { onSuccess: () => void }) {
-  const allAzureIds = PROVIDER_RESOURCES.azure.map(r => r.id);
-  const [form, setForm] = useState({ connection_name: '', tenant_id: '', client_id: '', client_secret: '', subscription_id: '', resource_group: '' });
-  const [resources, setResources] = useState<string[]>(allAzureIds);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showSecret, setShowSecret] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError('');
-    try {
-      await apiFetch('/api/integrations/azure/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, resources_to_observe: resources }),
-      });
-      onSuccess();
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-azure" required />
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Tenant ID *" value={form.tenant_id} onChange={v => setForm(p => ({ ...p, tenant_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
-        <FormField label="Subscription ID *" value={form.subscription_id} onChange={v => setForm(p => ({ ...p, subscription_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Client ID (App ID) *" value={form.client_id} onChange={v => setForm(p => ({ ...p, client_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Client Secret *</label>
-          <div className="relative">
-            <input
-              type={showSecret ? 'text' : 'password'}
-              value={form.client_secret}
-              onChange={e => setForm(p => ({ ...p, client_secret: e.target.value }))}
-              placeholder="Your client secret"
-              required
-              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-            />
-            <button type="button" onClick={() => setShowSecret(s => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-              {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-        </div>
-      </div>
-      <FormField label="Resource Group (optional)" value={form.resource_group} onChange={v => setForm(p => ({ ...p, resource_group: v }))} placeholder="e.g. my-rg (leave blank to observe all)" />
-      <ResourceSelector provider="azure" selected={resources} onChange={setResources} />
-      <div className="mt-2 text-[10px] text-[var(--color-text-secondary)]/80 flex items-center gap-1.5 bg-blue-500/5 p-2 rounded border border-blue-500/10">
-        <span className="text-blue-400">ℹ</span>
-        Uses modern Azure Monitor Agent (AMA) & DCRs under the hood. No manual endpoint config required.
-      </div>
-      <FormActions loading={loading} error={error} label="Connect Azure" />
-    </form>
-  );
-}
-
-function GCPForm({ onSuccess }: { onSuccess: () => void }) {
-  const allGcpIds = PROVIDER_RESOURCES.gcp.map(r => r.id);
-  const [form, setForm] = useState({ connection_name: '', project_id: '', region: '', service_account_json: '' });
-  const [resources, setResources] = useState<string[]>(allGcpIds);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [jsonError, setJsonError] = useState('');
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const text = ev.target?.result as string;
-      try { JSON.parse(text); setForm(p => ({ ...p, service_account_json: text })); setJsonError(''); }
-      catch { setJsonError('Invalid JSON file'); }
-    };
-    reader.readAsText(file);
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.service_account_json) { setJsonError('Service account JSON is required'); return; }
-    setLoading(true); setError('');
-    try {
-      const parsed = JSON.parse(form.service_account_json);
-      await apiFetch('/api/integrations/gcp/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          connection_name: form.connection_name,
-          project_id: form.project_id || parsed.project_id,
-          region: form.region || undefined,
-          service_account_json: parsed,
-          resources_to_observe: resources,
-        }),
-      });
-      onSuccess();
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-gcp" required />
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected)" />
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Region (optional)</label>
-          <select
-            value={form.region}
-            onChange={e => setForm(p => ({ ...p, region: e.target.value }))}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          >
-            <option value="">All regions</option>
-            {GCP_REGIONS.map(r => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Service Account JSON *</label>
-        <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
-          <input type="file" accept=".json" onChange={handleFile} className="hidden" id="gcp-json-upload" />
-          <label htmlFor="gcp-json-upload" className="cursor-pointer">
-            <Box className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              {form.service_account_json ? <span className="text-green-500 font-medium">✓ JSON loaded</span> : 'Click to upload service-account.json'}
-            </p>
-          </label>
-        </div>
-        {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
-      </div>
-      <ResourceSelector provider="gcp" selected={resources} onChange={setResources} />
-      <FormActions loading={loading} error={error} label="Connect GCP" />
-    </form>
-  );
-}
-
-function K8sForm({ onSuccess }: { onSuccess: () => void }) {
-  const allK8sIds = PROVIDER_RESOURCES.kubernetes.map(r => r.id);
-  const [mode, setMode] = useState<'kubeconfig' | 'token'>('kubeconfig');
-  const [form, setForm] = useState({ connection_name: '', kubeconfig: '', endpoint: '', token: '', ca_cert: '', namespaces: '' });
-  const [resources, setResources] = useState<string[]>(allK8sIds);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const text = btoa(ev.target?.result as string);
-      setForm(p => ({ ...p, kubeconfig: text }));
-    };
-    reader.readAsText(file);
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError('');
-    try {
-      const namespacesArr = form.namespaces ? form.namespaces.split(',').map(n => n.trim()).filter(Boolean) : [];
-      const base = { connection_name: form.connection_name, resources_to_observe: resources, namespaces: namespacesArr };
-      const body = mode === 'kubeconfig'
-        ? { ...base, kubeconfig: form.kubeconfig }
-        : { ...base, endpoint: form.endpoint, token: form.token, ca_cert: form.ca_cert };
-      await apiFetch('/api/integrations/kubernetes/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      onSuccess();
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-k8s" required />
-      <div className="flex gap-2">
-        {(['kubeconfig', 'token'] as const).map(m => (
-          <button key={m} type="button" onClick={() => setMode(m)}
-            className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${mode === m ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
-            {m === 'kubeconfig' ? 'Upload kubeconfig' : 'Endpoint + Token'}
-          </button>
-        ))}
-      </div>
-      {mode === 'kubeconfig' ? (
-        <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
-          <input type="file" accept=".yaml,.yml,.conf" onChange={handleFile} className="hidden" id="k8s-kubeconfig-upload" />
-          <label htmlFor="k8s-kubeconfig-upload" className="cursor-pointer">
-            <Layers className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              {form.kubeconfig ? <span className="text-green-500 font-medium">✓ kubeconfig loaded</span> : 'Click to upload kubeconfig file'}
-            </p>
-          </label>
-        </div>
-      ) : (
-        <>
-          <FormField label="Cluster Endpoint *" value={form.endpoint} onChange={v => setForm(p => ({ ...p, endpoint: v }))} placeholder="https://your-cluster:6443" required />
-          <FormField label="Bearer Token *" value={form.token} onChange={v => setForm(p => ({ ...p, token: v }))} placeholder="eyJhbGciOiJSUzI1NiIs..." required secret />
-          <FormField label="CA Certificate (optional, base64)" value={form.ca_cert} onChange={v => setForm(p => ({ ...p, ca_cert: v }))} placeholder="LS0tLS1CRUdJTi..." />
-        </>
-      )}
-      <FormField label="Namespaces (optional)" value={form.namespaces} onChange={v => setForm(p => ({ ...p, namespaces: v }))} placeholder="default, kube-system (comma-separated, blank = all)" />
-      <ResourceSelector provider="kubernetes" selected={resources} onChange={setResources} />
-      <FormActions loading={loading} error={error} label="Connect Kubernetes" />
-    </form>
-  );
 }
 
 // ─── Reusable form components ─────────────────────────────────────────────────
@@ -512,6 +183,273 @@ function FormActions({ loading, error, label }: { loading: boolean; error: strin
   );
 }
 
+// ─── AWS Form (with IAM Access Key + Role ARN tabs) ───────────────────────────
+
+function AWSForm({ onSuccess }: { onSuccess: () => void }) {
+  const [authMode, setAuthMode] = useState<'access_key' | 'role_arn' | 'default'>('access_key');
+  const [form, setForm] = useState({
+    connection_name: '', region: 'us-east-1',
+    access_key_id: '', secret_access_key: '', session_token: '',
+    role_arn: '', external_id: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const body: Record<string, string> = { connection_name: form.connection_name, region: form.region };
+      if (authMode === 'access_key') {
+        body.access_key_id = form.access_key_id;
+        body.secret_access_key = form.secret_access_key;
+        if (form.session_token) body.session_token = form.session_token;
+      } else if (authMode === 'role_arn') {
+        body.role_arn = form.role_arn;
+        if (form.external_id) body.external_id = form.external_id;
+      }
+      await apiFetch('/api/integrations/aws/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      onSuccess();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const authModes = [
+    { id: 'access_key' as const, label: '🔑 Access Key', sub: 'IAM Access Key + Secret' },
+    { id: 'role_arn' as const, label: '🎭 Role ARN', sub: 'STS AssumeRole' },
+    { id: 'default' as const, label: '⚙️ Default', sub: 'Instance Profile / Env' },
+  ];
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-aws" required />
+      <FormField label="Region" value={form.region} onChange={v => setForm(p => ({ ...p, region: v }))} placeholder="us-east-1" />
+
+      {/* Auth mode selector */}
+      <div>
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-2">Authentication Method</label>
+        <div className="grid grid-cols-3 gap-2">
+          {authModes.map(m => (
+            <button key={m.id} type="button" onClick={() => setAuthMode(m.id)}
+              className={`py-2 px-2 rounded-lg border text-center transition-all ${authMode === m.id ? 'border-[#FF9900] bg-[#FF9900]/10 text-[#FF9900]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+              <p className="text-xs font-semibold">{m.label}</p>
+              <p className="text-[10px] opacity-70 mt-0.5">{m.sub}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {authMode === 'access_key' && (
+        <>
+          <FormField label="Access Key ID *" value={form.access_key_id} onChange={v => setForm(p => ({ ...p, access_key_id: v }))} placeholder="AKIAIOSFODNN7EXAMPLE" required />
+          <FormField label="Secret Access Key *" value={form.secret_access_key} onChange={v => setForm(p => ({ ...p, secret_access_key: v }))} placeholder="wJalrXUtnFEMI/K7MDENG..." required secret />
+          <FormField label="Session Token (optional)" value={form.session_token} onChange={v => setForm(p => ({ ...p, session_token: v }))} placeholder="For temporary credentials only" secret />
+        </>
+      )}
+
+      {authMode === 'role_arn' && (
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="IAM Role ARN *" value={form.role_arn} onChange={v => setForm(p => ({ ...p, role_arn: v }))} placeholder="arn:aws:iam::123456789012:role/MyRole" required />
+          <FormField label="External ID (optional)" value={form.external_id} onChange={v => setForm(p => ({ ...p, external_id: v }))} placeholder="optional" />
+        </div>
+      )}
+
+      {authMode === 'default' && (
+        <div className="p-3 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
+          <p className="font-semibold text-[var(--color-text-primary)] mb-1">Default Credential Chain</p>
+          <p>Will use: AWS env vars → ~/.aws/credentials → EC2 instance profile → ECS task role</p>
+        </div>
+      )}
+
+      <FormActions loading={loading} error={error} label="Connect AWS" />
+    </form>
+  );
+}
+
+// ─── Azure Form ───────────────────────────────────────────────────────────────
+
+function AzureForm({ onSuccess }: { onSuccess: () => void }) {
+  const [form, setForm] = useState({ connection_name: '', tenant_id: '', client_id: '', client_secret: '', subscription_id: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      await apiFetch('/api/integrations/azure/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      onSuccess();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-azure" required />
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Tenant ID *" value={form.tenant_id} onChange={v => setForm(p => ({ ...p, tenant_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
+        <FormField label="Subscription ID *" value={form.subscription_id} onChange={v => setForm(p => ({ ...p, subscription_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Client ID (App ID) *" value={form.client_id} onChange={v => setForm(p => ({ ...p, client_id: v }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required />
+        <div>
+          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Client Secret *</label>
+          <div className="relative">
+            <input
+              type={showSecret ? 'text' : 'password'}
+              value={form.client_secret}
+              onChange={e => setForm(p => ({ ...p, client_secret: e.target.value }))}
+              placeholder="Your client secret"
+              required
+              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+            />
+            <button type="button" onClick={() => setShowSecret(s => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+              {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+      </div>
+      <FormActions loading={loading} error={error} label="Connect Azure" />
+    </form>
+  );
+}
+
+// ─── GCP Form ─────────────────────────────────────────────────────────────────
+
+function GCPForm({ onSuccess }: { onSuccess: () => void }) {
+  const [form, setForm] = useState({ connection_name: '', project_id: '', service_account_json: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [jsonError, setJsonError] = useState('');
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      try { JSON.parse(text); setForm(p => ({ ...p, service_account_json: text })); setJsonError(''); }
+      catch { setJsonError('Invalid JSON file'); }
+    };
+    reader.readAsText(file);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.service_account_json) { setJsonError('Service account JSON is required'); return; }
+    setLoading(true); setError('');
+    try {
+      const parsed = JSON.parse(form.service_account_json);
+      await apiFetch('/api/integrations/gcp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connection_name: form.connection_name, project_id: form.project_id || parsed.project_id, service_account_json: parsed }),
+      });
+      onSuccess();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-gcp" required />
+      <FormField label="Project ID" value={form.project_id} onChange={v => setForm(p => ({ ...p, project_id: v }))} placeholder="my-gcp-project (or auto-detected from JSON)" />
+      <div>
+        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Service Account JSON *</label>
+        <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
+          <input type="file" accept=".json" onChange={handleFile} className="hidden" id="gcp-json-upload" />
+          <label htmlFor="gcp-json-upload" className="cursor-pointer">
+            <Box className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              {form.service_account_json ? <span className="text-green-500 font-medium">✓ JSON loaded</span> : 'Click to upload service-account.json'}
+            </p>
+          </label>
+        </div>
+        {jsonError && <p className="text-xs text-red-400 mt-1">{jsonError}</p>}
+      </div>
+      <FormActions loading={loading} error={error} label="Connect GCP" />
+    </form>
+  );
+}
+
+// ─── K8s Form ─────────────────────────────────────────────────────────────────
+
+function K8sForm({ onSuccess }: { onSuccess: () => void }) {
+  const [mode, setMode] = useState<'kubeconfig' | 'token'>('kubeconfig');
+  const [form, setForm] = useState({ connection_name: '', kubeconfig: '', endpoint: '', token: '', ca_cert: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = btoa(ev.target?.result as string);
+      setForm(p => ({ ...p, kubeconfig: text }));
+    };
+    reader.readAsText(file);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const body = mode === 'kubeconfig'
+        ? { connection_name: form.connection_name, kubeconfig: form.kubeconfig }
+        : { connection_name: form.connection_name, endpoint: form.endpoint, token: form.token, ca_cert: form.ca_cert };
+      await apiFetch('/api/integrations/kubernetes/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      onSuccess();
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <FormField label="Connection Name *" value={form.connection_name} onChange={v => setForm(p => ({ ...p, connection_name: v }))} placeholder="e.g. prod-k8s" required />
+      <div className="flex gap-2">
+        {(['kubeconfig', 'token'] as const).map(m => (
+          <button key={m} type="button" onClick={() => setMode(m)}
+            className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${mode === m ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+            {m === 'kubeconfig' ? 'Upload kubeconfig' : 'Endpoint + Token'}
+          </button>
+        ))}
+      </div>
+      {mode === 'kubeconfig' ? (
+        <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-4 text-center hover:border-[var(--color-primary)]/50 transition-colors">
+          <input type="file" accept=".yaml,.yml,.conf" onChange={handleFile} className="hidden" id="k8s-kubeconfig-upload" />
+          <label htmlFor="k8s-kubeconfig-upload" className="cursor-pointer">
+            <Layers className="h-6 w-6 mx-auto mb-1 text-[var(--color-text-secondary)]" />
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              {form.kubeconfig ? <span className="text-green-500 font-medium">✓ kubeconfig loaded</span> : 'Click to upload kubeconfig file'}
+            </p>
+          </label>
+        </div>
+      ) : (
+        <>
+          <FormField label="Cluster Endpoint *" value={form.endpoint} onChange={v => setForm(p => ({ ...p, endpoint: v }))} placeholder="https://your-cluster:6443" required />
+          <FormField label="Bearer Token *" value={form.token} onChange={v => setForm(p => ({ ...p, token: v }))} placeholder="eyJhbGciOiJSUzI1NiIs..." required secret />
+          <FormField label="CA Certificate (optional, base64)" value={form.ca_cert} onChange={v => setForm(p => ({ ...p, ca_cert: v }))} placeholder="LS0tLS1CRUdJTi..." />
+        </>
+      )}
+      <FormActions loading={loading} error={error} label="Connect Kubernetes" />
+    </form>
+  );
+}
+
 // ─── Provider Card ─────────────────────────────────────────────────────────────
 
 function ProviderCard({ provider, connections, onRefresh }: {
@@ -559,7 +497,6 @@ function ProviderCard({ provider, connections, onRefresh }: {
 
       {expanded && (
         <div className="px-5 pb-5 space-y-4 border-t" style={{ borderColor: cfg.border }}>
-          {/* Existing connections */}
           {connections.length > 0 && (
             <div className="space-y-2 pt-4">
               {connections.map(conn => (
@@ -586,8 +523,6 @@ function ProviderCard({ provider, connections, onRefresh }: {
               ))}
             </div>
           )}
-
-          {/* Add new connection form */}
           <div className="pt-2">
             <p className="text-xs font-semibold text-[var(--color-text-secondary)] mb-3 uppercase tracking-wider">
               {connections.length > 0 ? 'Add Another Connection' : 'Add Connection'}
@@ -603,22 +538,111 @@ function ProviderCard({ provider, connections, onRefresh }: {
   );
 }
 
+// ─── AWS Data Sources Panel ────────────────────────────────────────────────────
+
+function AWSSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
+  return (
+    <div className="rounded-xl border border-[#FF9900]/20 bg-[#FF9900]/5 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Cloud className="h-4 w-4 text-[#FF9900]" />
+        <p className="text-sm font-semibold text-[var(--color-text-primary)]">AWS Account — Data Sources</p>
+        {hasConnection
+          ? <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
+          : <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
+        }
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {AWS_DATA_SOURCES.map(src => {
+          const Icon = src.icon;
+          return (
+            <div key={src.id} className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${hasConnection ? 'border-[#FF9900]/20 bg-[#FF9900]/5' : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'}`}>
+              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection ? 'bg-[#FF9900]/15' : 'bg-[var(--color-border)]/30'}`}>
+                <Icon className={`h-3.5 w-3.5 ${hasConnection ? 'text-[#FF9900]' : 'text-[var(--color-text-secondary)]'}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
+                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Azure Data Sources Panel ─────────────────────────────────────────────────
+
+function AzureSourcesPanel({ hasConnection }: { hasConnection: boolean }) {
+  // Track which sources are actually implemented vs planned
+  const implemented = new Set([
+    'azure_monitor', 'container_insights', 'ama_otel',
+    'log_analytics', 'activity_log', 'service_principal',
+  ]);
+
+  return (
+    <div className="rounded-xl border border-[#0078D4]/20 bg-[#0078D4]/5 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">⬡</span>
+        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Azure — Data Sources</p>
+        {hasConnection
+          ? <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">ACTIVE</span>
+          : <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-border)]/60 text-[var(--color-text-secondary)]">NOT CONNECTED</span>
+        }
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {AZURE_DATA_SOURCES.map(src => {
+          const Icon = src.icon;
+          const isLive = implemented.has(src.id);
+          return (
+            <div
+              key={src.id}
+              className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all relative ${hasConnection
+                  ? isLive
+                    ? 'border-[#0078D4]/20 bg-[#0078D4]/5'
+                    : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-60'
+                  : 'border-[var(--color-border)] bg-[var(--color-card-hover)] opacity-50'
+                }`}
+            >
+              <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${hasConnection && isLive ? 'bg-[#0078D4]/15' : 'bg-[var(--color-border)]/30'
+                }`}>
+                <Icon className={`h-3.5 w-3.5 ${hasConnection && isLive ? 'text-[#0078D4]' : 'text-[var(--color-text-secondary)]'
+                  }`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{src.label}</p>
+                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{src.sub}</p>
+              </div>
+              {hasConnection && !isLive && (
+                <span className="absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold leading-none">SOON</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Resources Panel ──────────────────────────────────────────────────────────
 
-function ResourcesPanel() {
+function ResourcesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Provider | 'all'>('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     setLoading(true);
-    apiFetch('/api/integrations/resources?limit=500')
+    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    apiFetch(`/api/integrations/resources?limit=500${qs}`)
       .then(d => setResources(d.resources || []))
       .catch(() => setResources([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeProvider]);
 
-  const filtered = filter === 'all' ? resources : resources.filter(r => r.provider === filter);
+  const filtered = resources
+    .filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase()) || r.resource_type.includes(search.toLowerCase()));
+
   const byType = filtered.reduce((acc, r) => {
     acc[r.resource_type] = (acc[r.resource_type] || 0) + 1;
     return acc;
@@ -626,8 +650,8 @@ function ResourcesPanel() {
 
   const healthColor = (h: string) =>
     h === 'healthy' ? 'text-green-400 bg-green-400/10' :
-    h === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
-    'text-red-400 bg-red-400/10';
+      h === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
+        'text-red-400 bg-red-400/10';
 
   if (loading) return (
     <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]">
@@ -638,26 +662,26 @@ function ResourcesPanel() {
   if (resources.length === 0) return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <Server className="h-10 w-10 text-[var(--color-text-secondary)]/30 mb-3" />
-      <p className="text-sm font-medium text-[var(--color-text-secondary)]">No resources discovered yet</p>
+      <p className="text-sm font-medium text-[var(--color-text-secondary)]">
+        {activeProvider === 'all' ? 'No resources discovered yet' : `No ${PROVIDER_CONFIG[activeProvider].label} resources yet`}
+      </p>
       <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1 max-w-xs">
-        Connect a cloud provider above, then click "Sync Now" to discover your infrastructure.
+        Connect a cloud provider and click "Sync Now" to discover your infrastructure.
       </p>
     </div>
   );
 
   return (
     <div className="space-y-4">
-      {/* Filter tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {(['all', 'aws', 'azure', 'gcp', 'kubernetes'] as const).map(p => (
-          <button key={p} onClick={() => setFilter(p)}
-            className={`px-3 py-1 text-xs rounded-full border transition-colors ${filter === p ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
-            {p === 'all' ? `All (${resources.length})` : `${PROVIDER_CONFIG[p].label} (${resources.filter(r => r.provider === p).length})`}
-          </button>
-        ))}
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-secondary)]" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search resources..."
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]" />
+        </div>
+        <span className="text-xs text-[var(--color-text-secondary)]">{filtered.length} resources</span>
       </div>
 
-      {/* Summary chips */}
       <div className="flex gap-2 flex-wrap">
         {Object.entries(byType).map(([type, count]) => (
           <span key={type} className="text-[10px] px-2 py-0.5 rounded bg-[var(--color-card-hover)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
@@ -666,30 +690,31 @@ function ResourcesPanel() {
         ))}
       </div>
 
-      {/* Resource table */}
       <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[var(--color-border)] bg-[var(--color-card-hover)]">
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Resource</th>
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Type</th>
-              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Provider</th>
+              {activeProvider === 'all' && <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Cloud</th>}
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Region</th>
               <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Health</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
             {filtered.map(r => (
-              <tr key={r.id} className="hover:bg-[var(--color-card-hover)] transition-colors">
+              <tr key={`${r.provider}::${r.id}`} className="hover:bg-[var(--color-card-hover)] transition-colors">
                 <td className="px-4 py-2.5 font-medium text-[var(--color-text-primary)] max-w-[180px] truncate">{r.name}</td>
                 <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">
                   {RESOURCE_TYPE_ICON[r.resource_type] || '📌'} {r.resource_type.replace(/_/g, ' ')}
                 </td>
-                <td className="px-4 py-2.5">
-                  <span className="font-semibold" style={{ color: PROVIDER_CONFIG[r.provider]?.color }}>
-                    {r.provider.toUpperCase()}
-                  </span>
-                </td>
+                {activeProvider === 'all' && (
+                  <td className="px-4 py-2.5">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ color: PROVIDER_CONFIG[r.provider]?.color, background: PROVIDER_CONFIG[r.provider]?.bg }}>
+                      {r.provider.toUpperCase()}
+                    </span>
+                  </td>
+                )}
                 <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{r.region}</td>
                 <td className="px-4 py-2.5">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${healthColor(r.health)}`}>
@@ -705,23 +730,443 @@ function ResourcesPanel() {
   );
 }
 
+// ─── Logs Panel ───────────────────────────────────────────────────────────────
+
+function LogsPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+  const [data, setData] = useState<{ events: LogEvent[]; log_groups: any[]; updated_at: string }>({ events: [], log_groups: [], updated_at: '' });
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<'all' | 'cloudwatch_logs' | 'vpc_flow_logs'>('all');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    apiFetch(`/api/integrations/logs?limit=200${qs}`)
+      .then(d => setData(d))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, [activeProvider]);
+
+  const events = data.events
+    .filter(e => source === 'all' || e.source === source)
+    .filter(e => !search || e.message.toLowerCase().includes(search.toLowerCase()) || e.log_group.toLowerCase().includes(search.toLowerCase()));
+
+  const severityColor = (msg: string) => {
+    const m = msg.toLowerCase();
+    if (m.includes('error') || m.includes('exception') || m.includes('critical')) return 'text-red-400 border-red-400/20 bg-red-400/5';
+    if (m.includes('warn')) return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/5';
+    return 'text-[var(--color-text-secondary)] border-[var(--color-border)] bg-transparent';
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading logs...</div>;
+
+  if (data.events.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <FileText className="h-10 w-10 text-[var(--color-text-secondary)]/30 mb-3" />
+      <p className="text-sm font-medium text-[var(--color-text-secondary)]">No log events collected yet</p>
+      <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1">CloudWatch Logs sync runs every 2 minutes after connection.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-secondary)]" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search messages..."
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]" />
+        </div>
+        {(['all', 'cloudwatch_logs', 'vpc_flow_logs'] as const).map(s => (
+          <button key={s} onClick={() => setSource(s)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${source === s ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+            {s === 'all' ? `All (${data.events.length})` : s === 'cloudwatch_logs' ? 'App Logs' : 'VPC Flow'}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
+        {events.slice(0, 100).map((ev, i) => (
+          <div key={i} className={`rounded-lg border px-3 py-2 font-mono text-[11px] ${severityColor(ev.message)}`}>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-[var(--color-text-secondary)] shrink-0">{new Date(ev.timestamp).toLocaleTimeString()}</span>
+              <span className="text-[var(--color-primary)] truncate max-w-[200px]">{ev.log_group}</span>
+              <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-card-hover)]">{ev.source === 'vpc_flow_logs' ? '🌊 VPC' : '📋 CW'}</span>
+            </div>
+            <p className="truncate text-[var(--color-text-primary)]">{ev.message}</p>
+          </div>
+        ))}
+      </div>
+      {data.updated_at && <p className="text-[10px] text-[var(--color-text-secondary)]">Last updated: {new Date(data.updated_at).toLocaleString()}</p>}
+    </div>
+  );
+}
+
+// ─── Traces Panel ─────────────────────────────────────────────────────────────
+
+function TracesPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+  const [data, setData] = useState<{ traces: TraceItem[]; service_map: any[]; updated_at: string }>({ traces: [], service_map: [], updated_at: '' });
+  const [otelStatus, setOtelStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'errors' | 'faults'>('all');
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupLang, setSetupLang] = useState<'python' | 'node'>('python');
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    Promise.all([
+      apiFetch(`/api/integrations/traces?limit=100${qs}`).catch(() => ({ traces: [], service_map: [], updated_at: '' })),
+      apiFetch('/api/otel/status').catch(() => null)
+    ])
+      .then(([tracesData, otelData]) => {
+        setData(tracesData);
+        setOtelStatus(otelData);
+      })
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, [activeProvider]);
+
+  const traces = data.traces.filter(t =>
+    filter === 'all' || (filter === 'errors' && t.has_error) || (filter === 'faults' && t.has_fault)
+  );
+
+  if (loading) return <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading traces...</div>;
+
+  return (
+    <div className="space-y-6">
+      {/* OTel Receiver Status Card */}
+      {otelStatus && (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">OpenTelemetry OTLP/HTTP Receiver</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">Active</span>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Direct span ingestion endpoint: <code className="px-1.5 py-0.5 rounded bg-[var(--color-card-hover)] text-[var(--color-primary)] font-mono text-[10px]">http://localhost:8000/api/otel/v1/traces</code>
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSetup(s => !s)}
+              className="px-2.5 py-1 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-card-hover)] transition-colors text-[var(--color-text-secondary)]"
+            >
+              {showSetup ? 'Hide Setup' : 'How to Instrument'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)]">
+              <p className="text-[10px] text-[var(--color-text-secondary)] font-medium">Ingested Spans</p>
+              <p className="text-lg font-bold text-[var(--color-text-primary)] mt-1">{otelStatus.spans_stored}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)]">
+              <p className="text-[10px] text-[var(--color-text-secondary)] font-medium">OTel Services</p>
+              <p className="text-lg font-bold text-[var(--color-text-primary)] mt-1">{otelStatus.topology?.otel_services || 0}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)]">
+              <p className="text-[10px] text-[var(--color-text-secondary)] font-medium">Derived App Edges</p>
+              <p className="text-lg font-bold text-[var(--color-text-primary)] mt-1">{otelStatus.topology?.otel_app_edges || 0}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)]">
+              <p className="text-[10px] text-[var(--color-text-secondary)] font-medium">AWS Infra Edges</p>
+              <p className="text-lg font-bold text-[var(--color-text-primary)] mt-1">
+                {(otelStatus.topology?.infra_tier1_xray || 0) + (otelStatus.topology?.infra_tier2_structural || 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Setup dropdown instructions */}
+          {showSetup && (
+            <div className="p-4 rounded-lg bg-[var(--color-card-hover)] border border-[var(--color-border)] space-y-3">
+              <div className="flex gap-2 border-b border-[var(--color-border)] pb-2">
+                <button
+                  type="button"
+                  onClick={() => setSetupLang('python')}
+                  className={`text-xs font-semibold pb-1 border-b-2 transition-colors ${setupLang === 'python' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-[var(--color-text-secondary)]'}`}
+                >
+                  Python SDK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSetupLang('node')}
+                  className={`text-xs font-semibold pb-1 border-b-2 transition-colors ${setupLang === 'node' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-[var(--color-text-secondary)]'}`}
+                >
+                  Node.js SDK
+                </button>
+              </div>
+              <div className="space-y-2 text-xs">
+                <p className="font-semibold text-[var(--color-text-primary)]">1. Set environment variables:</p>
+                <pre className="p-2.5 rounded bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono text-[10px] overflow-x-auto">
+                  {`OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:8000/api/otel\nOTEL_EXPORTER_OTLP_PROTOCOL=http/json\nOTEL_SERVICE_NAME=my-service`}
+                </pre>
+                <p className="font-semibold text-[var(--color-text-primary)]">2. Code configuration example:</p>
+                <pre className="p-2.5 rounded bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono text-[10px] overflow-x-auto whitespace-pre-wrap">
+                  {setupLang === 'python' ? otelStatus.sdk_setup?.python_example : otelStatus.sdk_setup?.node_example}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Active OTel Services tag list */}
+          {otelStatus.services_seen && Object.keys(otelStatus.services_seen).length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-[var(--color-text-secondary)] uppercase font-semibold tracking-wider">Active reporting services</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(otelStatus.services_seen).map(([svc, count]) => (
+                  <span key={svc} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-primary)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                    {svc}
+                    <span className="text-[10px] text-[var(--color-text-secondary)]">({count as any} spans)</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* X-Ray / AWS traces section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">AWS X-Ray Collected Traces</h4>
+          {data.traces.length > 0 && (
+            <div className="flex gap-2">
+              {(['all', 'errors', 'faults'] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${filter === f ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+                  {f === 'all' ? `All (${data.traces.length})` : f === 'errors' ? `Errors (${data.traces.filter(t => t.has_error).length})` : `Faults (${data.traces.filter(t => t.has_fault).length})`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {data.traces.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-[var(--color-border)]">
+            <GitBranch className="h-8 w-8 text-[var(--color-text-secondary)]/30 mb-2" />
+            <p className="text-xs font-medium text-[var(--color-text-secondary)]">No AWS X-Ray traces collected in this view</p>
+            <p className="text-[10px] text-[var(--color-text-secondary)]/60 mt-0.5">Configure X-Ray in AWS. AWS Syncs every 1 minute.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-card-hover)]">
+                  <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Trace ID</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Service</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Duration</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {traces.slice(0, 50).map(t => (
+                  <tr key={t.trace_id} className="hover:bg-[var(--color-card-hover)] transition-colors">
+                    <td className="px-4 py-2.5 font-mono text-[var(--color-text-secondary)] max-w-[120px] truncate">{t.trace_id.slice(0, 16)}…</td>
+                    <td className="px-4 py-2.5 font-medium text-[var(--color-text-primary)]">{t.root_service}</td>
+                    <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{t.duration_ms.toFixed(0)}ms</td>
+                    <td className="px-4 py-2.5">
+                      {t.has_fault ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-400/10 text-red-400">FAULT</span>
+                        : t.has_error ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-400/10 text-orange-400">ERROR</span>
+                          : t.has_throttle ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-400/10 text-yellow-400">THROTTLE</span>
+                            : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-400/10 text-green-400">OK</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{new Date(t.timestamp).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Audit Events Panel ───────────────────────────────────────────────────────
+
+function AuditPanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+  const [data, setData] = useState<{ events: AuditEvent[]; updated_at: string }>({ events: [], updated_at: '' });
+  const [loading, setLoading] = useState(true);
+  const [severity, setSeverity] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    apiFetch(`/api/integrations/audit-events?limit=200${qs}`)
+      .then(d => setData(d))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, [activeProvider]);
+
+  const events = data.events
+    .filter(e => severity === 'all' || e.severity === severity)
+    .filter(e => !search || e.event_name.toLowerCase().includes(search.toLowerCase()) || e.username.toLowerCase().includes(search.toLowerCase()));
+
+  const sevColor = (s: string) =>
+    s === 'critical' ? 'text-red-400 bg-red-400/10' :
+      s === 'warning' ? 'text-yellow-400 bg-yellow-400/10' :
+        'text-blue-400 bg-blue-400/10';
+
+  if (loading) return <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading audit events...</div>;
+
+  if (data.events.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <BookOpen className="h-10 w-10 text-[var(--color-text-secondary)]/30 mb-3" />
+      <p className="text-sm font-medium text-[var(--color-text-secondary)]">No CloudTrail audit events yet</p>
+      <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1">Only write-only API calls are collected. Syncs every 5 minutes.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-secondary)]" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by event or user..."
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]" />
+        </div>
+        {(['all', 'critical', 'warning', 'info'] as const).map(s => (
+          <button key={s} onClick={() => setSeverity(s)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${severity === s ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+            {s === 'all' ? `All (${data.events.length})` : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-[var(--color-border)] bg-[var(--color-card-hover)]">
+              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Event</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">User</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Source IP</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Severity</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider text-[10px]">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--color-border)]">
+            {events.slice(0, 100).map(e => (
+              <tr key={e.event_id} className="hover:bg-[var(--color-card-hover)] transition-colors">
+                <td className="px-4 py-2.5 font-medium text-[var(--color-text-primary)]">{e.event_name}</td>
+                <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{e.username || '—'}</td>
+                <td className="px-4 py-2.5 font-mono text-[var(--color-text-secondary)]">{e.source_ip || '—'}</td>
+                <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${sevColor(e.severity)}`}>{e.severity}</span></td>
+                <td className="px-4 py-2.5 text-[var(--color-text-secondary)]">{new Date(e.timestamp).toLocaleTimeString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Compliance Panel ─────────────────────────────────────────────────────────
+
+function CompliancePanel({ activeProvider }: { activeProvider: Provider | 'all' }) {
+  const [data, setData] = useState<{ rules: ConfigRule[]; non_compliant_resources: any[]; total_rules: number; non_compliant_rule_count: number; updated_at: string }>({
+    rules: [], non_compliant_resources: [], total_rules: 0, non_compliant_rule_count: 0, updated_at: ''
+  });
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'compliant' | 'non_compliant'>('all');
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = activeProvider !== 'all' ? `&provider=${activeProvider}` : '';
+    apiFetch(`/api/integrations/config-compliance${qs ? '?' + qs.slice(1) : ''}`)
+      .then(d => setData(d))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, [activeProvider]);
+
+  const rules = data.rules.filter(r =>
+    filter === 'all' || (filter === 'compliant' && r.is_compliant) || (filter === 'non_compliant' && !r.is_compliant)
+  );
+
+  const complianceRate = data.total_rules > 0
+    ? Math.round(((data.total_rules - data.non_compliant_rule_count) / data.total_rules) * 100)
+    : 100;
+
+  if (loading) return <div className="flex items-center justify-center py-12 text-[var(--color-text-secondary)]"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading compliance data...</div>;
+
+  if (data.rules.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <ShieldCheck className="h-10 w-10 text-[var(--color-text-secondary)]/30 mb-3" />
+      <p className="text-sm font-medium text-[var(--color-text-secondary)]">No AWS Config data yet</p>
+      <p className="text-xs text-[var(--color-text-secondary)]/60 mt-1">AWS Config must be enabled in your account. Syncs every 15 minutes.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-card)]">
+          <p className="text-2xl font-bold text-[var(--color-text-primary)]">{data.total_rules}</p>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">Total Rules</p>
+        </div>
+        <div className={`rounded-xl border p-4 ${data.non_compliant_rule_count === 0 ? 'border-green-500/20 bg-green-500/5' : 'border-red-500/20 bg-red-500/5'}`}>
+          <p className={`text-2xl font-bold ${data.non_compliant_rule_count === 0 ? 'text-green-400' : 'text-red-400'}`}>{data.non_compliant_rule_count}</p>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">Non-Compliant</p>
+        </div>
+        <div className={`rounded-xl border p-4 ${complianceRate >= 90 ? 'border-green-500/20 bg-green-500/5' : 'border-yellow-500/20 bg-yellow-500/5'}`}>
+          <p className={`text-2xl font-bold ${complianceRate >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>{complianceRate}%</p>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">Compliance Rate</p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {(['all', 'compliant', 'non_compliant'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${filter === f ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-card-hover)]'}`}>
+            {f === 'all' ? `All Rules (${data.rules.length})` : f === 'compliant' ? `✅ Compliant` : `❌ Non-Compliant`}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {rules.map(rule => (
+          <div key={rule.rule_name} className={`flex items-center justify-between p-3 rounded-lg border ${rule.is_compliant ? 'border-[var(--color-border)] bg-[var(--color-card)]' : 'border-red-500/20 bg-red-500/5'}`}>
+            <div className="flex items-center gap-2.5">
+              {rule.is_compliant
+                ? <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+                : <AlertOctagon className="h-4 w-4 text-red-400 shrink-0" />}
+              <div>
+                <p className="text-xs font-semibold text-[var(--color-text-primary)]">{rule.rule_name}</p>
+                <p className="text-[10px] text-[var(--color-text-secondary)]">{rule.description || rule.source_identifier}</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${rule.is_compliant ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+              {rule.is_compliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CloudIntegrationsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<SyncStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'connect' | 'resources'>('connect');
+  const [syncResult, setSyncResult] = useState<Record<string, string> | null>(null);
+  const [activeTab, setActiveTab] = useState<TelemetryTab>('connect');
   const [lastSync, setLastSync] = useState<string>('');
+  // Provider context: clicking a provider card scopes ALL tabs to that provider
+  const [activeProvider, setActiveProvider] = useState<Provider | 'all'>('all');
 
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     try {
       const data = await apiFetch('/api/integrations/connections');
       setConnections(data.connections || []);
     } catch { }
-  };
+  }, []);
 
-  useEffect(() => { loadConnections(); }, []);
+  useEffect(() => { loadConnections(); }, [loadConnections]);
 
   const triggerSync = async () => {
     setSyncing(true); setSyncResult(null);
@@ -735,6 +1180,16 @@ export default function CloudIntegrationsPage() {
 
   const byProvider = (p: Provider) => connections.filter(c => c.provider === p);
   const totalConnections = connections.length;
+  const hasAWS = byProvider('aws').length > 0;
+
+  const tabs: { id: TelemetryTab; label: string; icon: any; requiresCloud?: 'aws' }[] = [
+    { id: 'connect', label: 'Connect', icon: Cloud },
+    { id: 'resources', label: 'Resources', icon: Server },
+    { id: 'logs', label: 'Logs', icon: FileText },
+    { id: 'traces', label: 'Traces', icon: GitBranch },
+    { id: 'audit', label: 'Audit', icon: BookOpen, requiresCloud: 'aws' },
+    { id: 'compliance', label: 'Compliance', icon: ShieldCheck, requiresCloud: 'aws' },
+  ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -753,7 +1208,10 @@ export default function CloudIntegrationsPage() {
         </div>
         <div className="flex items-center gap-3">
           {lastSync && (
-            <p className="text-[10px] text-[var(--color-text-secondary)]">Last sync: {lastSync}</p>
+            <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-secondary)]">
+              <Clock className="h-3 w-3" />
+              Last sync: {lastSync}
+            </div>
           )}
           <button
             onClick={triggerSync}
@@ -766,69 +1224,145 @@ export default function CloudIntegrationsPage() {
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* Provider stats — clickable to scope all tabs */}
       <div className="grid grid-cols-4 gap-3">
-        {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => {
-          const count = byProvider(p).length;
-          const cfg = PROVIDER_CONFIG[p];
+        {(['all', 'aws', 'azure', 'gcp', 'kubernetes'] as (Provider | 'all')[]).map(p => {
+          const isAll = p === 'all';
+          const count = isAll ? connections.length : byProvider(p as Provider).length;
+          const cfg = isAll ? null : PROVIDER_CONFIG[p as Provider];
+          const isActive = activeProvider === p;
           return (
-            <div key={p} className="rounded-xl p-4 border" style={{ borderColor: cfg.border, background: cfg.bg }}>
+            <button
+              key={p}
+              onClick={() => setActiveProvider(p)}
+              className={`rounded-xl p-4 border text-left transition-all duration-200 ${isActive
+                  ? 'ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-background)] scale-[1.02]'
+                  : 'hover:scale-[1.01]'
+                }`}
+              style={{
+                borderColor: isAll ? 'var(--color-border)' : (isActive ? cfg!.color : cfg!.border),
+                background: isAll ? 'var(--color-card)' : cfg!.bg,
+              }}
+            >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-lg">{p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : '⎈'}</span>
-                {count > 0
+                <span className="text-lg">
+                  {p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : p === 'kubernetes' ? '⎈' : '🌐'}
+                </span>
+                {isAll ? (
+                  <Filter className="h-3.5 w-3.5" style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }} />
+                ) : (count > 0
                   ? <Wifi className="h-3.5 w-3.5 text-green-400" />
-                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />}
+                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />)
+                }
               </div>
               <p className="text-lg font-bold text-[var(--color-text-primary)]">{count}</p>
-              <p className="text-[10px] text-[var(--color-text-secondary)]">{cfg.label}</p>
-            </div>
+              <p className="text-[10px] text-[var(--color-text-secondary)]">
+                {isAll ? 'All Clouds' : cfg!.label}
+              </p>
+            </button>
           );
         })}
       </div>
 
+      {/* Active provider context banner */}
+      {activeProvider !== 'all' && (
+        <div
+          className="flex items-center justify-between px-4 py-2.5 rounded-xl border text-xs font-medium"
+          style={{
+            borderColor: PROVIDER_CONFIG[activeProvider].border,
+            background: PROVIDER_CONFIG[activeProvider].bg,
+            color: PROVIDER_CONFIG[activeProvider].color,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">
+              {activeProvider === 'aws' ? '☁' : activeProvider === 'azure' ? '⬡' : activeProvider === 'gcp' ? '◈' : '⎈'}
+            </span>
+            <span>Showing <strong>{PROVIDER_CONFIG[activeProvider].label}</strong> data only — all tabs filtered to this cloud</span>
+          </div>
+          <button
+            onClick={() => setActiveProvider('all')}
+            className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
+          >
+            <XCircle className="h-3.5 w-3.5" /> Clear filter
+          </button>
+        </div>
+      )}
+
+      {/* AWS data sources architecture */}
+      <AWSSourcesPanel hasConnection={hasAWS} />
+
+      {/* Azure data sources architecture */}
+      <AzureSourcesPanel hasConnection={byProvider('azure').length > 0} />
+
       {/* Sync result */}
       {syncResult && (
-        <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-card)] flex flex-wrap gap-4">
-          <p className="text-xs font-semibold text-[var(--color-text-primary)] w-full">Sync Complete</p>
-          {Object.entries(syncResult).map(([key, val]) => (
-            <div key={key} className="flex items-center gap-2 text-xs">
-              {val === 'ok'
-                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-                : <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />}
-              <span className="capitalize font-medium text-[var(--color-text-primary)]">{key}:</span>
-              <span className={val === 'ok' ? 'text-green-400' : 'text-yellow-400'}>{val}</span>
-            </div>
-          ))}
+        <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-card)]">
+          <p className="text-xs font-semibold text-[var(--color-text-primary)] mb-3">Sync Complete</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {Object.entries(syncResult).map(([key, val]) => (
+              <div key={key} className={`flex items-center gap-2 text-xs p-2 rounded-lg border ${val === 'ok' ? 'border-green-500/20 bg-green-500/5' : 'border-yellow-500/20 bg-yellow-500/5'}`}>
+                {val === 'ok'
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400 shrink-0" />
+                  : <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />}
+                <div>
+                  <p className="capitalize font-semibold text-[var(--color-text-primary)]">{key.replace(/_/g, ' ')}</p>
+                  <p className={val === 'ok' ? 'text-green-400' : 'text-yellow-400'}>{val}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-[var(--color-border)]">
-        {(['connect', 'resources'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === tab ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
-            {tab === 'connect' ? 'Connect Providers' : 'Discovered Resources'}
-            {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] rounded-full" />}
-          </button>
-        ))}
+      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const disabled = tab.requiresCloud === 'aws' && !hasAWS;
+          return (
+            <button key={tab.id} onClick={() => !disabled && setActiveTab(tab.id)}
+              disabled={disabled}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.id ? 'text-[var(--color-primary)]' : disabled ? 'text-[var(--color-text-secondary)]/30 cursor-not-allowed' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+              <Icon className="h-3.5 w-3.5" />
+              {tab.label}
+              {disabled && <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-border)] text-[var(--color-text-secondary)]/50">AWS</span>}
+              {activeTab === tab.id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] rounded-full" />}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
-      {activeTab === 'connect' ? (
+      {activeTab === 'connect' && (
         <div className="grid gap-4">
           {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => (
             <ProviderCard key={p} provider={p} connections={byProvider(p)} onRefresh={loadConnections} />
           ))}
         </div>
-      ) : (
-        <ResourcesPanel />
       )}
+      {activeTab === 'resources' && <ResourcesPanel activeProvider={activeProvider} />}
+      {activeTab === 'logs' && <LogsPanel activeProvider={activeProvider} />}
+      {activeTab === 'traces' && <TracesPanel activeProvider={activeProvider} />}
+      {activeTab === 'audit' && <AuditPanel activeProvider={activeProvider} />}
+      {activeTab === 'compliance' && <CompliancePanel activeProvider={activeProvider} />}
 
       {/* Info footer */}
-      <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-card-hover)] text-xs text-[var(--color-text-secondary)] space-y-1">
-        <p className="font-semibold text-[var(--color-text-primary)]">How it works</p>
-        <p>Once connected, resources are auto-discovered every <strong>30 minutes</strong>, metrics every <strong>1 minute</strong>, and alerts every <strong>30 seconds</strong>.</p>
-        <p>Live data flows automatically into the Executive Dashboard, RCA Engine, Blast Radius Analyzer, and Dependency Map — no additional configuration needed.</p>
+      <div className="rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-card-hover)] text-xs text-[var(--color-text-secondary)] space-y-2">
+        <p className="font-semibold text-[var(--color-text-primary)]">Auto-sync schedule</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: 'Resources', freq: '1 min' }, { label: 'Metrics', freq: '1 min' },
+            { label: 'Alerts', freq: '30 sec' }, { label: 'Logs', freq: '2 min' },
+            { label: 'X-Ray Traces', freq: '1 min' }, { label: 'Audit Events', freq: '5 min' },
+            { label: 'Config', freq: '15 min' },
+          ].map(item => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-[var(--color-primary)]" />
+              <span className="font-medium text-[var(--color-text-primary)]">{item.label}:</span> {item.freq}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

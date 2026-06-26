@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, rca_engine
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
@@ -21,6 +21,11 @@ def _warm_parquet_cache() -> None:
         parquet_store._svc_host_map()
         parquet_store._metric_app()
         parquet_store._metric_cpu()
+        
+        log.info("[startup] Warming logical query cache...")
+        for filename in parquet_store._ROUTES.keys():
+            parquet_store.query(filename)
+            
         log.info("[startup] Parquet cache ready.")
     except Exception as exc:
         log.warning(f"[startup] Parquet pre-warm failed (non-fatal): {exc}")
@@ -59,7 +64,7 @@ app.include_router(intelligence.router)
 app.include_router(admin.router)
 app.include_router(copilot.router)
 app.include_router(integrations.router)
-app.include_router(rca_engine.router)
+app.include_router(otel.router)
 
 
 @app.get("/api/health")

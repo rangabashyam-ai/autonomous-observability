@@ -19,10 +19,10 @@ try:
         for _ in range(5):
             candidate = current / ".env"
             if candidate.exists():
-                load_dotenv(dotenv_path=candidate, override=False)
+                load_dotenv(dotenv_path=candidate, override=True)
                 return
             current = current.parent
-        load_dotenv(override=False)  # last resort: let dotenv search CWD
+        load_dotenv(override=True)  # last resort: let dotenv search CWD
 
     _find_and_load_env()
 except ImportError:
@@ -155,3 +155,5 @@ def chat_with_fallback(
             continue
 
     raise RuntimeError(f"All models failed: {last_error}")
+
+# End of file - Trigger reload on change

@@ -17,16 +17,32 @@ from typing import Any
 from app.data_store import read_json
 
 # Pin "now" to dataset time for consistent demo correlation
-DATASET_NOW = datetime(2026, 6, 8, 15, 38, 24, tzinfo=timezone.utc)
+DATASET_NOW = datetime(2021, 3, 25, 15, 58, 0, tzinfo=timezone.utc)
 
-TRACKED_SERVICES = [
-    "payment-authorization",
-    "settlement-processing",
-    "fraud-detection",
-    "api-gateway-services",
-    "merchant-services",
-    "partner-integrations",
-]
+def get_tracked_services() -> list[str]:
+    try:
+        from app import parquet_store
+        shm = parquet_store._svc_host_map()
+        if not shm.empty:
+            return sorted(shm["service"].dropna().unique().tolist())
+    except Exception:
+        pass
+    return []
+
+
+def get_playbook_for_service(service_name: str, pattern: dict) -> list[str]:
+    generic_playbook = [
+        f"Inspect container and system resource utilization (CPU, Memory) for {service_name}",
+        f"Verify network connectivity and routing to {service_name} downstream dependencies",
+        f"Review recent change records and deployments affecting {service_name}",
+        f"Analyze error logs and stack traces on {service_name} app instances"
+    ]
+    playbook = PLAYBOOKS.get(service_name)
+    if not playbook:
+        playbook = pattern.get("recommended_actions")
+    if not playbook:
+        playbook = generic_playbook
+    return playbook
 
 # Map variant alert titles to a shared canonical key
 ALERT_CANONICAL: dict[str, str] = {
@@ -448,7 +464,7 @@ def _build_detection(
             severity_breakdown[sev] += 1
 
     svc_name = expected_service.replace("-", " ").title()
-    playbook = PLAYBOOKS.get(expected_service, pattern.get("recommended_actions", []))
+    playbook = get_playbook_for_service(expected_service, pattern)
 
     return {
         "pattern_id": pattern["id"],
@@ -514,7 +530,7 @@ def _service_risk_summary(
 ) -> list[dict]:
     summary: list[dict] = []
 
-    for svc in TRACKED_SERVICES:
+    for svc in get_tracked_services():
         svc_name = svc.replace("-", " ").title()
         svc_detections = [d for d in detections if d["expected_impacted_service_id"] == svc]
 
@@ -734,9 +750,12 @@ def analyze_early_detection(current_alerts: list[str] | None = None) -> dict[str
 
     raw_detections: list[dict] = []
     for pattern in patterns:
-        det = _build_detection(pattern, active_alerts, dep_edges)
-        if det:
-            raw_detections.append(det)
+        for svc in get_tracked_services():
+            pat_copy = dict(pattern)
+            pat_copy["expected_service"] = svc
+            det = _build_detection(pat_copy, active_alerts, dep_edges)
+            if det:
+                raw_detections.append(det)
 
     detections = _dedupe_detections(raw_detections)
     service_risk_summary = _service_risk_summary(detections, active_alerts, dep_edges)

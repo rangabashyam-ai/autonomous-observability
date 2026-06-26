@@ -10,8 +10,8 @@ def get_monitoring_dashboard():
     from app import parquet_store
     from app.services.intelligence import _load_incidents, _load_alerts
 
-    services_raw = parquet_store._q_services().get("services", [])
-    infra_raw    = parquet_store._q_infrastructure().get("nodes", [])
+    services_raw = parquet_store.query("dependencies/services.json").get("services", [])
+    infra_raw    = parquet_store.query("dependencies/infrastructure.json").get("nodes", [])
 
     # Service tab — microservices only, shaped for MonitoringDashboard
     service_metrics = []
@@ -86,6 +86,7 @@ def get_monitoring_dashboard():
     ]
 
     return {
+        "dataset_available": parquet_store.is_dataset_available(),
         "executive": {
             "service_availability":     round(avg_sr, 2),
             "transaction_success_rate": round(avg_sr, 2),

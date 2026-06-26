@@ -15,17 +15,21 @@ from app.data_store import read_json
 # ---------------------------------------------------------------------------
 # Bank data paths (overridable via env vars)
 # ---------------------------------------------------------------------------
+_BANK_ROOT = Path(os.environ.get(
+    "BANK_ROOT",
+    str(Path(__file__).resolve().parent.parent.parent.parent / "openRCA_Bank"),
+))
 _BANK_INCIDENTS_DIR = Path(os.environ.get(
     "BANK_INCIDENTS_DIR",
-    r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\incidents",
+    str(_BANK_ROOT / "incidents"),
 ))
 _BANK_ALERTS_DIR = Path(os.environ.get(
     "BANK_ALERTS_DIR",
-    r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\alerts",
+    str(_BANK_ROOT / "alerts"),
 ))
 _BANK_INCIDENTS_CSV = Path(os.environ.get(
     "INCIDENTS_CSV",
-    r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\incidents.csv",
+    str(_BANK_ROOT / "incidents.csv"),
 ))
 
 _bank_incidents_cache: list[dict] | None = None
@@ -205,75 +209,29 @@ def get_service_for_entity(entity_id: str) -> str | None:
         return None
     entity_id_lower = entity_id.lower()
 
-    # Bank-specific entity IDs (cmdb_id based)
-    bank_mapping = {
-        "ig01": "api-gateway-services", "ig02": "api-gateway-services",
-        "mg01": "settlement-processing", "mg02": "settlement-processing",
-        "tomcat01": "payment-authorization", "tomcat02": "payment-authorization",
-        "tomcat03": "fraud-detection",      "tomcat04": "fraud-detection",
-        "mysql01": "payment-authorization", "mysql02": "payment-authorization",
-        "redis01": "fraud-detection",       "redis02": "fraud-detection",
-        "apache01": "api-gateway-services", "apache02": "api-gateway-services",
-        "dockera1": "merchant-services",    "dockera2": "merchant-services",
-        "dockerb1": "partner-integrations", "dockerb2": "partner-integrations",
-    }
-    for prefix in range(1, 12):
-        bank_mapping[f"servicetest{prefix}"] = (
-            "payment-authorization" if prefix <= 2 else
-            "settlement-processing" if prefix <= 4 else
-            "fraud-detection"       if prefix <= 6 else
-            "merchant-services"     if prefix <= 8 else
-            "api-gateway-services"  if prefix <= 10 else
-            "partner-integrations"
-        )
-    if entity_id_lower in bank_mapping:
-        return bank_mapping[entity_id_lower]
+    # Try mapping dynamically using service_host_map.parquet
+    try:
+        from app import parquet_store
+        df = parquet_store._svc_host_map()
+        
+        # 1. Exact case-insensitive service lookup
+        unique_services = df["service"].dropna().unique()
+        services_map = {s.lower(): s for s in unique_services}
+        if entity_id_lower in services_map:
+            return services_map[entity_id_lower]
 
-    # Exact / direct mappings first
-    mapping = {
-        'cassandra-cluster': 'fraud-detection',
-        'identity-service': 'payment-authorization',
-        'customer-service': 'partner-integrations',
-        'webhook-handler': 'partner-integrations',
-        'rate-limiter': 'payment-authorization',
-        'reconciliation-service': 'merchant-services',
-        'api-gateway-services': 'api-gateway-services',
-        'auth-service': 'payment-authorization',
-        'merchant-services': 'merchant-services',
-        'payment-authorization': 'payment-authorization',
-        'fraud-detection': 'fraud-detection',
-        'api-gateway': 'api-gateway-services',
-        'audit-service': 'fraud-detection',
-        'token-service': 'payment-authorization',
-        'partner-integrations': 'partner-integrations',
-        'ml-scoring-service': 'fraud-detection',
-        'notification-service': 'settlement-processing',
-        'settlement-processing': 'settlement-processing',
-        'fraud-service': 'fraud-detection',
-        'settlement-service': 'settlement-processing',
-        'partner-api': 'partner-integrations',
-        'merchant-api': 'merchant-services',
-        'postgres-cluster': 'payment-authorization',
-        'redis-cluster': 'payment-authorization',
-    }
-    
-    if entity_id_lower in mapping:
-        return mapping[entity_id_lower]
-        
-    # Keyword-based fallback mappings
-    if any(k in entity_id_lower for k in ['auth', 'token', 'identity', 'redis', 'postgres', 'payment']):
-        return 'payment-authorization'
-    if any(k in entity_id_lower for k in ['settlement', 'notification', 'kafka', 'rabbitmq']):
-        return 'settlement-processing'
-    if any(k in entity_id_lower for k in ['fraud', 'ml', 'cassandra', 'audit']):
-        return 'fraud-detection'
-    if any(k in entity_id_lower for k in ['merchant', 'reconciliation']):
-        return 'merchant-services'
-    if any(k in entity_id_lower for k in ['partner', 'webhook', 'customer']):
-        return 'partner-integrations'
-    if any(k in entity_id_lower for k in ['gateway', 'api-gateway']):
-        return 'api-gateway-services'
-        
+        # 2. CMDB ID match
+        subset = df[df["cmdb_id"].str.lower() == entity_id_lower]
+        if not subset.empty:
+            return subset.iloc[0]["service"]
+
+        # 3. Substring check: if active service is part of entity name
+        for s in unique_services:
+            if s.lower() in entity_id_lower:
+                return s
+    except Exception:
+        pass
+
     return None
 
 
@@ -478,7 +436,15 @@ def analyze_blast_radius(
     # Determine source from RCA-like matching if not provided
     if not source_component:
         rca = analyze_rca(alerts, symptoms, service)
-        source_component = rca.get("suspected_component") or "auth-service"
+        fallback = "unknown-service"
+        try:
+            from app import parquet_store
+            unique_svcs = sorted(parquet_store._svc_host_map()["service"].unique().tolist())
+            if unique_svcs:
+                fallback = unique_svcs[0]
+        except Exception:
+            pass
+        source_component = rca.get("suspected_component") or fallback
 
     # BFS downstream on dependency graph
     downstream = _bfs_downstream(source_component, dep_edges)
@@ -500,16 +466,11 @@ def analyze_blast_radius(
     is_systemic = len(downstream) > 4 or any("gateway" in c for c in downstream)
 
     # Business impact score
-    service_impact_map = {
-        "payment-authorization": 95, "settlement-processing": 90,
-        "fraud-detection": 75, "merchant-services": 70,
-        "api-gateway-services": 85, "partner-integrations": 60,
-    }
     biz_score = 50
-    for svc, score in service_impact_map.items():
-        if service and svc in service.lower().replace(" ", "-"):
-            biz_score = score
-            break
+    if service:
+        import hashlib
+        h = int(hashlib.md5(service.encode()).hexdigest(), 16)
+        biz_score = 60 + (h % 36) # distributes stably between 60 and 95
     if is_systemic:
         biz_score = min(100, biz_score + 20)
 
@@ -835,6 +796,21 @@ def copilot_query(question: str) -> dict:
 
 
 def _extract_service(q: str) -> str | None:
+    text_lower = q.lower()
+    try:
+        from .. import parquet_store
+        if parquet_store.is_dataset_available():
+            for svc in parquet_store.get_business_services():
+                svc_id = svc["id"]
+                svc_name = svc["name"].lower()
+                if svc_name in text_lower or svc_id.lower() in text_lower:
+                    return svc_id
+                for ms in svc.get("microservices", []):
+                    if ms.lower() in text_lower:
+                        return svc_id
+    except Exception:
+        pass
+
     services = {
         "payment authorization": "payment-authorization",
         "payment": "payment-authorization",
@@ -846,7 +822,7 @@ def _extract_service(q: str) -> str | None:
         "partner": "partner-integrations",
     }
     for name, sid in services.items():
-        if name in q:
+        if name in text_lower:
             return sid
     return None
 

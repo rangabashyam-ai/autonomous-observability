@@ -15,7 +15,7 @@ import json
 
 logger = logging.getLogger(__name__)
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "data"
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data"
 _KG_PATH = _DATA_DIR / "rca" / "knowledge_graph.json"
 _DEP_GRAPH_PATH = _DATA_DIR / "dependencies" / "dependency_graph.json"
 

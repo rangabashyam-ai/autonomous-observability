@@ -71,16 +71,27 @@ def collect_rds_metrics(session, db_identifier: str, region: str = "us-east-1") 
     )
 
 
-def collect_alb_metrics(session, lb_name: str, region: str = "us-east-1") -> NormalizedMetric:
-    """Collect ALB metrics — TargetResponseTime, RequestCount, HTTPCode_ELB_5XX_Count."""
+def collect_alb_metrics(session, lb_arn: str, region: str = "us-east-1") -> NormalizedMetric:
+    """Collect ALB metrics — TargetResponseTime, RequestCount, HTTPCode_ELB_5XX_Count.
+
+    CloudWatch requires the ARN suffix as the LoadBalancer dimension value, NOT the
+    plain load-balancer name.  Example suffix: 'app/my-alb/50dc6c495c0c9188'.
+    ARN format: arn:aws:elasticloadbalancing:<region>:<acct>:loadbalancer/<suffix>
+    """
     cw = session.client("cloudwatch", region_name=region)
-    dims = [{"Name": "LoadBalancer", "Value": lb_name}]
+    # Extract the CloudWatch-compatible suffix from the full ARN.
+    # Falls back to the raw value so plain names still work (e.g. NLBs).
+    if "loadbalancer/" in lb_arn:
+        cw_lb_id = lb_arn.split("loadbalancer/", 1)[1]
+    else:
+        cw_lb_id = lb_arn
+    dims = [{"Name": "LoadBalancer", "Value": cw_lb_id}]
     latency = _cloudwatch_average(cw, "AWS/ApplicationELB", "TargetResponseTime", dims) * 1000
     requests = _cloudwatch_average(cw, "AWS/ApplicationELB", "RequestCount", dims)
     errors = _cloudwatch_average(cw, "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", dims)
     error_rate = (errors / max(requests, 1)) * 100 if requests > 0 else 0.0
     return normalize_cloudwatch_metrics(
-        resource_id=lb_name,
+        resource_id=lb_arn,
         metric_results={
             "TargetResponseTime": latency / 1000,   # back to seconds for normalizer
             "RequestCount": requests,
@@ -88,6 +99,35 @@ def collect_alb_metrics(session, lb_name: str, region: str = "us-east-1") -> Nor
         },
         region=region,
         resource_type="load_balancer",
+    )
+
+
+def collect_ecs_metrics(session, cluster_name: str, service_name: str, region: str = "us-east-1") -> NormalizedMetric:
+    """Collect ECS Service metrics via Container Insights."""
+    from app.integrations.aws.container_insights import collect_ecs_service_metrics
+    return collect_ecs_service_metrics(session, cluster_name, service_name, region)
+
+
+def collect_eks_metrics(session, cluster_name: str, region: str = "us-east-1") -> NormalizedMetric:
+    """Collect EKS cluster-level metrics via Container Insights.
+
+    Requires Container Insights to be enabled on the cluster.
+    Falls back to 0.0 gracefully if not enabled.
+    """
+    from app.integrations.aws.container_insights import collect_eks_node_metrics
+    cw = session.client("cloudwatch", region_name=region)
+    # Fetch cluster-level aggregated CPU and memory from ContainerInsights namespace
+    namespace = "ContainerInsights"
+    dims = [{"Name": "ClusterName", "Value": cluster_name}]
+    cpu = _cloudwatch_average(cw, namespace, "node_cpu_utilization", dims)
+    mem = _cloudwatch_average(cw, namespace, "node_memory_utilization", dims)
+    return NormalizedMetric(
+        resource=cluster_name,
+        provider="aws",
+        region=region,
+        resource_type="eks_cluster",
+        cpu=round(min(cpu, 100), 2),
+        memory=round(min(mem, 100), 2),
     )
 
 
@@ -103,7 +143,19 @@ def collect_metrics_for_resources(session, resources: list[dict], region: str = 
             elif rt == "rds_instance":
                 metrics.append(collect_rds_metrics(session, rid, region))
             elif rt == "load_balancer":
-                metrics.append(collect_alb_metrics(session, rid, region))
+                # Pass the full ARN (stored in res["id"] by discovery.py) so that
+                # collect_alb_metrics can extract the correct CloudWatch dimension suffix.
+                lb_arn = res.get("id", rid)
+                metrics.append(collect_alb_metrics(session, lb_arn, region))
+            elif rt == "ecs_service":
+                cluster = res.get("cluster", "")
+                if cluster:
+                    metrics.append(collect_ecs_metrics(session, cluster, rid, region))
+            elif rt == "eks_cluster":
+                # Collect cluster-level CPU/memory from Container Insights.
+                # Returns 0.0 gracefully if Container Insights is not enabled.
+                metrics.append(collect_eks_metrics(session, rid, region))
         except Exception as exc:
             logger.warning(f"[AWS] Metric collection failed for {rid}: {exc}")
     return metrics
+

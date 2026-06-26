@@ -10,6 +10,16 @@ DATA_DIR = Path(
 
 
 def read_json(filename: str) -> dict | list:
+    # Prefer parquet if dataset is available and path is routed
+    try:
+        from . import parquet_store
+        if parquet_store.is_dataset_available() and filename in parquet_store._ROUTES:
+            res = parquet_store.query(filename)
+            if res:
+                return res
+    except Exception:
+        pass
+
     filepath = DATA_DIR / filename
     if filepath.exists():
         import json

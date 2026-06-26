@@ -36,7 +36,7 @@ export default function BlastRadiusDashboard() {
   const { theme } = useTheme();
   const [alerts] = useState(['CPU Saturation', 'API Error Spike']);
   const [symptoms] = useState(['Latency Increase', 'Retry Storm']);
-  const [service, setService] = useState('payment-authorization');
+  const [service, setService] = useState('');
   const [result, setResult] = useState<BlastRadiusResult | null>(null);
   const [graph, setGraph] = useState<DependencyGraph | null>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -49,23 +49,32 @@ export default function BlastRadiusDashboard() {
   const [activeRegionModal, setActiveRegionModal] = useState<string | null>(null);
   const [expandedPanel, setExpandedPanel] = useState<'dynamic' | 'component' | 'chat' | null>(null);
 
-  const baseServiceImpact = useMemo(() => {
-    const serviceImpactMap: Record<string, number> = {
-      'payment-authorization': 95,
-      'settlement-processing': 90,
-      'api-gateway-services': 85,
-      'fraud-detection': 75,
-      'merchant-services': 70,
-      'partner-integrations': 60,
-    };
-    return serviceImpactMap[service] ?? 50;
-  }, [service]);
-
   const scopeModifier = useMemo(() => {
     if (!result) return 0;
     const isSystemic = result.issue_scope === 'systemic';
     return isSystemic ? 20 : 0;
   }, [result]);
+
+  const baseServiceImpact = useMemo(() => {
+    if (!result) return 0;
+    return result.business_impact_score - scopeModifier;
+  }, [result, scopeModifier]);
+
+  const regionServiceMap = useMemo(() => {
+    const map: Record<string, string[]> = {
+      'us-east': [],
+      'eu-central': [],
+      'ap-southeast': [],
+    };
+    if (!graph || !graph.nodes) return map;
+    graph.nodes.forEach((node, idx) => {
+      const regions = ['us-east', 'eu-central', 'ap-southeast'];
+      const r = regions[idx % regions.length];
+      map[r].push(node.id);
+      map[r].push(node.label);
+    });
+    return map;
+  }, [graph]);
 
   const applyGraphVisuals = useCallback(
     (
@@ -81,10 +90,16 @@ export default function BlastRadiusDashboard() {
       const selectedEdgeId = currentSelection?.type === 'edge' ? currentSelection.id : null;
 
       const regionServiceMap: Record<string, string[]> = {
-        'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
-        'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
-        'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
+        'us-east': [],
+        'eu-central': [],
+        'ap-southeast': [],
       };
+      graphData.nodes.forEach((node, idx) => {
+        const regions = ['us-east', 'eu-central', 'ap-southeast'];
+        const r = regions[idx % regions.length];
+        regionServiceMap[r].push(node.id);
+        regionServiceMap[r].push(node.label);
+      });
 
       // Filter graph data if filterRegion is active!
       let nodesToRender = graphData.nodes;
@@ -137,8 +152,8 @@ export default function BlastRadiusDashboard() {
   const buildGraph = useCallback(
     async (blast: BlastRadiusResult, currentTheme: 'light' | 'dark', currentSelection: GraphSelection) => {
       const [serviceGraph, infraGraph] = await Promise.all([
-        getDependencyGraph('microservice', 'risk_score', service),
-        getDependencyGraph('infrastructure', 'risk_score'),
+        getDependencyGraph(['microservice'], 'risk_score', service),
+        getDependencyGraph(['infrastructure'], 'risk_score'),
       ]);
 
       const infraRelevant = infraGraph.nodes.filter(
@@ -164,6 +179,7 @@ export default function BlastRadiusDashboard() {
   );
 
   const runAnalysis = useCallback(async () => {
+    if (!service) return;
     setLoading(true);
     try {
       const r = await analyzeBlastRadius({ alerts, symptoms, service });
@@ -177,6 +193,16 @@ export default function BlastRadiusDashboard() {
       setLoading(false);
     }
   }, [alerts, symptoms, service, theme, buildGraph]);
+
+  useEffect(() => {
+    getDependencyGraph(['microservice'], 'risk_score')
+      .then((g) => {
+        if (g.nodes && g.nodes.length > 0) {
+          setService(g.nodes[0].id);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     runAnalysis();
@@ -468,12 +494,6 @@ export default function BlastRadiusDashboard() {
 
   const getRegionStatus = useCallback((rName: string) => {
     if (!result) return 'Healthy';
-    
-    const regionServiceMap: Record<string, string[]> = {
-      'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
-      'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
-      'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
-    };
 
     const isOriginRegion = regionServiceMap[rName]?.some(
       s => s.toLowerCase() === service.toLowerCase()
@@ -489,19 +509,13 @@ export default function BlastRadiusDashboard() {
       return 'Warning';
     }
     return 'Healthy';
-  }, [result, service]);
+  }, [result, service, regionServiceMap]);
 
   const renderRegionModal = () => {
     if (!activeRegionModal || !result) return null;
     const rName = activeRegionModal;
     
     const status = getRegionStatus(rName);
-
-    const regionServiceMap: Record<string, string[]> = {
-      'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
-      'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
-      'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
-    };
 
     const localServices = regionServiceMap[rName] || [];
     
@@ -751,6 +765,18 @@ export default function BlastRadiusDashboard() {
         description="Predict impacted services, downstream failures, and visualize blast radius on dependency graph"
       />
 
+      {!result && !loading && (
+        <div className="mb-6 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm flex items-center gap-3">
+          <span className="text-lg animate-pulse">⚠️</span>
+          <div>
+            <p className="font-semibold text-amber-300">Observability dataset not detected</p>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Please copy your Parquet telemetry files into the project <code className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-400 font-mono text-[11px]">data/parquet</code> folder, or generate synthetic data in the Admin panel.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3 mb-4">
         <button onClick={runAnalysis} disabled={loading} className={btnPrimary}>
           {loading ? 'Analyzing...' : 'Refresh Analysis'}
@@ -866,12 +892,6 @@ export default function BlastRadiusDashboard() {
                     };
                     const statusEmoji = statusEmojiMap[status] || '🟢';
 
-                    // Compute impacted service count dynamically:
-                    const regionServiceMap: Record<string, string[]> = {
-                      'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
-                      'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
-                      'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
-                    };
                     const localServices = regionServiceMap[r] || [];
                     const impactedCount = result.currently_impacted_services.filter(s => 
                       localServices.some(ls => ls.toLowerCase() === s.toLowerCase() || s.toLowerCase().includes(ls.toLowerCase()))

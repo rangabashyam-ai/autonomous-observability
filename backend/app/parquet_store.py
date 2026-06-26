@@ -27,26 +27,63 @@ import pyarrow.parquet as pq
 PARQUET_DIR = Path(
     os.environ.get(
         "PARQUET_DIR",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\parquet",
+        str(Path(__file__).resolve().parent.parent.parent / "openRCA_Bank" / "parquet"),
     )
 )
 
-# Business services (domain names) → microservices (ServiceTestN) mapping
-BUSINESS_SERVICES = [
-    {"id": "payment-authorization",  "name": "Payment Authorization",  "microservices": ["ServiceTest1", "ServiceTest2"]},
-    {"id": "settlement-processing",  "name": "Settlement Processing",  "microservices": ["ServiceTest3", "ServiceTest4"]},
-    {"id": "fraud-detection",        "name": "Fraud Detection",        "microservices": ["ServiceTest5", "ServiceTest6"]},
-    {"id": "merchant-services",      "name": "Merchant Services",      "microservices": ["ServiceTest7", "ServiceTest8"]},
-    {"id": "api-gateway-services",   "name": "Api Gateway Services",   "microservices": ["ServiceTest9", "ServiceTest10"]},
-    {"id": "partner-integrations",   "name": "Partner Integrations",   "microservices": ["ServiceTest11"]},
-]
+def is_dataset_available() -> bool:
+    required_files = [
+        "service_host_map.parquet",
+        "metric_app.parquet",
+        "metric_container.parquet",
+        "log_service.parquet"
+    ]
+    if not PARQUET_DIR.exists():
+        return False
+    for f in required_files:
+        if not (PARQUET_DIR / f).exists():
+            return False
+    return True
 
-# Reverse lookup: microservice → parent business service id
-_MS_TO_BS: dict[str, str] = {
-    ms: bs["id"]
-    for bs in BUSINESS_SERVICES
-    for ms in bs["microservices"]
-}
+
+def get_business_services() -> list[dict]:
+    if not is_dataset_available():
+        return []
+    try:
+        shm = _svc_host_map()
+        unique_svcs = sorted(shm["service"].dropna().unique().tolist())
+        return [
+            {
+                "id": f"{svc}-bs",
+                "name": svc.replace("-", " ").title(),
+                "microservices": [svc]
+            }
+            for svc in unique_svcs
+        ]
+    except Exception:
+        return []
+
+
+def get_bs_microservices() -> dict[str, list[str]]:
+    if not is_dataset_available():
+        return {}
+    try:
+        shm = _svc_host_map()
+        unique_svcs = shm["service"].dropna().unique().tolist()
+        return {f"{svc}-bs": [svc] for svc in unique_svcs}
+    except Exception:
+        return {}
+
+
+def get_ms_to_bs() -> dict[str, str]:
+    if not is_dataset_available():
+        return {}
+    try:
+        shm = _svc_host_map()
+        unique_svcs = shm["service"].dropna().unique().tolist()
+        return {svc: f"{svc}-bs" for svc in unique_svcs}
+    except Exception:
+        return {}
 
 # ── lazy in-memory cache (loaded once per process) ──────────────────────────────
 _cache: dict[str, pd.DataFrame] = {}
@@ -132,20 +169,30 @@ _EMPTY_WRAPPERS: dict[str, dict] = {
 }
 
 
+_query_cache: dict[str, dict | list] = {}
+
+
 def query(filename: str) -> dict | list:
     """Route a logical JSON filename to its parquet query function."""
+    if filename in _query_cache:
+        return _query_cache[filename]
     handler_name = _ROUTES.get(filename)
     if handler_name is None:
         return _EMPTY_WRAPPERS.get(filename, {})
     fn = globals().get(handler_name)
     if fn is None:
         return _EMPTY_WRAPPERS.get(filename, {})
-    return fn()
+    res = fn()
+    if is_dataset_available():
+        _query_cache[filename] = res
+    return res
 
 
 # ── query implementations ────────────────────────────────────────────────────────
 
 def _q_metrics() -> dict:
+    if not is_dataset_available():
+        return {"metrics": [], "dataset_available": False}
     ma = _metric_app().copy()
     ma["hour"] = (ma["timestamp_s"] // 3600) * 3600
     hourly = (
@@ -197,6 +244,8 @@ def _q_metrics() -> dict:
 
 
 def _q_alerts() -> dict:
+    if not is_dataset_available():
+        return {"alerts": [], "dataset_available": False}
     ma = _metric_app().copy()
     ma["hour"] = (ma["timestamp_s"] // 3600) * 3600
 
@@ -224,7 +273,7 @@ def _q_alerts() -> dict:
             "description": f"Success rate dropped to {r.sr:.1f}% on {r.service}",
             "source": "metric_app",
             "severity": "critical" if r.sr < 95.0 else "warning",
-            "status": "active",
+            "status": "open",
             "metric": "success_rate",
             "entity_id": r.service,
             "entity_type": "service",
@@ -240,7 +289,7 @@ def _q_alerts() -> dict:
             "description": f"Mean response time reached {r.mrt:.0f} ms on {r.service}",
             "source": "metric_app",
             "severity": "critical" if r.mrt > 1000.0 else "warning",
-            "status": "active",
+            "status": "open",
             "metric": "mean_response_time",
             "entity_id": r.service,
             "entity_type": "service",
@@ -255,6 +304,8 @@ def _q_alerts() -> dict:
 
 def _q_events() -> dict:
     """Stream log_service.parquet in batches; stop once 500 unique events are collected."""
+    if not is_dataset_available():
+        return {"events": [], "dataset_available": False}
     events: list[dict] = []
     seen: set[tuple] = set()
 
@@ -292,6 +343,16 @@ def _q_events() -> dict:
 
 
 def _q_dashboard() -> dict:
+    if not is_dataset_available():
+        return {
+            "dashboard": {
+                "id": "bank-observability",
+                "title": "Bank Observability Dashboard",
+                "services": [],
+                "refresh_interval": 60,
+            },
+            "dataset_available": False
+        }
     services = sorted(_svc_host_map()["service"].unique())
     return {
         "dashboard": {
@@ -304,6 +365,8 @@ def _q_dashboard() -> dict:
 
 
 def _q_services() -> dict:
+    if not is_dataset_available():
+        return {"services": [], "dataset_available": False}
     shm = _svc_host_map()
     ma = _metric_app()
 
@@ -348,8 +411,8 @@ def _q_services() -> dict:
         })
 
     # ── business services (domain names) — aggregate child microservice metrics ─
-    for bs in BUSINESS_SERVICES:
-        child_rows = [latest_map[ms] for ms in bs["microservices"] if ms in latest_map]
+    for bs in get_business_services():
+        child_rows = [latest_map[ms] for ms in get_bs_microservices().get(bs["id"], []) if ms in latest_map]
         if child_rows:
             avg_sr  = sum(float(r.sr)  for r in child_rows) / len(child_rows)
             avg_mrt = sum(float(r.mrt) for r in child_rows) / len(child_rows)
@@ -358,7 +421,7 @@ def _q_services() -> dict:
             avg_sr, avg_mrt, avg_rr = 100.0, 0.0, 0.0
         health = "critical" if avg_sr < 95 else ("degraded" if avg_sr < 99 else "healthy")
         risk = round(max(0.0, (100 - avg_sr) * 2 + max(0.0, avg_mrt - 200) / 10), 1)
-        all_hosts = [h for ms in bs["microservices"] for h in svc_hosts.get(ms, [])]
+        all_hosts = [h for ms in get_bs_microservices().get(bs["id"], []) for h in svc_hosts.get(ms, [])]
 
         services.append({
             "id": bs["id"],
@@ -384,6 +447,8 @@ def _q_services() -> dict:
 
 
 def _q_infrastructure() -> dict:
+    if not is_dataset_available():
+        return {"nodes": [], "dataset_available": False}
     shm = _svc_host_map()
 
     try:
@@ -426,13 +491,15 @@ def _q_infrastructure() -> dict:
 
 
 def _q_dep_graph() -> dict:
+    if not is_dataset_available():
+        return {"edges": [], "dataset_available": False}
     shm = _svc_host_map()
 
     edges: list[dict] = []
 
     # business service → microservice edges
-    for bs in BUSINESS_SERVICES:
-        for ms in bs["microservices"]:
+    for bs in get_business_services():
+        for ms in get_bs_microservices().get(bs["id"], []):
             edges.append({
                 "source": bs["id"],
                 "target": ms,
@@ -453,6 +520,8 @@ def _q_dep_graph() -> dict:
 
 
 def _q_incidents() -> dict:
+    if not is_dataset_available():
+        return {"incidents": [], "dataset_available": False}
     ma = _metric_app().copy()
     ma["day"] = (ma["timestamp_s"] // 86400) * 86400
 
@@ -480,7 +549,7 @@ def _q_incidents() -> dict:
         sev   = "P1" if (min_sr < 90.0 or max_mrt > 2000.0) else "P2"
         hosts = svc_hosts.get(svc, [])
         iid   = f"INC-{inc_num}"
-        parent_bs = _MS_TO_BS.get(svc, svc)
+        parent_bs = get_ms_to_bs().get(svc, svc)
 
         incidents.append({
             "incident_id": iid,
@@ -522,6 +591,15 @@ def _q_incidents() -> dict:
 
 
 def _q_knowledge_graph() -> dict:
+    if not is_dataset_available():
+        return {
+            "nodes": [],
+            "edges": [],
+            "pattern_library": [],
+            "stats": {"node_count": 0, "edge_count": 0},
+            "generated_at": "",
+            "dataset_available": False
+        }
     shm = _svc_host_map()
     services = sorted(shm["service"].unique())
     cmdb_ids = sorted(shm["cmdb_id"].unique())
@@ -530,7 +608,7 @@ def _q_knowledge_graph() -> dict:
     edges: list[dict] = []
 
     # business service nodes
-    for bs in BUSINESS_SERVICES:
+    for bs in get_business_services():
         nodes.append({"id": f"component-{bs['id']}", "type": "business_service", "label": bs["name"]})
     # microservice nodes
     for svc in services:
@@ -543,8 +621,8 @@ def _q_knowledge_graph() -> dict:
         nodes.append({"id": f"alert-{at.lower().replace(' ', '-')}", "type": "alert", "label": at})
 
     # business service → microservice edges
-    for bs in BUSINESS_SERVICES:
-        for ms in bs["microservices"]:
+    for bs in get_business_services():
+        for ms in get_bs_microservices().get(bs["id"], []):
             edges.append({
                 "source": f"component-{bs['id']}",
                 "target": f"component-{ms}",
@@ -608,6 +686,14 @@ def query_incident_runbook(
     severity: str,
     similar_incidents: list[dict],
 ) -> dict:
+    if not is_dataset_available():
+        return {
+            "golden_signals": {"baseline": {}, "incident": {}, "deltas": {}},
+            "host_saturation": [],
+            "gc_pressure": False,
+            "runbook": [],
+            "dataset_available": False,
+        }
     """
     Compute golden-signal deltas and generate an ordered SRE runbook.
 
@@ -1026,6 +1112,8 @@ def query_incident_telemetry(
 
 
 def _q_incident_graph() -> dict:
+    if not is_dataset_available():
+        return {"nodes": [], "edges": [], "dataset_available": False}
     incidents = _q_incidents().get("incidents", [])[:100]
 
     raw_nodes: list[dict] = []
@@ -1056,6 +1144,16 @@ def query_slo_burn_multiservice(
     incident_end_ts: int,
     slo_target: float = 0.999,
 ) -> dict:
+    if not is_dataset_available():
+        return {
+            "slo_target": slo_target,
+            "error_budget_pct": 0.0,
+            "error_budget_minutes": 0.0,
+            "overall_highest_tier": None,
+            "recommended_action": "Dataset not available",
+            "services": [],
+            "dataset_available": False,
+        }
     """
     Auto-detect which services had elevated SLO burn during an incident window.
 
@@ -1170,6 +1268,20 @@ def query_slo_burn_multiservice(
 
 
 def query_slo_burn(service: str, incident_ts: int, slo_target: float = 0.999) -> dict:
+    if not is_dataset_available():
+        return {
+            "service": service,
+            "slo_target": slo_target,
+            "error_budget_pct": 0.0,
+            "error_budget_minutes": 0.0,
+            "highest_firing_tier": None,
+            "time_to_exhaustion_hours": None,
+            "recommended_action": "Dataset not available",
+            "burn_rates": {},
+            "window_details": {},
+            "alerts": [],
+            "dataset_available": False,
+        }
     """
     Compute SLO burn rates at the moment of an incident using metric_app.parquet.
 
