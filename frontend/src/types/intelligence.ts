@@ -63,6 +63,7 @@ export interface RCAResult {
 }
 
 export interface BlastRadiusResult {
+  dataset_available?: boolean;
   currently_impacted_services: string[];
   likely_downstream_services: string[];
   impacted_infrastructure: string[];

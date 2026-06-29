@@ -172,6 +172,12 @@ _EMPTY_WRAPPERS: dict[str, dict] = {
 _query_cache: dict[str, dict | list] = {}
 
 
+def clear_cache() -> None:
+    global _cache, _query_cache
+    _cache.clear()
+    _query_cache.clear()
+
+
 def query(filename: str) -> dict | list:
     """Route a logical JSON filename to its parquet query function."""
     if filename in _query_cache:
@@ -520,6 +526,89 @@ def _q_dep_graph() -> dict:
 
 
 def _q_incidents() -> dict:
+    import json
+    all_json_path = PARQUET_DIR.parent / "incidents" / "all_incidents.json"
+    if all_json_path.exists():
+        try:
+            with open(all_json_path, "r", encoding="utf-8") as f:
+                raw_incidents = json.load(f)
+            
+            mapped_incidents = []
+            for inc in raw_incidents:
+                iid = inc.get("incidentId", "")
+                title = inc.get("title", "")
+                desc = inc.get("description", "")
+                sev = inc.get("severity", "Low")
+                status = inc.get("status", "New")
+                
+                tw = inc.get("timeWindow", {})
+                start_time = tw.get("start", "")
+                end_time = tw.get("end", "")
+                
+                alerts_info = inc.get("alerts", {})
+                alert_items = alerts_info.get("items", [])
+                alert_rules = [a.get("alertRule", "") for a in alert_items]
+                
+                entities = inc.get("entities", [])
+                tactics = inc.get("tactics", [])
+                
+                service_tests = [e for e in entities if e.startswith("ServiceTest")]
+                service = service_tests[0] if service_tests else (entities[0] if entities else "unknown-service")
+                parent_bs = get_ms_to_bs().get(service, service)
+                
+                priority = "1 - Critical" if sev in ("High", "Critical", "Sev1", "P1") else "2 - High"
+                
+                state_map = {
+                    "new": "Open",
+                    "open": "Open",
+                    "active": "In Progress",
+                    "in progress": "In Progress",
+                    "resolved": "Resolved",
+                    "closed": "Resolved"
+                }
+                state = state_map.get(status.lower(), "Open")
+                
+                root_cause = inc.get("root_cause") or inc.get("true_root_cause") or "Unknown"
+                fix = inc.get("fix") or "Pending investigation"
+                
+                mapped_incidents.append({
+                    "incident_id": iid,
+                    "id": iid,
+                    "number": iid,
+                    "title": title,
+                    "short_description": desc,
+                    "severity": sev,
+                    "priority": priority,
+                    "state": state,
+                    "service": service,
+                    "service_id": service,
+                    "affected_service": service,
+                    "alerts": alert_rules,
+                    "symptoms": tactics,
+                    "root_cause": root_cause,
+                    "fix": fix,
+                    "impacted_components": entities,
+                    "impacted_services": [service, parent_bs] if service != parent_bs else [service],
+                    "region": "bank-dc1",
+                    "environment": "production",
+                    "owner_team": "platform-ops",
+                    "assignment_group": "SRE",
+                    "assigned_to": "on-call-engineer",
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "created_at": start_time,
+                    "resolved_at": end_time if state == "Resolved" else None,
+                    "duration_minutes": 30,
+                    "confidence_training_value": 0.9,
+                    "resolution_notes": fix,
+                    "change_records": [],
+                    "similar_incidents": [],
+                    "category": inc.get("category", "performance"),
+                })
+            return {"incidents": mapped_incidents}
+        except Exception:
+            pass
+
     if not is_dataset_available():
         return {"incidents": [], "dataset_available": False}
     ma = _metric_app().copy()

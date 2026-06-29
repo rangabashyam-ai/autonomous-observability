@@ -13,6 +13,7 @@ import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visua
 import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
 
 export default function ExecutiveCommandCenter() {
   const navigate = useNavigate();
@@ -114,15 +115,7 @@ export default function ExecutiveCommandCenter() {
       />
 
       {monitoring.dataset_available === false && (
-        <div className="mb-6 p-4 rounded-2xl border border-amber-500/30 bg-amber-555/10 text-amber-200 text-sm flex items-center gap-3">
-          <span className="text-lg animate-pulse">⚠️</span>
-          <div>
-            <p className="font-semibold text-amber-300">Observability dataset not detected</p>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Please copy your Parquet telemetry files into the project <code className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-400 font-mono text-[11px]">data/parquet</code> folder, or generate synthetic data in the Admin panel.
-            </p>
-          </div>
-        </div>
+        <DatasetUploadBanner onUploadSuccess={() => window.location.reload()} />
       )}
 
       <Grid12 className="mb-4">

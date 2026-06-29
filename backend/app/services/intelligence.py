@@ -36,6 +36,12 @@ _bank_incidents_cache: list[dict] | None = None
 _bank_alerts_cache: list[dict] | None = None
 
 
+def clear_intelligence_cache() -> None:
+    global _bank_incidents_cache, _bank_alerts_cache
+    _bank_incidents_cache = None
+    _bank_alerts_cache = None
+
+
 def _load_bank_incidents() -> list[dict]:
     global _bank_incidents_cache
     if _bank_incidents_cache is not None:
@@ -479,7 +485,11 @@ def analyze_blast_radius(
 
     severity = "P1" if biz_score >= 85 else "P2" if biz_score >= 70 else "P3"
 
+    from app import parquet_store
+    dataset_avail = parquet_store.is_dataset_available()
+
     return {
+        "dataset_available": dataset_avail,
         "input": {"alerts": alerts, "symptoms": symptoms, "source_component": source_component, "service": service},
         "currently_impacted_services": currently_impacted,
         "likely_downstream_services": likely_downstream,
@@ -1084,6 +1094,10 @@ def generate_mock_sre_response(context_type: str, context_payload: dict, questio
             
     else:
         return f"Scoped assistant: Received context type {context_type}. Please let me know how I can assist you with this payload."
+
+
+
+
 
 
 

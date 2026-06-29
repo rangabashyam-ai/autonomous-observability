@@ -708,10 +708,10 @@ export default function EarlyDetectionDashboard() {
   // Auto-open detail drawers based on URL query parameters
   useEffect(() => {
     if (loading || !data) return;
-    
+
     const threatParam = searchParams.get('threat');
     const patternParam = searchParams.get('pattern');
-    
+
     if (threatParam) {
       const found = data.detections.find(
         (d) =>
@@ -1522,12 +1522,12 @@ export default function EarlyDetectionDashboard() {
                 ? Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="h-24 rounded-xl bg-card-hover animate-pulse" />
                 ))
-                : detections.map((d, i) => {
+                : detections.map((d) => {
                   const stage = STAGE_META[d.progression_stage ?? 'watch'] ?? STAGE_META.watch;
                   const isSelected = selected?.pattern_id === d.pattern_id;
                   return (
                     <button
-                      key={`${d.pattern_id}-${i}`}
+                      key={d.pattern_id}
                       type="button"
                       onClick={() => openDrill({ panel: 'ranked-threat', patternId: d.pattern_id })}
                       className={cn(
@@ -1710,9 +1710,9 @@ export default function EarlyDetectionDashboard() {
               <div className="shrink-0 pr-4" style={{ width: '50%' }}>
                 <DrilldownSection title="Matched precursor patterns">
                   <div className="space-y-3">
-                    {detections.map((d, i) => (
+                    {detections.map((d) => (
                       <button
-                        key={`${d.pattern_id}-${i}`}
+                        key={d.pattern_id}
                         type="button"
                         onClick={() => setDrill({ panel: 'patterns', patternId: d.pattern_id })}
                         className="w-full text-left p-3 rounded-lg border border-border bg-card-hover hover:border-primary/30 transition-colors cursor-pointer"
@@ -1793,7 +1793,7 @@ export default function EarlyDetectionDashboard() {
                         const svcId = cachedDetection.expected_impacted_service_id;
                         const incidents = svcId ? (historicalIncidents[svcId] ?? []) : [];
                         const matchedIncidents = incidents.filter(inc => isPrecededByPattern(inc, cachedDetection.matched_alerts.concat(cachedDetection.match_coverage?.unmatched_alerts ?? [])));
-                        
+
                         if (matchedIncidents.length === 0) {
                           return <p className="text-xs text-text-secondary italic text-center py-2 bg-slate-50 dark:bg-slate-800/40 rounded-lg">No matching historical incidents found in the database.</p>;
                         }
@@ -1854,8 +1854,8 @@ export default function EarlyDetectionDashboard() {
                     <p className="text-sm text-text-secondary">No threats at imminent stage right now.</p>
                   ) : (
                     <div className="space-y-3">
-                      {imminentDetections.map((d, i) => (
-                        <div key={`${d.pattern_id}-${i}`} className="p-3 rounded-lg border border-critical/30 bg-critical/5">
+                      {imminentDetections.map((d) => (
+                        <div key={d.pattern_id} className="p-3 rounded-lg border border-critical/30 bg-critical/5">
                           <div className="flex justify-between mb-2">
                             <span className="font-semibold text-text-primary">{d.expected_impacted_service}</span>
                             <Badge variant="critical">ETA {formatEta(d.estimated_time_to_incident_minutes)}</Badge>
@@ -2180,7 +2180,7 @@ export default function EarlyDetectionDashboard() {
             <div className="space-y-2">
               {detections.map((d, idx) => (
                 <button
-                  key={`${d.pattern_id}-${idx}`}
+                  key={d.pattern_id}
                   type="button"
                   onClick={() => openDrill({ panel: 'ranked-threat', patternId: d.pattern_id })}
                   className="w-full text-left p-3 rounded-lg border border-border bg-card-hover hover:border-primary/30 transition-colors"

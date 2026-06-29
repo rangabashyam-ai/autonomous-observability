@@ -37,7 +37,7 @@ export async function getDependencyGraph(
 ): Promise<DependencyGraph> {
   const params = new URLSearchParams({ view: views.join(','), heatmap });
   if (focusNode) params.set('focus_node', focusNode);
-  
+
   try {
     const result = await fetchJson<DependencyGraph>(`${BASE}/dependencies/graph?${params}`);
     return result;
@@ -397,6 +397,49 @@ export async function uploadDataFile(category: string, file: File) {
   form.append('file', file);
   const res = await fetch(`${BASE}/admin/upload/${category}`, { method: 'POST', body: form });
   if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
+
+export async function uploadDatasetZip(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/admin/upload-dataset`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'ZIP Upload failed');
+  }
+  return res.json();
+}
+
+export async function uploadDatasetJson(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/admin/upload-dataset-json`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.detail) throw new Error(parsed.detail);
+    } catch {}
+    throw new Error(text || 'JSON Upload failed');
+  }
+  return res.json();
+}
+
+export async function addIncident(incident: any) {
+  const res = await fetch(`${BASE}/admin/add-incident`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(incident),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.detail) throw new Error(parsed.detail);
+    } catch {}
+    throw new Error(text || 'Failed to add incident');
+  }
   return res.json();
 }
 

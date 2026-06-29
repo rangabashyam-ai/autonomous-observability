@@ -82,8 +82,37 @@ def _load_csv_incidents() -> list[dict] | None:
     return list(_csv_cache)
 
 
+def _load_custom_incidents() -> list[dict]:
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    path = project_root / "openRCA_Bank" / "incidents" / "all_incidents.json"
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+        except Exception:
+            pass
+    return []
+
+
 def _find_incident(incident_id: str) -> dict | None:
     """Find an incident by IN-XXXX id, original INC-XXXX id, or hash id."""
+    custom = _load_custom_incidents()
+    for inc in custom:
+        if inc.get("incidentId") == incident_id:
+            inc["incident_id"] = inc.get("incidentId", "")
+            inc["id"] = inc.get("incidentId", "")
+            status = inc.get("status", "Open")
+            inc["state"] = "Open" if status in ("New", "Active") else status
+            tw = inc.get("timeWindow", {})
+            start_t = tw.get("start", "")
+            inc["start_time"] = inc.get("start_time", start_t)
+            inc["incident_time"] = inc.get("incident_time", start_t)
+            entities = inc.get("entities", [])
+            inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
+            inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
+            return dict(inc)
+
     incidents = _load_csv_incidents()
     if incidents is None:
         data = read_json("incidents/service_now_incidents.json")
@@ -208,6 +237,22 @@ def get_incidents(
     if incidents is None:
         data = read_json("incidents/service_now_incidents.json")
         incidents = data.get("incidents", [])
+        
+    custom = _load_custom_incidents()
+    for inc in custom:
+        inc["incident_id"] = inc.get("incidentId", "")
+        inc["id"] = inc.get("incidentId", "")
+        status = inc.get("status", "Open")
+        inc["state"] = "Open" if status in ("New", "Active") else status
+        tw = inc.get("timeWindow", {})
+        start_t = tw.get("start", "")
+        inc["start_time"] = inc.get("start_time", start_t)
+        inc["incident_time"] = inc.get("incident_time", start_t)
+        entities = inc.get("entities", [])
+        inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
+        inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
+            
+    incidents = custom + incidents
     incidents = _apply_resolutions(incidents)
     incidents = _filter_incidents(incidents, severity, service, search, state, active)
     total = len(incidents)
