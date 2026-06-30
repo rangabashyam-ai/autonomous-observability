@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
@@ -65,6 +65,7 @@ app.include_router(admin.router)
 app.include_router(copilot.router)
 app.include_router(integrations.router)
 app.include_router(otel.router)
+app.include_router(vm.router, prefix="/api/vm", tags=["VM"])
 
 
 @app.get("/api/health")

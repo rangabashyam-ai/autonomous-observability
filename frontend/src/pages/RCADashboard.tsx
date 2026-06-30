@@ -292,11 +292,12 @@ export default function RCADashboard() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/bank-incidents.json')
+    fetch('/api/vm/incidents')
       .then((r) => r.json())
-      .then((data: BankIncident[]) => {
-        setIncidents(data);
-        setSelected(data[0] ?? null);
+      .then((data: any) => {
+        const payload = Array.isArray(data) ? data : data.incidents || [];
+        setIncidents(payload);
+        setSelected(payload[0] ?? null);
         setLoading(false);
       })
       .catch(() => setLoading(false));

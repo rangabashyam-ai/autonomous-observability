@@ -24,12 +24,23 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
-PARQUET_DIR = Path(
-    os.environ.get(
-        "PARQUET_DIR",
-        str(Path(__file__).resolve().parent.parent.parent / "openRCA_Bank" / "parquet"),
-    )
-)
+def _find_parquet_dir() -> Path:
+    env_dir = os.environ.get("PARQUET_DIR")
+    if env_dir:
+        return Path(env_dir)
+        
+    local_path = Path(__file__).resolve().parent.parent.parent / "openRCA_Bank" / "parquet"
+    if (local_path / "service_host_map.parquet").exists():
+        return local_path
+        
+    pictures_path = Path(r"C:\Users\GKDSSPSairam\Pictures\openRCA_Bank\parquet")
+    if (pictures_path / "service_host_map.parquet").exists():
+        return pictures_path
+        
+    return local_path
+
+PARQUET_DIR = _find_parquet_dir()
+
 
 def is_dataset_available() -> bool:
     required_files = [

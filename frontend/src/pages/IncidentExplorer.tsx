@@ -2046,9 +2046,13 @@ export function BankSentinelView() {
   const [bankSearch, setBankSearch] = useState('');
 
   useEffect(() => {
-    fetch('/bank-incidents.json')
+    fetch('/api/vm/incidents')
       .then((r) => r.json())
-      .then((data: BankIncident[]) => { setBankIncidents(data); setBankLoading(false); })
+      .then((data: any) => {
+        const payload = Array.isArray(data) ? data : data.incidents || [];
+        setBankIncidents(payload);
+        setBankLoading(false);
+      })
       .catch(() => setBankLoading(false));
   }, []);
 
