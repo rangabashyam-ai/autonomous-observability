@@ -19,95 +19,9 @@ from dotenv import load_dotenv
 # Load environment variables from the project's root .env file.
 # This ensures GROQ_API_KEY and related settings are available regardless of
 # the current working directory when the server starts.
-project_root = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[2]
 env_path = project_root / ".env"
-load_dotenv(dotenv_path=env_path, override=False)
-
-_MAX_RELATED_ALERTS = 20
-_MAX_DETECTIONS = 8
-_MAX_MATCHED_ALERTS_PER_DETECTION = 5
-_MAX_CHAT_MESSAGES = 12
-_ALERT_KEYS = ("id", "title", "severity", "service", "service_id", "status", "entity", "count")
-_DETECTION_KEYS = (
-    "pattern_id",
-    "expected_impacted_service",
-    "expected_impacted_service_id",
-    "confidence",
-    "estimated_time_to_incident_minutes",
-    "risk_level",
-    "progression_stage",
-    "match_coverage",
-    "matched_alerts",
-    "recommended_actions",
-)
-
-
-def _trim_alert_item(item: Any) -> Any:
-    if isinstance(item, str):
-        return item[:200]
-    if not isinstance(item, dict):
-        return str(item)
-    trimmed = {k: item[k] for k in _ALERT_KEYS if k in item}
-    if "matched_alerts_details" in item and isinstance(item["matched_alerts_details"], list):
-        trimmed["matched_alerts_details"] = [
-            _trim_alert_item(a) for a in item["matched_alerts_details"][:_MAX_MATCHED_ALERTS_PER_DETECTION]
-        ]
-    return trimmed
-
-
-def _trim_detection_item(item: Any) -> Any:
-    if not isinstance(item, dict):
-        return item
-    trimmed = {k: item[k] for k in _DETECTION_KEYS if k in item}
-    if "matched_alerts_details" in item and isinstance(item["matched_alerts_details"], list):
-        trimmed["matched_alerts_details"] = [
-            _trim_alert_item(a) for a in item["matched_alerts_details"][:_MAX_MATCHED_ALERTS_PER_DETECTION]
-        ]
-    if "matched_alerts" in item and isinstance(item["matched_alerts"], list):
-        trimmed["matched_alerts"] = item["matched_alerts"][:_MAX_MATCHED_ALERTS_PER_DETECTION]
-    return trimmed
-
-
-def _trim_copilot_context(context: dict[str, Any]) -> dict[str, Any]:
-    """Shrink large payloads so GROQ requests stay within limits."""
-    trimmed = dict(context)
-    entity_data = dict(trimmed.get("entity_data") or {})
-
-    alerts = trimmed.get("related_alerts", [])
-    if isinstance(alerts, list):
-        if len(alerts) > _MAX_RELATED_ALERTS:
-            entity_data["related_alerts_truncated"] = True
-            entity_data["related_alerts_total"] = len(alerts)
-        trimmed["related_alerts"] = [
-            _trim_alert_item(a) for a in alerts[:_MAX_RELATED_ALERTS]
-        ]
-
-    incidents = trimmed.get("related_incidents", [])
-    if isinstance(incidents, list) and len(incidents) > _MAX_RELATED_ALERTS:
-        trimmed["related_incidents"] = incidents[:_MAX_RELATED_ALERTS]
-
-    analysis = trimmed.get("analysis_results", {})
-    if isinstance(analysis, dict):
-        new_analysis = dict(analysis)
-        detections = new_analysis.get("detections", [])
-        if isinstance(detections, list):
-            if len(detections) > _MAX_DETECTIONS:
-                new_analysis["detections_truncated"] = True
-                new_analysis["detections_total"] = len(detections)
-            new_analysis["detections"] = [
-                _trim_detection_item(d) for d in detections[:_MAX_DETECTIONS]
-            ]
-        trimmed["analysis_results"] = new_analysis
-
-    if entity_data:
-        trimmed["entity_data"] = entity_data
-    return trimmed
-
-
-def _trim_chat_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
-    if len(messages) <= _MAX_CHAT_MESSAGES:
-        return messages
-    return messages[-_MAX_CHAT_MESSAGES:]
+load_dotenv(dotenv_path=env_path, override=True)
 
 
 def _regex_lenient_parse(text: str) -> dict[str, Any]:
@@ -231,9 +145,7 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
         "pod", "node", "container", "api", "jvm", "database", "queue", "rps", "throughput",
         "rca", "blast", "remediate", "help", "happen", "diagnose", "root cause", "failure",
         "why", "how", "what", "detail", "usage", "performance", "avail", "warn", "critical",
-        "effect", "impact", "cause", "solve", "fix", "resolution", "remedy", "issue", "trouble", "problem",
-        "threat", "priority", "prioritize", "urgent", "outage", "on-call", "playbook", "eta", "risk",
-        "precursor", "pattern", "clear", "defer", "intervene", "escalat",
+        "effect", "impact", "cause", "solve", "fix", "resolution", "remedy", "issue", "trouble", "problem"
     ]
     entity_words = [w.strip("-_") for w in re.split(r'[^a-zA-Z0-9]', entity.lower()) if len(w) > 2]
     q_words = set(re.split(r'[^a-zA-Z0-9]', q))
@@ -330,100 +242,14 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
         }
 
     if page_type == "prediction":
-        drilldown = entity_data.get("drilldown", "")
-        detections = analysis.get("detections", []) if isinstance(analysis, dict) else []
-        clearance = analysis.get("clearance_plan", {}) if isinstance(analysis, dict) else {}
-        alerts = context.get("related_alerts", [])
-
-        if drilldown == "active-alerts":
-            critical = entity_data.get("critical_count", len(alerts))
-            alert_titles = [
-                a.get("title", str(a)) if isinstance(a, dict) else str(a) for a in alerts[:5]
-            ]
-            actions = clearance.get("priority_actions", []) if isinstance(clearance, dict) else []
-            return {
-                "summary": (
-                    f"{critical} critical alerts are active. Clear highest-severity signals on services "
-                    "with imminent precursor patterns first to prevent incident formation."
-                ),
-                "findings": [
-                    f"Critical alert count: {critical}",
-                    f"Total active signals in view: {entity_data.get('total_active', 'N/A')}",
-                ],
-                "evidence": alert_titles,
-                "recommended_actions": actions[:5] or [
-                    "Triage critical alerts by impacted service and ETA",
-                    "Correlate alerts with matched precursor patterns",
-                    "Execute clearance plan priority actions",
-                ],
-                "confidence": "75%",
-            }
-
-        if drilldown == "ranked-threats" and detections:
-            ranked = sorted(
-                detections,
-                key=lambda d: (
-                    d.get("estimated_time_to_incident_minutes", 999),
-                    -float(str(d.get("confidence", 0)).replace("%", "") or 0),
-                ),
-            )
-            top = ranked[0]
-            service = top.get("expected_impacted_service", "top-ranked service")
-            eta = top.get("estimated_time_to_incident_minutes", "N/A")
-            return {
-                "summary": (
-                    f"Address the threat on {service} first — shortest ETA ({eta} min) "
-                    f"with {top.get('confidence', 'N/A')}% confidence and {top.get('risk_level', 'elevated')} risk."
-                ),
-                "findings": [
-                    f"Top threat: {service}",
-                    f"Progression stage: {top.get('progression_stage', 'N/A')}",
-                    f"Threats in queue: {len(detections)}",
-                ],
-                "evidence": (top.get("matched_alerts", []) or [])[:5],
-                "recommended_actions": (top.get("recommended_actions", []) or [])[:5] or [
-                    f"Intervene on {service} before ETA expires",
-                    "Collect matched alert evidence",
-                    "Notify service owner",
-                ],
-                "confidence": f"{top.get('confidence', 75)}%",
-            }
-
-        if drilldown == "eta" and entity_data.get("service"):
-            service = entity_data.get("service")
-            eta = entity_data.get("eta_minutes", "N/A")
-            return {
-                "summary": (
-                    f"Intervene on {service} within {eta} minutes: scale constrained resources, "
-                    "clear matched precursor alerts, and validate dependency health."
-                ),
-                "findings": [
-                    f"Service at risk: {service}",
-                    f"ETA: {eta} minutes",
-                    f"Risk level: {entity_data.get('risk_level', 'N/A')}",
-                ],
-                "evidence": entity_data.get("evidence", [])[:5],
-                "recommended_actions": entity_data.get("recommended_actions", [])[:5] or [
-                    "Scale affected resources",
-                    "Clear matched precursor alerts",
-                    "Monitor dependency chain",
-                ],
-                "confidence": f"{entity_data.get('confidence', 75)}%",
-            }
-
-        prediction = entity_data.get("prediction", entity)
         return {
-            "summary": f"Early detection prediction: {prediction}.",
+            "summary": f"Early detection prediction: {entity_data.get('prediction', entity)}.",
             "findings": [
                 f"Confidence: {entity_data.get('confidence', 'N/A')}%",
-                f"ETA to outage: {entity_data.get('estimated_time_to_outage', entity_data.get('eta_minutes', 'N/A'))}",
+                f"ETA to outage: {entity_data.get('estimated_time_to_outage', 'N/A')}",
             ],
             "evidence": entity_data.get("evidence", [])[:5],
-            "recommended_actions": entity_data.get("recommended_actions", [])[:5] or [
-                "Scale affected resources",
-                "Review correlated alerts",
-                "Prepare incident response",
-            ],
+            "recommended_actions": ["Scale affected resources", "Review correlated alerts", "Prepare incident response"],
             "confidence": f"{entity_data.get('confidence', 70)}%",
         }
 
@@ -464,9 +290,6 @@ def _mock_response(context: dict[str, Any], question: str) -> dict[str, Any]:
 
 def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dict[str, Any]:
     """Process a copilot chat request with context guardrails."""
-    context = _trim_copilot_context(context)
-    messages = _trim_chat_messages(messages)
-
     page_type = context.get("page_type")
     if not page_type:
         page_type = "early_detection"
@@ -497,23 +320,8 @@ def copilot_chat(context: dict[str, Any], messages: list[dict[str, str]]) -> dic
         except Exception as exc:
             logger.exception("GROQ call failed")
             err_msg = str(exc)
-            user_question = context.get("user_question", "") or (
-                messages[-1].get("content", "") if messages else ""
-            )
-            mock = _mock_response(context, user_question)
-            if mock.get("summary") and mock["summary"] != "That information is not present in the current investigation context.":
-                mock["model"] = "rule-based-fallback"
-                mock["timestamp"] = timestamp
-                mock["agent"] = agent.page_type
-                return mock
-
             friendly_err = "The AI assistant is temporarily unavailable due to an issue with your GROQ API key or request. Please verify your key, account balance, and GROQ endpoint."
-            if "429" in err_msg or "rate_limit" in err_msg.lower():
-                friendly_err = (
-                    "The AI assistant is temporarily unavailable because the GROQ daily token limit was reached. "
-                    "Wait for the limit to reset, upgrade your Groq tier, or use the rule-based guidance below."
-                )
-            elif "402" in err_msg or "Payment Required" in err_msg:
+            if "402" in err_msg or "Payment Required" in err_msg:
                 friendly_err = "The AI assistant is temporarily unavailable due to insufficient credits/balance on your GROQ API key. Please top up your account or configure a new key."
             elif "403" in err_msg or "1010" in err_msg:
                 friendly_err = "The AI assistant request was blocked by GROQ. Check your GROQ_API_KEY, GROQ_BASE_URL, and make sure the request is not being blocked by Cloudflare or an invalid endpoint."

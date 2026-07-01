@@ -19,10 +19,10 @@ try:
         for _ in range(5):
             candidate = current / ".env"
             if candidate.exists():
-                load_dotenv(dotenv_path=candidate, override=False)
+                load_dotenv(dotenv_path=candidate, override=True)
                 return
             current = current.parent
-        load_dotenv(override=False)  # last resort: let dotenv search CWD
+        load_dotenv(override=True)  # last resort: let dotenv search CWD
 
     _find_and_load_env()
 except ImportError:
@@ -53,7 +53,10 @@ def _resolve_groq_base_urls() -> list[str]:
     urls = []
     if env_url:
         urls.append(env_url)
-    urls.append("https://api.groq.com/openai/v1")
+    urls.extend([
+        "https://api.groq.com/openai/v1",
+        "https://api.groq.com/v1",
+    ])
     return list(dict.fromkeys(urls))
 
 
@@ -72,7 +75,7 @@ def chat_completion(
     temperature: float = 0.2,
     response_format: dict | None = None,
     max_tokens: int = 2048,
-    timeout: int = 45,
+    timeout: int = 20,
 ) -> dict[str, Any]:
     """Call GROQ chat completions API. Raises on failure."""
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
@@ -134,7 +137,7 @@ def chat_with_fallback(
     model: str,
     temperature: float = 0.2,
     max_tokens: int = 2048,
-    timeout: int = 45,
+    timeout: int = 20,
 ) -> tuple[str, str]:
     """Try primary model, then fallback. Returns (content, model_used)."""
     models = [model]
@@ -152,3 +155,5 @@ def chat_with_fallback(
             continue
 
     raise RuntimeError(f"All models failed: {last_error}")
+
+# End of file - Trigger reload on change

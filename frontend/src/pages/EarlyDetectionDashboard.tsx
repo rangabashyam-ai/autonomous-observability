@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { analyzeEarlyDetection, copilotChat } from '../api/client';
+import { Link, useSearchParams } from 'react-router-dom';
+import { analyzeEarlyDetection, copilotChat, getIncidents } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
-import type { EarlyDetection } from '../types/intelligence';
+import type { EarlyDetection, Incident } from '../types/intelligence';
 import { Sparkles, Bot, MessageSquare, ShieldAlert, Send, RefreshCw, AlertTriangle, Target, Zap, Clock, TrendingUp, ArrowRight } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { Badge } from '../components/ui/badge';
@@ -22,6 +23,8 @@ interface MatchedAlertDetail {
   value?: number;
   threshold?: number;
   metric?: string;
+  triggered_at?: string;
+  description?: string;
 }
 
 interface ActiveCondition {
@@ -640,6 +643,104 @@ export default function EarlyDetectionDashboard() {
   const [aiResponse, setAiResponse] = useState<CopilotResponse | null>(null);
   const [aiChat, setAiChat] = useState<AiChatEntry[]>([]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [historicalIncidents, setHistoricalIncidents] = useState<Record<string, Incident[]>>({});
+  const [cachedDetection, setCachedDetection] = useState<DetectionExtended | null>(null);
+
+  const closeDrill = useCallback(() => {
+    setDrill(null);
+    setAiResponse(null);
+    setAiChat([]);
+  }, []);
+
+  const isPrecededByPattern = useCallback((incident: Incident, patternAlerts: string[]) => {
+    if (!incident.alerts) return false;
+    const incidentAlertsLower = incident.alerts.map(a => a.toLowerCase().replace(/[\s-_]+/g, ''));
+    const patternAlertsLower = patternAlerts.map(a => a.toLowerCase().replace(/[\s-_]+/g, ''));
+    return patternAlertsLower.every(pa => incidentAlertsLower.some(ia => ia.includes(pa) || pa.includes(ia)));
+  }, []);
+
+  // Sync cached detection details
+  useEffect(() => {
+    if (data?.detections) {
+      const selectedDet = data.detections.find((d) => d.pattern_id === drill?.patternId);
+      if (selectedDet) {
+        setCachedDetection(selectedDet);
+      }
+    }
+  }, [drill?.patternId, data?.detections]);
+
+  // Fetch historical incidents dynamically
+  useEffect(() => {
+    if (drill?.patternId && data?.detections && data.detections.length > 0) {
+      const d = data.detections.find((x) => x.pattern_id === drill.patternId);
+      if (d && d.expected_impacted_service_id) {
+        const svcId = d.expected_impacted_service_id;
+        if (!historicalIncidents[svcId]) {
+          getIncidents({ service: svcId, limit: 10 }).then((res) => {
+            setHistoricalIncidents((prev) => ({
+              ...prev,
+              [svcId]: res.incidents,
+            }));
+          });
+        }
+      }
+    }
+  }, [drill?.patternId, data?.detections, historicalIncidents]);
+
+  // Keyboard navigation (Escape closes detail/returns to list)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (drill) {
+          if (drill.patternId) {
+            setDrill({ panel: drill.panel });
+          } else {
+            closeDrill();
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [drill, closeDrill]);
+
+  // Auto-open detail drawers based on URL query parameters
+  useEffect(() => {
+    if (loading || !data) return;
+
+    const threatParam = searchParams.get('threat');
+    const patternParam = searchParams.get('pattern');
+
+    if (threatParam) {
+      const found = data.detections.find(
+        (d) =>
+          d.pattern_id === threatParam ||
+          d.expected_impacted_service_id === threatParam ||
+          d.expected_impacted_service.toLowerCase().replace(/[\s-_]+/g, '') === threatParam.toLowerCase().replace(/[\s-_]+/g, '')
+      );
+      if (found) {
+        setDrill({ panel: 'imminent', patternId: found.pattern_id });
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('threat');
+        setSearchParams(newParams, { replace: true });
+      }
+    } else if (patternParam) {
+      const found = data.detections.find(
+        (d) =>
+          d.pattern_id === patternParam ||
+          d.expected_impacted_service_id === patternParam ||
+          d.expected_impacted_service.toLowerCase().replace(/[\s-_]+/g, '') === patternParam.toLowerCase().replace(/[\s-_]+/g, '')
+      );
+      if (found) {
+        setDrill({ panel: 'patterns', patternId: found.pattern_id });
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('pattern');
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [loading, data, searchParams, setSearchParams]);
+
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -680,6 +781,7 @@ export default function EarlyDetectionDashboard() {
   const soonestDetection = detections.length
     ? [...detections].sort((a, b) => a.estimated_time_to_incident_minutes - b.estimated_time_to_incident_minutes)[0]
     : null;
+  const isDetail = !!drill?.patternId;
 
   const openDrill = useCallback((ctx: DrillContext) => {
     setDrill(ctx);
@@ -687,12 +789,6 @@ export default function EarlyDetectionDashboard() {
     setAiChat([]);
     if (ctx.patternId) setSelectedId(ctx.patternId);
     if (ctx.panel === 'ranked-threat' && ctx.patternId) setSelectedId(ctx.patternId);
-  }, []);
-
-  const closeDrill = useCallback(() => {
-    setDrill(null);
-    setAiResponse(null);
-    setAiChat([]);
   }, []);
 
   const jumpToDetection = useCallback((patternId: string) => {
@@ -1492,50 +1588,62 @@ export default function EarlyDetectionDashboard() {
       <DrilldownDrawer
         isOpen={drill !== null}
         onClose={closeDrill}
+        onBack={
+          drill?.patternId
+            ? () => setDrill({ panel: drill.panel })
+            : undefined
+        }
         title={
-          drill?.panel === 'active-alerts'
-            ? `Active Alerts (${alertsFeed.length})`
-            : drill?.panel === 'patterns'
-              ? `Matched Patterns (${detections.length})`
-              : drill?.panel === 'imminent'
-                ? `Imminent Threats (${imminentDetections.length})`
-                : drill?.panel === 'eta'
-                  ? 'Soonest Predicted Incident'
-                  : drill?.panel === 'service-risk-overview'
-                    ? 'Service Risk Overview'
-                    : drill?.panel === 'service-risk' && drillService
-                      ? drillService.service_name
-                      : drill?.panel === 'live-conditions' && drillCondition
-                        ? `Condition: ${drillCondition.title}`
-                        : drill?.panel === 'live-conditions'
-                          ? 'Live Alert Conditions'
-                          : drill?.panel === 'ranked-threats'
-                            ? `Ranked Threats (${detections.length})`
-                            : drill?.panel === 'ranked-threat' && drillDetection
-                              ? drillDetection.expected_impacted_service
-                              : 'Early Detection'
+          drill?.patternId && cachedDetection
+            ? `${drill.panel === 'imminent' ? 'Imminent Threat:' : 'Precursor Pattern:'} ${cachedDetection.expected_impacted_service}`
+            : drill?.panel === 'active-alerts'
+              ? `Active Alerts (${alertsFeed.length})`
+              : drill?.panel === 'patterns'
+                ? `Matched Precursor Patterns (${detections.length})`
+                : drill?.panel === 'imminent'
+                  ? `Imminent Incident Precursors (${imminentDetections.length})`
+                  : drill?.panel === 'eta'
+                    ? 'Soonest Predicted Incident'
+                    : drill?.panel === 'service-risk-overview'
+                      ? 'Service Risk Overview'
+                      : drill?.panel === 'service-risk' && drillService
+                        ? drillService.service_name
+                        : drill?.panel === 'live-conditions' && drillCondition
+                          ? `Condition: ${drillCondition.title}`
+                          : drill?.panel === 'live-conditions'
+                            ? 'Live Alert Conditions'
+                            : drill?.panel === 'ranked-threats'
+                              ? `Ranked Threats (${detections.length})`
+                              : drill?.panel === 'ranked-threat' && drillDetection
+                                ? drillDetection.expected_impacted_service
+                                : 'Early Detection'
         }
         subtitle={
-          drill?.panel === 'active-alerts'
-            ? `${criticalFeed.length} critical signals requiring clearance`
-            : drill?.panel === 'eta' && soonestDetection
-              ? `${soonestDetection.expected_impacted_service} · ${formatEta(soonestDetection.estimated_time_to_incident_minutes)}`
-              : drill?.panel === 'service-risk' && drillService
-                ? `${drillService.risk_level} risk · ${drillService.active_threats} signals · ETA ${formatEta(drillService.eta_minutes)}`
-                : drill?.panel === 'live-conditions' && drillCondition
-                  ? `${drillCondition.count} occurrences on ${drillCondition.entities.join(', ')}`
-                  : drill?.panel === 'ranked-threat' && drillDetection
-                    ? `${drillDetection.confidence}% confidence · ETA ${formatEta(drillDetection.estimated_time_to_incident_minutes)}`
-                    : undefined
+          drill?.patternId && cachedDetection
+            ? `${cachedDetection.confidence}% confidence · ETA ${formatEta(cachedDetection.estimated_time_to_incident_minutes)}`
+            : drill?.panel === 'active-alerts'
+              ? `${criticalFeed.length} critical signals requiring clearance`
+              : drill?.panel === 'eta' && soonestDetection
+                ? `${soonestDetection.expected_impacted_service} · ${formatEta(soonestDetection.estimated_time_to_incident_minutes)}`
+                : drill?.panel === 'service-risk' && drillService
+                  ? `${drillService.risk_level} risk · ${drillService.active_threats} signals · ETA ${formatEta(drillService.eta_minutes)}`
+                  : drill?.panel === 'live-conditions' && drillCondition
+                    ? `${drillCondition.count} occurrences on ${drillCondition.entities.join(', ')}`
+                    : drill?.panel === 'ranked-threat' && drillDetection
+                      ? `${drillDetection.confidence}% confidence · ETA ${formatEta(drillDetection.estimated_time_to_incident_minutes)}`
+                      : undefined
         }
         type="incident"
         health={
-          (drill?.panel === 'active-alerts' && criticalFeed.length > 0) ||
-            (drill?.panel === 'imminent' && imminentDetections.length > 0) ||
-            (drill?.panel === 'service-risk' && drillService && drillService.risk_level !== 'Healthy') ||
-            (drill?.panel === 'ranked-threat' && drillDetection?.progression_stage === 'imminent')
+          drill?.panel === 'imminent'
             ? 'critical'
-            : 'warning'
+            : drill?.panel === 'patterns'
+              ? 'warning'
+              : (drill?.panel === 'active-alerts' && criticalFeed.length > 0) ||
+                (drill?.panel === 'service-risk' && drillService && drillService.risk_level !== 'Healthy') ||
+                (drill?.panel === 'ranked-threat' && drillDetection?.progression_stage === 'imminent')
+                ? 'critical'
+                : 'warning'
         }
         actions={
           <button
@@ -1590,65 +1698,313 @@ export default function EarlyDetectionDashboard() {
         )}
 
         {drill?.panel === 'patterns' && (
-          <>
-            <DrilldownSection title="Matched precursor patterns">
-              <div className="space-y-3">
-                {detections.map((d) => (
-                  <button
-                    key={d.pattern_id}
-                    type="button"
-                    onClick={() => jumpToDetection(d.pattern_id)}
-                    className="w-full text-left p-3 rounded-lg border border-border bg-card-hover hover:border-primary/30 transition-colors"
-                  >
-                    <div className="flex justify-between gap-2 mb-1">
-                      <span className="font-medium text-text-primary text-sm">{d.expected_impacted_service}</span>
-                      <Badge variant={RISK_VARIANT[d.risk_level ?? 'Medium'] ?? 'warning'}>{d.confidence}%</Badge>
-                    </div>
-                    <p className="text-xs text-text-secondary">{d.pattern_label}</p>
-                    <p className="text-xs text-text-secondary mt-1">
-                      Coverage {d.match_coverage?.matched}/{d.match_coverage?.total} · ETA {formatEta(d.estimated_time_to_incident_minutes)}
-                    </p>
-                  </button>
-                ))}
+          <div className="relative overflow-hidden w-full">
+            <div
+              className={cn(
+                "transition-transform duration-300 ease-in-out flex",
+                isDetail ? "-translate-x-1/2" : "translate-x-0"
+              )}
+              style={{ width: '200%' }}
+            >
+              {/* Slide 1: List */}
+              <div className="shrink-0 pr-4" style={{ width: '50%' }}>
+                <DrilldownSection title="Matched precursor patterns">
+                  <div className="space-y-3">
+                    {detections.map((d) => (
+                      <button
+                        key={d.pattern_id}
+                        type="button"
+                        onClick={() => setDrill({ panel: 'patterns', patternId: d.pattern_id })}
+                        className="w-full text-left p-3 rounded-lg border border-border bg-card-hover hover:border-primary/30 transition-colors cursor-pointer"
+                      >
+                        <div className="flex justify-between gap-2 mb-1">
+                          <span className="font-medium text-text-primary text-sm">{d.expected_impacted_service}</span>
+                          <Badge variant={RISK_VARIANT[d.risk_level ?? 'Medium'] ?? 'warning'}>{d.confidence}%</Badge>
+                        </div>
+                        <p className="text-xs text-text-secondary">{d.pattern_label}</p>
+                        <p className="text-xs text-text-secondary mt-1">
+                          Coverage {d.match_coverage?.matched}/{d.match_coverage?.total} · ETA {formatEta(d.estimated_time_to_incident_minutes)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </DrilldownSection>
               </div>
-            </DrilldownSection>
-          </>
+              {/* Slide 2: Detail */}
+              <div className="shrink-0 pl-4" style={{ width: '50%' }}>
+                {cachedDetection && (
+                  <div className="space-y-6">
+                    {/* Pattern Definition */}
+                    <div className="bg-card-hover border border-border rounded-xl p-4 space-y-2">
+                      <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Pattern Definition</p>
+                      <p className="text-sm text-text-primary">
+                        Triggers when <strong className="text-primary">{cachedDetection.matched_alerts.concat(cachedDetection.match_coverage?.unmatched_alerts ?? []).join(" AND ")}</strong> occur in the same service context.
+                      </p>
+                    </div>
+
+                    {/* Coverage Status */}
+                    <DrilldownSection title="Pattern Match Status">
+                      <div className="bg-card-hover border border-border rounded-xl p-4 space-y-3">
+                        <PatternCoverageBar
+                          matched={cachedDetection.match_coverage?.matched ?? 0}
+                          total={cachedDetection.match_coverage?.total ?? 0}
+                        />
+                        <div className="space-y-2 mt-4">
+                          <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Detailed Alert Coverage</p>
+                          <div className="space-y-2">
+                            {cachedDetection.matched_alerts_details?.map((alert) => (
+                              <div key={alert.id} className="flex items-center justify-between p-2 rounded-lg bg-success/5 border border-success/20 text-xs">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-text-primary truncate">{alert.title}</p>
+                                  <p className="text-[10px] text-text-secondary font-mono truncate">{alert.entity_id}</p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {severityBadge(alert.severity)}
+                                  <span className="text-success font-bold font-mono">✓ MATCHED</span>
+                                </div>
+                              </div>
+                            ))}
+                            {(cachedDetection.match_coverage?.unmatched_alerts ?? []).map((alertName) => (
+                              <div key={alertName} className="flex items-center justify-between p-2 rounded-lg border border-dashed border-border bg-slate-50 dark:bg-slate-800/40 text-xs opacity-70">
+                                <span className="font-semibold text-text-secondary">{alertName}</span>
+                                <span className="text-text-secondary font-mono text-[10px] animate-pulse">⏰ PENDING MATCH</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </DrilldownSection>
+
+                    {/* ETA Countdown with Confidence Band */}
+                    <div className="flex items-center gap-4 bg-card-hover border border-border rounded-xl p-4">
+                      <div className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0">
+                        <Clock className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Estimated Incident Horizon</p>
+                        <p className="text-lg font-bold text-text-primary mt-0.5">ETA: {formatEta(cachedDetection.estimated_time_to_incident_minutes)}</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Horizon Confidence Band: {cachedDetection.confidence - 5}% - {Math.min(99, cachedDetection.confidence + 5)}%</p>
+                      </div>
+                    </div>
+
+                    {/* Historical Incidents Preceded */}
+                    <DrilldownSection title="Historical Incidents Preceded" icon={<TrendingUp className="h-4 w-4" />}>
+                      {(() => {
+                        const svcId = cachedDetection.expected_impacted_service_id;
+                        const incidents = svcId ? (historicalIncidents[svcId] ?? []) : [];
+                        const matchedIncidents = incidents.filter(inc => isPrecededByPattern(inc, cachedDetection.matched_alerts.concat(cachedDetection.match_coverage?.unmatched_alerts ?? [])));
+
+                        if (matchedIncidents.length === 0) {
+                          return <p className="text-xs text-text-secondary italic text-center py-2 bg-slate-50 dark:bg-slate-800/40 rounded-lg">No matching historical incidents found in the database.</p>;
+                        }
+
+                        return (
+                          <div className="space-y-2">
+                            {matchedIncidents.slice(0, 5).map((inc) => (
+                              <Link
+                                key={inc.incident_id}
+                                to={`/incidents?id=${inc.incident_id}`}
+                                className="block p-3 rounded-lg border border-border bg-card-hover hover:border-primary/40 hover:bg-primary/5 transition-all text-xs"
+                              >
+                                <div className="flex justify-between items-start mb-1">
+                                  <span className="font-semibold text-primary hover:underline">{inc.incident_id}</span>
+                                  <span className="text-[10px] text-text-secondary font-mono">{inc.severity}</span>
+                                </div>
+                                <p className="font-medium text-text-primary mb-1">{inc.title}</p>
+                                <p className="text-text-secondary">Root Cause: <strong className="text-text-primary">{inc.root_cause}</strong> · Resolved in {inc.duration_minutes ? `${Math.round(inc.duration_minutes)}m` : 'N/A'}</p>
+                              </Link>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </DrilldownSection>
+
+                    {/* See imminent threat actions button */}
+                    {imminentDetections.some(d => d.pattern_id === cachedDetection.pattern_id) && (
+                      <div className="pt-4 border-t border-border flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setDrill({ panel: 'imminent', patternId: cachedDetection.pattern_id })}
+                          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-semibold cursor-pointer"
+                        >
+                          → See imminent threat actions
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {drill?.panel === 'imminent' && (
-          <>
-            <DrilldownSection title="Imminent incident precursors">
-              {imminentDetections.length === 0 ? (
-                <p className="text-sm text-text-secondary">No threats at imminent stage right now.</p>
-              ) : (
-                <div className="space-y-3">
-                  {imminentDetections.map((d) => (
-                    <div key={d.pattern_id} className="p-3 rounded-lg border border-critical/30 bg-critical/5">
-                      <div className="flex justify-between mb-2">
-                        <span className="font-semibold text-text-primary">{d.expected_impacted_service}</span>
-                        <Badge variant="critical">ETA {formatEta(d.estimated_time_to_incident_minutes)}</Badge>
+          <div className="relative overflow-hidden w-full">
+            <div
+              className={cn(
+                "transition-transform duration-300 ease-in-out flex",
+                isDetail ? "-translate-x-1/2" : "translate-x-0"
+              )}
+              style={{ width: '200%' }}
+            >
+              {/* Slide 1: List */}
+              <div className="shrink-0 pr-4" style={{ width: '50%' }}>
+                <DrilldownSection title="Imminent incident precursors">
+                  {imminentDetections.length === 0 ? (
+                    <p className="text-sm text-text-secondary">No threats at imminent stage right now.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {imminentDetections.map((d) => (
+                        <div key={d.pattern_id} className="p-3 rounded-lg border border-critical/30 bg-critical/5">
+                          <div className="flex justify-between mb-2">
+                            <span className="font-semibold text-text-primary">{d.expected_impacted_service}</span>
+                            <Badge variant="critical">ETA {formatEta(d.estimated_time_to_incident_minutes)}</Badge>
+                          </div>
+                          <ul className="space-y-1">
+                            {d.recommended_actions.slice(0, 3).map((a) => (
+                              <li key={a} className="text-xs text-text-secondary flex gap-1.5">
+                                <span className="text-critical">→</span>
+                                {a}
+                              </li>
+                            ))}
+                          </ul>
+                          <button
+                            type="button"
+                            onClick={() => setDrill({ panel: 'imminent', patternId: d.pattern_id })}
+                            className="text-xs text-primary hover:underline mt-2 font-semibold cursor-pointer"
+                          >
+                            View full threat analysis
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </DrilldownSection>
+              </div>
+              {/* Slide 2: Detail */}
+              <div className="shrink-0 pl-4" style={{ width: '50%' }}>
+                {cachedDetection && (
+                  <div className="space-y-6">
+                    {/* Severity confidence score card */}
+                    <div className="flex items-center gap-4 bg-card-hover border border-border rounded-xl p-4">
+                      <div className="shrink-0">
+                        <ConfidenceRing value={cachedDetection.confidence} size={72} selectedDetection={cachedDetection} />
                       </div>
-                      <ul className="space-y-1">
-                        {d.recommended_actions.slice(0, 3).map((a) => (
-                          <li key={a} className="text-xs text-text-secondary flex gap-1.5">
-                            <span className="text-critical">→</span>
-                            {a}
+                      <div>
+                        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Severity Confidence</p>
+                        <p className="text-lg font-bold text-text-primary mt-0.5">{cachedDetection.risk_level} Risk Stage</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Estimated timeline accuracy: ±10% confidence band</p>
+                      </div>
+                    </div>
+
+                    {/* ETA Countdown & Confidence Band */}
+                    <div className="flex items-center gap-3 bg-critical/5 border border-critical/20 rounded-xl p-4">
+                      <div className="p-2.5 bg-critical/15 text-critical rounded-lg shrink-0">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Estimated Incident Horizon</p>
+                        <p className="text-lg font-bold text-critical mt-0.5">ETA: {formatEta(cachedDetection.estimated_time_to_incident_minutes)}</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Horizon Confidence: {cachedDetection.confidence - 5}% - {Math.min(99, cachedDetection.confidence + 5)}%</p>
+                      </div>
+                    </div>
+
+                    {/* Root Cause Timeline */}
+                    <DrilldownSection title="Root Cause Timeline" icon={<Clock className="h-4 w-4" />}>
+                      <div className="relative border-l border-slate-200 dark:border-slate-700 ml-3 pl-6 space-y-4">
+                        {[...(cachedDetection.matched_alerts_details ?? [])]
+                          .sort((a, b) => b.minutes_ago - a.minutes_ago)
+                          .map((alert) => (
+                            <div key={alert.id} className="relative">
+                              <span className={cn(
+                                "absolute -left-[34px] top-1 flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white dark:ring-slate-900",
+                                alert.severity === 'critical' ? "bg-red-500" : "bg-amber-500"
+                              )}>
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              </span>
+                              <div className="flex items-center justify-between text-xs text-text-secondary">
+                                <span className="font-semibold">{formatAge(alert.minutes_ago)}</span>
+                                <span>{alert.triggered_at ? new Date(alert.triggered_at).toLocaleTimeString() : ''}</span>
+                              </div>
+                              <p className="text-sm font-medium text-text-primary mt-0.5">
+                                {alert.title} on <span className="font-mono text-xs">{alert.entity_id}</span>
+                              </p>
+                              {alert.description && (
+                                <p className="text-xs text-text-secondary mt-1">{alert.description}</p>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </DrilldownSection>
+
+                    {/* Blast propagation paths / affected dependencies */}
+                    {cachedDetection.propagation_paths && Object.keys(cachedDetection.propagation_paths).length > 0 && (
+                      <DrilldownSection title="Affected Services & Dependencies" icon={<Target className="h-4 w-4" />}>
+                        <div className="space-y-2">
+                          {Object.entries(cachedDetection.propagation_paths).map(([entity, path]) => (
+                            <div key={entity} className="flex flex-wrap items-center gap-1.5 text-xs p-3 rounded-lg bg-card-hover border border-border">
+                              <span className="font-mono text-text-primary">{entity}</span>
+                              {path.map((node, i) => (
+                                <span key={`${entity}-${i}`} className="flex items-center gap-1.5">
+                                  <ArrowRight className="h-3 w-3 text-text-secondary" />
+                                  <span className="font-mono text-text-secondary">{node}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </DrilldownSection>
+                    )}
+
+                    {/* Correlated Signals */}
+                    {cachedDetection.correlated_changes && cachedDetection.correlated_changes.length > 0 && (
+                      <DrilldownSection title="Correlated Changes & Signals" icon={<TrendingUp className="h-4 w-4" />}>
+                        <div className="space-y-2">
+                          {cachedDetection.correlated_changes.map((change) => (
+                            <div key={change.id} className="p-3 rounded-lg border border-border bg-card-hover text-sm">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-text-primary truncate">{change.title}</span>
+                                {severityBadge(change.severity)}
+                              </div>
+                              <p className="text-xs text-text-secondary mt-1 capitalize">
+                                {change.type.replace('_', ' ')} · {change.status} · {change.hours_ago}h ago
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </DrilldownSection>
+                    )}
+
+                    {/* Recommended steps */}
+                    <DrilldownSection title="Recommended Runbook Steps" icon={<Zap className="h-4 w-4" />}>
+                      <ol className="space-y-2">
+                        {cachedDetection.recommended_actions.map((action, i) => (
+                          <li key={action} className="flex gap-2 text-sm text-text-secondary">
+                            <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">
+                              {i + 1}
+                            </span>
+                            {action}
                           </li>
                         ))}
-                      </ul>
+                      </ol>
+                    </DrilldownSection>
+
+                    {/* Triggered by pattern back-reference */}
+                    <div className="pt-4 border-t border-border flex justify-end">
                       <button
                         type="button"
-                        onClick={() => jumpToDetection(d.pattern_id)}
-                        className="text-xs text-primary hover:underline mt-2"
+                        onClick={() => setDrill({ panel: 'patterns', patternId: cachedDetection.pattern_id })}
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-semibold cursor-pointer"
                       >
-                        View full threat analysis
+                        <ArrowRight className="h-4 w-4 rotate-180" />
+                        ← Triggered by pattern
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </DrilldownSection>
-          </>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {drill?.panel === 'eta' && soonestDetection && (

@@ -63,8 +63,8 @@ export default function HomeOverview() {
           {data.early_detections.length === 0 ? (
             <p className="text-sm text-slate-600 dark:text-slate-400">No active patterns detected</p>
           ) : (
-            data.early_detections.map((d) => (
-              <div key={d.pattern_id} className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-500/30 rounded-lg mb-2">
+            data.early_detections.map((d, i) => (
+              <div key={`${d.pattern_id}-${i}`} className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-500/30 rounded-lg mb-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-red-700 dark:text-red-300 font-medium">Probable incident forming</span>
                   <span className="text-sm font-bold text-red-600 dark:text-red-400">{d.confidence}%</span>

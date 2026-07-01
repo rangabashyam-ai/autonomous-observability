@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { heatmapColor } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
+import { useLongPress } from '../utils/hooks';
 
 export interface DependencyNodeData {
   label: string;
@@ -14,54 +14,60 @@ export interface DependencyNodeData {
   isHighlighted: boolean;
   isSearchMatch?: boolean;
   dimmed?: boolean;
+  onLongPress?: (id: string, isGroup: boolean) => void;
+  onClick?: (id: string, isGroup: boolean) => void;
 }
 
-function DependencyNode({ data }: NodeProps<DependencyNodeData>) {
-  const { theme } = useTheme();
+function DependencyNode({ id, data }: NodeProps<DependencyNodeData>) {
   const color = heatmapColor(data.heatmapValue, data.heatmapMetric as never);
-  const borderColor = data.isSelected
-    ? '#3b82f6'
-    : data.isSearchMatch
-    ? '#f59e0b'
-    : data.isHighlighted
-    ? '#a855f7'
-    : color;
-  const bgEnd = theme === 'dark' ? '#1e293b' : '#f8fafc';
+  const borderColor = data.isSelected ? '#3b82f6' : data.isSearchMatch ? '#f59e0b' : color;
+  
+  const getIcon = () => {
+    if (data.type === 'database') return '🛢️';
+    if (data.type === 'server' || data.type === 'kubernetes_cluster') return '🖥️';
+    if (data.type === 'load_balancer') return '⚖️';
+    if (data.layer === 'microservice') return '⚙️';
+    if (data.layer === 'business_service') return '💼';
+    return '📦';
+  };
+
+  const longPressProps = useLongPress(
+    (e) => {
+      e.stopPropagation();
+      data.onLongPress?.(id, false);
+    },
+    (e) => {
+      e.stopPropagation();
+      data.onClick?.(id, false);
+    },
+    { delay: 400 }
+  );
 
   return (
-    <div
-      className="rounded-lg shadow-lg min-w-[140px] max-w-[180px]"
-      style={{
-        border: `2px solid ${borderColor}`,
-        background: `linear-gradient(135deg, ${color}22 0%, ${bgEnd} 100%)`,
-        boxShadow: data.isSelected
-          ? `0 0 14px ${borderColor}88`
-          : data.isSearchMatch
-          ? `0 0 10px ${borderColor}99`
-          : undefined,
-        opacity: data.dimmed ? 0.25 : 1,
-        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
-      }}
+    <div 
+      {...longPressProps}
+      className="relative flex flex-col items-center justify-center cursor-pointer"
+      style={{ opacity: data.dimmed ? 0.25 : 1, transition: 'opacity 0.2s' }}
     >
-      <Handle type="target" position={Position.Top} className="!bg-slate-400 !w-2 !h-2" />
-      <div className="px-3 py-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
-          {data.layer.replace(/_/g, ' ')}
-        </div>
-        <div className="text-xs font-semibold text-slate-900 dark:text-white truncate mt-0.5" title={data.label}>
+      <Handle type="target" position={Position.Top} className="!opacity-0 !pointer-events-none" />
+      
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center shadow-md bg-white dark:bg-slate-800 z-10"
+        style={{
+          border: `2px solid ${borderColor}`,
+          boxShadow: data.isSelected ? `0 0 8px ${borderColor}` : undefined,
+        }}
+      >
+        <span className="text-xs leading-none">{getIcon()}</span>
+      </div>
+
+      <div className="absolute top-8 left-1/2 -translate-x-1/2 w-28 text-center pointer-events-none">
+        <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 leading-tight drop-shadow-md">
           {data.label}
         </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400">{data.type}</span>
-          <span
-            className="text-[10px] font-mono font-bold"
-            style={{ color }}
-          >
-            {data.heatmapValue.toFixed(data.heatmapMetric === 'incident_count' ? 0 : 1)}
-          </span>
-        </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-slate-400 !w-2 !h-2" />
+      
+      <Handle type="source" position={Position.Bottom} className="!opacity-0 !pointer-events-none" />
     </div>
   );
 }

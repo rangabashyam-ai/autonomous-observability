@@ -16,6 +16,8 @@ import {
   Shield,
   FileSearch,
   Cloud,
+  Upload,
+  GitBranch,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
@@ -34,13 +36,15 @@ const primaryNav = [
 
 const secondaryNav = [
   { to: '/dependencies', label: 'Map', icon: Map },
+  { to: '/traces', label: 'Traces', icon: GitBranch },
   { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
   { to: '/rca', label: 'RCA', icon: FileSearch },
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
   { to: '/integrations', label: 'Integrations', icon: Cloud },
-  { to: '/admin', label: 'Settings', icon: Settings },
+  { to: '/admin', label: 'Custom', icon: Upload },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 /* ─── NavItem ────────────────────────────────────────────────────────────── */

@@ -165,6 +165,91 @@ def discover_load_balancers(session, region: str = "us-east-1") -> list[dict]:
         return []
 
 
+def discover_ecs(session, region: str = "us-east-1") -> list[dict]:
+    """Discover ECS clusters and their services."""
+    try:
+        ecs = session.client("ecs", region_name=region)
+        cluster_arns = ecs.list_clusters().get("clusterArns", [])
+        resources: list[dict] = []
+
+        # Describe clusters
+        if cluster_arns:
+            clusters_detail = ecs.describe_clusters(clusters=cluster_arns).get("clusters", [])
+            for cluster in clusters_detail:
+                status = cluster.get("status", "UNKNOWN")
+                health = "healthy" if status == "ACTIVE" else "critical"
+                resources.append(_make_resource(
+                    id=cluster.get("clusterArn", cluster["clusterName"]),
+                    name=cluster["clusterName"],
+                    resource_type="ecs_cluster",
+                    region=region,
+                    health=health,
+                    extra={
+                        "status": status,
+                        "running_tasks": cluster.get("runningTasksCount", 0),
+                        "pending_tasks": cluster.get("pendingTasksCount", 0),
+                        "active_services": cluster.get("activeServicesCount", 0),
+                    },
+                ))
+
+                # List services within the cluster
+                try:
+                    svc_paginator = ecs.get_paginator("list_services")
+                    for page in svc_paginator.paginate(cluster=cluster.get("clusterArn", cluster["clusterName"])):
+                        svc_arns = page.get("serviceArns", [])
+                        if svc_arns:
+                            svcs = ecs.describe_services(
+                                cluster=cluster.get("clusterArn", cluster["clusterName"]),
+                                services=svc_arns[:10],  # API limit: 10 per call
+                            ).get("services", [])
+                            for svc in svcs:
+                                svc_status = svc.get("status", "UNKNOWN")
+                                svc_health = "healthy" if svc_status == "ACTIVE" else "critical"
+                                resources.append(_make_resource(
+                                    id=svc.get("serviceArn", svc["serviceName"]),
+                                    name=svc["serviceName"],
+                                    resource_type="ecs_service",
+                                    region=region,
+                                    health=svc_health,
+                                    extra={
+                                        "cluster": cluster["clusterName"],
+                                        "task_definition": svc.get("taskDefinition", ""),
+                                        "desired_count": svc.get("desiredCount", 0),
+                                        "running_count": svc.get("runningCount", 0),
+                                        "pending_count": svc.get("pendingCount", 0),
+                                        "launch_type": svc.get("launchType", ""),
+                                    },
+                                ))
+                except Exception as exc:
+                    logger.warning(f"[AWS] Failed to list ECS services in {cluster['clusterName']}: {exc}")
+
+        logger.info(f"[AWS] Discovered {len(resources)} ECS resources in {region}")
+        return resources
+    except Exception as exc:
+        logger.error(f"[AWS] ECS discovery failed: {exc}")
+        return []
+
+
+def discover_kinesis(session, region: str = "us-east-1") -> list[dict]:
+    """Discover Kinesis Data Streams."""
+    try:
+        from app.integrations.aws.kinesis import discover_streams
+        return discover_streams(session, region)
+    except Exception as exc:
+        logger.error(f"[AWS] Kinesis discovery failed: {exc}")
+        return []
+
+
+def discover_event_bridges(session, region: str = "us-east-1") -> list[dict]:
+    """Discover EventBridge event buses and rules."""
+    try:
+        from app.integrations.aws.eventbridge import discover_all as eb_discover_all
+        return eb_discover_all(session, region)
+    except Exception as exc:
+        logger.error(f"[AWS] EventBridge discovery failed: {exc}")
+        return []
+
+
 def discover_all(session, region: str = "us-east-1") -> list[dict]:
     """Run all AWS discovery and return combined resource list."""
     resources: list[dict] = []
@@ -172,4 +257,7 @@ def discover_all(session, region: str = "us-east-1") -> list[dict]:
     resources.extend(discover_eks(session, region))
     resources.extend(discover_rds(session, region))
     resources.extend(discover_load_balancers(session, region))
+    resources.extend(discover_ecs(session, region))
+    resources.extend(discover_kinesis(session, region))
+    resources.extend(discover_event_bridges(session, region))
     return resources

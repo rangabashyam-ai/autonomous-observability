@@ -22,6 +22,7 @@ import BlastRadiusDetailPanel, {
 } from '../components/BlastRadiusDetailPanel';
 import BlastRadiusClickableTags from '../components/BlastRadiusClickableTags';
 import BlastRadiusPathChat from '../components/BlastRadiusPathChat';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
 
 import BlastRadiusEdge from '../components/BlastRadiusEdge';
 
@@ -92,8 +93,8 @@ export default function BlastRadiusDashboard() {
 
       if (filterRegion) {
         const localServices = regionServiceMap[filterRegion] || [];
-        nodesToRender = graphData.nodes.filter(node => 
-          localServices.some(ls => 
+        nodesToRender = graphData.nodes.filter(node =>
+          localServices.some(ls =>
             node.id.toLowerCase() === ls.toLowerCase() ||
             node.label.toLowerCase() === ls.toLowerCase() ||
             node.id.toLowerCase().includes(ls.toLowerCase()) ||
@@ -101,7 +102,7 @@ export default function BlastRadiusDashboard() {
           ) || node.id.toLowerCase().includes(filterRegion.toLowerCase())
         );
         const nodeIds = new Set(nodesToRender.map(n => n.id));
-        edgesToRender = graphData.edges.filter(edge => 
+        edgesToRender = graphData.edges.filter(edge =>
           nodeIds.has(edge.source) && nodeIds.has(edge.target)
         );
       }
@@ -112,7 +113,7 @@ export default function BlastRadiusDashboard() {
       const mappedNodes = rawNodes.map((node) => {
         if (!highlightRegion) return node;
 
-        const inRegion = localServices.some(ls => 
+        const inRegion = localServices.some(ls =>
           node.id.toLowerCase() === ls.toLowerCase() ||
           node.data.label.toLowerCase() === ls.toLowerCase() ||
           node.id.toLowerCase().includes(ls.toLowerCase()) ||
@@ -137,8 +138,8 @@ export default function BlastRadiusDashboard() {
   const buildGraph = useCallback(
     async (blast: BlastRadiusResult, currentTheme: 'light' | 'dark', currentSelection: GraphSelection) => {
       const [serviceGraph, infraGraph] = await Promise.all([
-        getDependencyGraph('microservice', 'risk_score', service),
-        getDependencyGraph('infrastructure', 'risk_score'),
+        getDependencyGraph(['microservice'], 'risk_score', service),
+        getDependencyGraph(['infrastructure'], 'risk_score'),
       ]);
 
       const infraRelevant = infraGraph.nodes.filter(
@@ -247,20 +248,20 @@ export default function BlastRadiusDashboard() {
     const selectedPayload = selectionDetail
       ? selectionDetail.type === 'node'
         ? {
-            type: 'node',
-            id: selectionDetail.detail.id,
-            label: selectionDetail.detail.label,
-            impact_role: selectionDetail.detail.impactRoleLabel,
-            health: selectionDetail.detail.health,
-            status: selectionDetail.detail.currentImpact,
-          }
+          type: 'node',
+          id: selectionDetail.detail.id,
+          label: selectionDetail.detail.label,
+          impact_role: selectionDetail.detail.impactRoleLabel,
+          health: selectionDetail.detail.health,
+          status: selectionDetail.detail.currentImpact,
+        }
         : {
-            type: 'edge',
-            source: selectionDetail.detail.sourceLabel,
-            target: selectionDetail.detail.targetLabel,
-            relationship: selectionDetail.detail.relationship,
-            kind: selectionDetail.detail.kindLabel,
-          }
+          type: 'edge',
+          source: selectionDetail.detail.sourceLabel,
+          target: selectionDetail.detail.targetLabel,
+          relationship: selectionDetail.detail.relationship,
+          kind: selectionDetail.detail.kindLabel,
+        }
       : null;
 
     const entitySuffix = selection
@@ -468,7 +469,7 @@ export default function BlastRadiusDashboard() {
 
   const getRegionStatus = useCallback((rName: string) => {
     if (!result) return 'Healthy';
-    
+
     const regionServiceMap: Record<string, string[]> = {
       'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
       'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
@@ -478,7 +479,7 @@ export default function BlastRadiusDashboard() {
     const isOriginRegion = regionServiceMap[rName]?.some(
       s => s.toLowerCase() === service.toLowerCase()
     );
-    const hasImpactedServices = result.currently_impacted_services.some(s => 
+    const hasImpactedServices = result.currently_impacted_services.some(s =>
       regionServiceMap[rName]?.some(ls => ls.toLowerCase() === s.toLowerCase() || s.toLowerCase().includes(ls.toLowerCase()))
     );
 
@@ -494,7 +495,7 @@ export default function BlastRadiusDashboard() {
   const renderRegionModal = () => {
     if (!activeRegionModal || !result) return null;
     const rName = activeRegionModal;
-    
+
     const status = getRegionStatus(rName);
 
     const regionServiceMap: Record<string, string[]> = {
@@ -504,9 +505,9 @@ export default function BlastRadiusDashboard() {
     };
 
     const localServices = regionServiceMap[rName] || [];
-    
+
     // Impacted services = currently_impacted_services & localServices
-    const impactedServices = result.currently_impacted_services.filter(s => 
+    const impactedServices = result.currently_impacted_services.filter(s =>
       localServices.some(ls => ls.toLowerCase() === s.toLowerCase() || s.toLowerCase().includes(ls.toLowerCase()))
     );
 
@@ -635,7 +636,7 @@ export default function BlastRadiusDashboard() {
 
     return nodes.map((node) => {
       const isRed = node.data?.impactRole === 'root' || node.data?.impactRole === 'impacted';
-      
+
       let targetOpacity = 1.0;
       let isGlowing = false;
       let isPulsing = false;
@@ -697,7 +698,7 @@ export default function BlastRadiusDashboard() {
 
     return edges.map((edge) => {
       const isRed = edge.data?.kind === 'impact';
-      
+
       let targetOpacity = 1.0;
       let filterStyle: string | undefined = undefined;
 
@@ -751,12 +752,16 @@ export default function BlastRadiusDashboard() {
         description="Predict impacted services, downstream failures, and visualize blast radius on dependency graph"
       />
 
+      {(!result || result.dataset_available === false) && !loading && (
+        <DatasetUploadBanner onUploadSuccess={() => window.location.reload()} />
+      )}
+
       <div className="flex gap-3 mb-4">
         <button onClick={runAnalysis} disabled={loading} className={btnPrimary}>
           {loading ? 'Analyzing...' : 'Refresh Analysis'}
         </button>
       </div>
-      {result && (
+      {result && result.dataset_available !== false && (
         <>
           {/* KPI Stat Cards and ConfidenceBar */}
           <div className="mb-4 space-y-3.5">
@@ -856,7 +861,7 @@ export default function BlastRadiusDashboard() {
                 <div className="flex flex-wrap gap-1.5">
                   {['us-east', 'eu-central', 'ap-southeast'].map((r) => {
                     const status = getRegionStatus(r);
-                    
+
                     const isSelected = activeRegionModal === r || selectedRegionHighlight === r || selectedRegionFilter === r;
 
                     const statusEmojiMap = {
@@ -873,7 +878,7 @@ export default function BlastRadiusDashboard() {
                       'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
                     };
                     const localServices = regionServiceMap[r] || [];
-                    const impactedCount = result.currently_impacted_services.filter(s => 
+                    const impactedCount = result.currently_impacted_services.filter(s =>
                       localServices.some(ls => ls.toLowerCase() === s.toLowerCase() || s.toLowerCase().includes(ls.toLowerCase()))
                     ).length;
 
@@ -890,9 +895,8 @@ export default function BlastRadiusDashboard() {
                         onClick={() => {
                           setActiveRegionModal(activeRegionModal === r ? null : r);
                         }}
-                        className={`flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer font-medium ${chipBgMap[status]} ${
-                          isSelected ? 'ring-2 ring-sky-500 ring-offset-1 dark:ring-offset-slate-900 scale-105' : ''
-                        }`}
+                        className={`flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer font-medium ${chipBgMap[status]} ${isSelected ? 'ring-2 ring-sky-500 ring-offset-1 dark:ring-offset-slate-900 scale-105' : ''
+                          }`}
                       >
                         <span>{r} {statusEmoji} {impactedCount}</span>
                       </button>
@@ -951,7 +955,7 @@ export default function BlastRadiusDashboard() {
                   onToggle={() => setExpandedPanel(prev => prev === 'dynamic' ? null : 'dynamic')}
                 />
               </div>
-              
+
               <div className="shrink-0">
                 <BlastRadiusDetailPanel
                   rootId={service}

@@ -2,11 +2,162 @@
 
 from __future__ import annotations
 
+import csv
+import json
+import os
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from app.data_store import read_json
+
+# ---------------------------------------------------------------------------
+# Bank data paths (overridable via env vars)
+# ---------------------------------------------------------------------------
+_BANK_ROOT = Path(os.environ.get(
+    "BANK_ROOT",
+    str(Path(__file__).resolve().parent.parent.parent.parent / "openRCA_Bank"),
+))
+_BANK_INCIDENTS_DIR = Path(os.environ.get(
+    "BANK_INCIDENTS_DIR",
+    str(_BANK_ROOT / "incidents"),
+))
+_BANK_ALERTS_DIR = Path(os.environ.get(
+    "BANK_ALERTS_DIR",
+    str(_BANK_ROOT / "alerts"),
+))
+_BANK_INCIDENTS_CSV = Path(os.environ.get(
+    "INCIDENTS_CSV",
+    str(_BANK_ROOT / "incidents.csv"),
+))
+
+_bank_incidents_cache: list[dict] | None = None
+_bank_alerts_cache: list[dict] | None = None
+
+
+def clear_intelligence_cache() -> None:
+    global _bank_incidents_cache, _bank_alerts_cache
+    _bank_incidents_cache = None
+    _bank_alerts_cache = None
+
+
+def _load_bank_incidents() -> list[dict]:
+    global _bank_incidents_cache
+    if _bank_incidents_cache is not None:
+        return _bank_incidents_cache
+
+    csv_lookup: dict[str, dict] = {}
+    if _BANK_INCIDENTS_CSV.exists():
+        with open(_BANK_INCIDENTS_CSV, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                csv_lookup[row.get("original_id", "")] = row
+
+    # Prefer all_incidents.json (single read); fall back to scanning individual files
+    all_json = _BANK_INCIDENTS_DIR / "all_incidents.json"
+    raw: list[dict] = []
+    if all_json.exists():
+        with open(all_json, encoding="utf-8") as f:
+            raw = json.load(f)
+    elif _BANK_INCIDENTS_DIR.is_dir():
+        for entry in sorted(os.scandir(_BANK_INCIDENTS_DIR), key=lambda e: e.name):
+            if entry.name.startswith("incident_") and entry.name.endswith(".json"):
+                with open(entry.path, encoding="utf-8") as f:
+                    raw.append(json.load(f))
+
+    incidents: list[dict] = []
+    for inc in raw:
+        inc_id    = inc.get("incidentId", "")
+        csv_row   = csv_lookup.get(inc_id, {})
+        entities  = inc.get("entities", [])
+        alert_rules = [a.get("alertRule", "") for a in inc.get("alerts", {}).get("items", [])]
+        tactics   = inc.get("tactics", [])
+        root_cause = csv_row.get("true_root_cause", "") or "Unknown"
+        component  = csv_row.get("component", "")
+        service    = component or (entities[0] if entities else "")
+
+        incidents.append({
+            "incident_id":               csv_row.get("id", inc_id),
+            "original_id":               inc_id,
+            "title":                     inc.get("title", ""),
+            "severity":                  inc.get("severity", "Low"),
+            "state":                     inc.get("status", "Open"),
+            "alerts":                    alert_rules,
+            "symptoms":                  tactics,
+            "root_cause":                root_cause,
+            "component":                 component,
+            "fix":                       csv_row.get("fix", "Pending investigation"),
+            "impacted_components":       entities,
+            "impacted_services":         [e for e in entities if e.startswith("ServiceTest")],
+            "service":                   service,
+            "service_id":                service,
+            "region":                    "bank-dc1",
+            "environment":               "production",
+            "owner_team":                "bank-ops",
+            "start_time":                inc.get("timeWindow", {}).get("start", ""),
+            "end_time":                  inc.get("timeWindow", {}).get("end", ""),
+            "resolution_notes":          csv_row.get("details", ""),
+            "confidence_training_value": 0.9,
+        })
+
+    _bank_incidents_cache = incidents
+    return incidents
+
+
+def _parse_alert_file(path: str) -> dict | None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+        ess  = raw["data"]["essentials"]
+        ctx  = raw["data"]["alertContext"]["properties"]
+        rule = ess.get("alertRule", "")
+        parts  = rule.split("-")
+        entity = ctx.get("component", "") or (
+            parts[1] if len(parts) >= 3 and parts[0] == "BankRCA" else
+            (ess.get("configurationItems") or [""])[0]
+        )
+        status = "open" if ess.get("monitorCondition", "Fired") == "Fired" else "resolved"
+        return {
+            "id":            ess.get("alertId", os.path.basename(path)),
+            "alert_id":      ess.get("alertId", os.path.basename(path)),
+            "rule":          rule,
+            "title":         rule,
+            "severity":      ess.get("severity", "Sev2"),
+            "signal_type":   ess.get("signalType", "Metric"),
+            "resource_type": ess.get("resourceType", ""),
+            "entity_id":     entity,
+            "status":        status,
+            "rca_status":    ctx.get("rcaStatus", "Pending"),
+            "fired_at":      ess.get("firedDateTime", ""),
+            "window_start":  ctx.get("windowStart", ""),
+            "window_end":    ctx.get("windowEnd", ""),
+            "description":   ess.get("description", ""),
+        }
+    except Exception:
+        return None
+
+
+def _load_bank_alerts() -> list[dict]:
+    """Load all alerts from BANK_ALERTS_DIR/alert_*.json using a thread pool."""
+    global _bank_alerts_cache
+    if _bank_alerts_cache is not None:
+        return _bank_alerts_cache
+
+    alerts: list[dict] = []
+
+    if _BANK_ALERTS_DIR.is_dir():
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        paths = [
+            e.path for e in os.scandir(_BANK_ALERTS_DIR)
+            if e.name.startswith("alert_") and e.name.endswith(".json")
+        ]
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            for result in pool.map(_parse_alert_file, paths):
+                if result is not None:
+                    alerts.append(result)
+
+    _bank_alerts_cache = alerts
+    return alerts
 
 
 def _slug(text: str) -> str:
@@ -15,16 +166,31 @@ def _slug(text: str) -> str:
 
 def _load_incidents() -> list[dict]:
     data = read_json("incidents/service_now_incidents.json")
-    return data.get("incidents", [])
+    if data:
+        return data.get("incidents", [])
+    return _load_bank_incidents()
 
 
 def _load_knowledge_graph() -> dict:
-    return read_json("rca/knowledge_graph.json") or {"nodes": [], "edges": [], "pattern_library": []}
+    kg = read_json("rca/knowledge_graph.json")
+    if kg:
+        return kg
+    try:
+        from app import parquet_store
+        return parquet_store.query("rca/knowledge_graph.json") or {"nodes": [], "edges": [], "pattern_library": []}
+    except Exception:
+        return {"nodes": [], "edges": [], "pattern_library": []}
 
 
 def _load_dependency_edges() -> list[dict]:
     data = read_json("dependencies/dependency_graph.json")
-    return data.get("edges", [])
+    if data:
+        return data.get("edges", [])
+    try:
+        from app import parquet_store
+        return parquet_store.query("dependencies/dependency_graph.json").get("edges", [])
+    except Exception:
+        return []
 
 
 def _load_changes() -> list[dict]:
@@ -39,59 +205,39 @@ def _load_deployments() -> list[dict]:
 
 def _load_alerts() -> list[dict]:
     data = read_json("monitoring/alerts.json")
-    return data.get("alerts", [])
+    if data:
+        return data.get("alerts", [])
+    return _load_bank_alerts()
 
 
 def get_service_for_entity(entity_id: str) -> str | None:
     if not entity_id:
         return None
     entity_id_lower = entity_id.lower()
-    
-    # Exact / direct mappings first
-    mapping = {
-        'cassandra-cluster': 'fraud-detection',
-        'identity-service': 'payment-authorization',
-        'customer-service': 'partner-integrations',
-        'webhook-handler': 'partner-integrations',
-        'rate-limiter': 'payment-authorization',
-        'reconciliation-service': 'merchant-services',
-        'api-gateway-services': 'api-gateway-services',
-        'auth-service': 'payment-authorization',
-        'merchant-services': 'merchant-services',
-        'payment-authorization': 'payment-authorization',
-        'fraud-detection': 'fraud-detection',
-        'api-gateway': 'api-gateway-services',
-        'audit-service': 'fraud-detection',
-        'token-service': 'payment-authorization',
-        'partner-integrations': 'partner-integrations',
-        'ml-scoring-service': 'fraud-detection',
-        'notification-service': 'settlement-processing',
-        'settlement-processing': 'settlement-processing',
-        'fraud-service': 'fraud-detection',
-        'settlement-service': 'settlement-processing',
-        'partner-api': 'partner-integrations',
-        'merchant-api': 'merchant-services',
-        'postgres-cluster': 'payment-authorization',
-        'redis-cluster': 'payment-authorization',
-    }
-    
-    if entity_id_lower in mapping:
-        return mapping[entity_id_lower]
+
+    # Try mapping dynamically using service_host_map.parquet
+    try:
+        from app import parquet_store
+        df = parquet_store._svc_host_map()
         
-    # Keyword-based fallback mappings
-    if any(k in entity_id_lower for k in ['auth', 'token', 'identity', 'redis', 'postgres', 'payment']):
-        return 'payment-authorization'
-    if any(k in entity_id_lower for k in ['settlement', 'notification', 'kafka', 'rabbitmq']):
-        return 'settlement-processing'
-    if any(k in entity_id_lower for k in ['fraud', 'ml', 'cassandra', 'audit']):
-        return 'fraud-detection'
-    if any(k in entity_id_lower for k in ['merchant', 'reconciliation']):
-        return 'merchant-services'
-    if any(k in entity_id_lower for k in ['partner', 'webhook', 'customer']):
-        return 'partner-integrations'
-    if any(k in entity_id_lower for k in ['gateway', 'api-gateway']):
-        return 'api-gateway-services'
-        
+        # 1. Exact case-insensitive service lookup
+        unique_services = df["service"].dropna().unique()
+        services_map = {s.lower(): s for s in unique_services}
+        if entity_id_lower in services_map:
+            return services_map[entity_id_lower]
+
+        # 2. CMDB ID match
+        subset = df[df["cmdb_id"].str.lower() == entity_id_lower]
+        if not subset.empty:
+            return subset.iloc[0]["service"]
+
+        # 3. Substring check: if active service is part of entity name
+        for s in unique_services:
+            if s.lower() in entity_id_lower:
+                return s
+    except Exception:
+        pass
+
     return None
 
 
@@ -296,7 +442,15 @@ def analyze_blast_radius(
     # Determine source from RCA-like matching if not provided
     if not source_component:
         rca = analyze_rca(alerts, symptoms, service)
-        source_component = rca.get("suspected_component") or "auth-service"
+        fallback = "unknown-service"
+        try:
+            from app import parquet_store
+            unique_svcs = sorted(parquet_store._svc_host_map()["service"].unique().tolist())
+            if unique_svcs:
+                fallback = unique_svcs[0]
+        except Exception:
+            pass
+        source_component = rca.get("suspected_component") or fallback
 
     # BFS downstream on dependency graph
     downstream = _bfs_downstream(source_component, dep_edges)
@@ -318,16 +472,11 @@ def analyze_blast_radius(
     is_systemic = len(downstream) > 4 or any("gateway" in c for c in downstream)
 
     # Business impact score
-    service_impact_map = {
-        "payment-authorization": 95, "settlement-processing": 90,
-        "fraud-detection": 75, "merchant-services": 70,
-        "api-gateway-services": 85, "partner-integrations": 60,
-    }
     biz_score = 50
-    for svc, score in service_impact_map.items():
-        if service and svc in service.lower().replace(" ", "-"):
-            biz_score = score
-            break
+    if service:
+        import hashlib
+        h = int(hashlib.md5(service.encode()).hexdigest(), 16)
+        biz_score = 60 + (h % 36) # distributes stably between 60 and 95
     if is_systemic:
         biz_score = min(100, biz_score + 20)
 
@@ -336,7 +485,11 @@ def analyze_blast_radius(
 
     severity = "P1" if biz_score >= 85 else "P2" if biz_score >= 70 else "P3"
 
+    from app import parquet_store
+    dataset_avail = parquet_store.is_dataset_available()
+
     return {
+        "dataset_available": dataset_avail,
         "input": {"alerts": alerts, "symptoms": symptoms, "source_component": source_component, "service": service},
         "currently_impacted_services": currently_impacted,
         "likely_downstream_services": likely_downstream,
@@ -653,6 +806,21 @@ def copilot_query(question: str) -> dict:
 
 
 def _extract_service(q: str) -> str | None:
+    text_lower = q.lower()
+    try:
+        from .. import parquet_store
+        if parquet_store.is_dataset_available():
+            for svc in parquet_store.get_business_services():
+                svc_id = svc["id"]
+                svc_name = svc["name"].lower()
+                if svc_name in text_lower or svc_id.lower() in text_lower:
+                    return svc_id
+                for ms in svc.get("microservices", []):
+                    if ms.lower() in text_lower:
+                        return svc_id
+    except Exception:
+        pass
+
     services = {
         "payment authorization": "payment-authorization",
         "payment": "payment-authorization",
@@ -664,7 +832,7 @@ def _extract_service(q: str) -> str | None:
         "partner": "partner-integrations",
     }
     for name, sid in services.items():
-        if name in q:
+        if name in text_lower:
             return sid
     return None
 
@@ -926,6 +1094,10 @@ def generate_mock_sre_response(context_type: str, context_payload: dict, questio
             
     else:
         return f"Scoped assistant: Received context type {context_type}. Please let me know how I can assist you with this payload."
+
+
+
+
 
 
 

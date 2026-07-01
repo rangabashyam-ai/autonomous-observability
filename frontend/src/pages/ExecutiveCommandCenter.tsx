@@ -13,6 +13,7 @@ import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visua
 import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
 
 export default function ExecutiveCommandCenter() {
   const navigate = useNavigate();
@@ -31,7 +32,22 @@ export default function ExecutiveCommandCenter() {
   }, []);
 
   const exec = monitoring?.executive;
-  const services = monitoring?.service.services ?? [];
+  const services = monitoring?.service?.services ?? [];
+
+  const regionServiceMap = useMemo(() => {
+    const map: Record<string, string[]> = {
+      'ap-northeast': [],
+      'eu-west': [],
+      'us-east': [],
+      'us-west': [],
+    };
+    services.forEach((s: any, idx: number) => {
+      const regions = ['ap-northeast', 'eu-west', 'us-east', 'us-west'];
+      const r = regions[idx % regions.length];
+      map[r].push(s.id);
+    });
+    return map;
+  }, [services]);
 
   const businessHealth = useMemo(() => {
     if (!exec) return 0;
@@ -87,7 +103,7 @@ export default function ExecutiveCommandCenter() {
 
   useRegisterCopilotContext(copilotContext);
 
-  if (!monitoring || !overview) {
+  if (!monitoring || !overview || !exec) {
     return <p className="text-text-secondary text-sm">Loading executive command center...</p>;
   }
 
@@ -97,6 +113,10 @@ export default function ExecutiveCommandCenter() {
         title="Executive Command Center"
         description="Business visibility across service health, revenue risk, and customer impact"
       />
+
+      {monitoring.dataset_available === false && (
+        <DatasetUploadBanner onUploadSuccess={() => window.location.reload()} />
+      )}
 
       <Grid12 className="mb-4">
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -781,9 +801,10 @@ export default function ExecutiveCommandCenter() {
               <div className="space-y-3">
                 {services
                   .filter(s => {
-                    if (selectedRegion.id === 'ap-northeast') return s.id === 'settlement-processing' || s.id === 'partner-integrations' || s.id === 'fraud-detection';
-                    if (selectedRegion.id === 'eu-west') return s.id === 'payment-authorization' || s.id === 'merchant-services';
-                    if (selectedRegion.id === 'us-east' || selectedRegion.id === 'us-west') return s.id === 'api-gateway-services' || s.id === 'fraud-detection';
+                    if (selectedRegion.id === 'ap-northeast') return regionServiceMap['ap-northeast'].includes(s.id);
+                    if (selectedRegion.id === 'eu-west') return regionServiceMap['eu-west'].includes(s.id);
+                    if (selectedRegion.id === 'us-east') return regionServiceMap['us-east'].includes(s.id);
+                    if (selectedRegion.id === 'us-west') return regionServiceMap['us-west'].includes(s.id);
                     return s.health !== 'healthy';
                   })
                   .map(s => (
@@ -801,9 +822,10 @@ export default function ExecutiveCommandCenter() {
                     </div>
                   ))}
                 {services.filter(s => {
-                  if (selectedRegion.id === 'ap-northeast') return s.id === 'settlement-processing' || s.id === 'partner-integrations' || s.id === 'fraud-detection';
-                  if (selectedRegion.id === 'eu-west') return s.id === 'payment-authorization' || s.id === 'merchant-services';
-                  if (selectedRegion.id === 'us-east' || selectedRegion.id === 'us-west') return s.id === 'api-gateway-services' || s.id === 'fraud-detection';
+                  if (selectedRegion.id === 'ap-northeast') return regionServiceMap['ap-northeast'].includes(s.id);
+                  if (selectedRegion.id === 'eu-west') return regionServiceMap['eu-west'].includes(s.id);
+                  if (selectedRegion.id === 'us-east') return regionServiceMap['us-east'].includes(s.id);
+                  if (selectedRegion.id === 'us-west') return regionServiceMap['us-west'].includes(s.id);
                   return s.health !== 'healthy';
                 }).length === 0 && (
                     <p className="text-xs text-text-secondary">No regional microservice constraints active. Standard gateway routing healthy.</p>
