@@ -150,6 +150,10 @@ def _host_type_layer(cid: str) -> tuple[str, str]:
         return "container", "server"
     if u.startswith("MYSQL"):
         return "database", "server"
+    if u.startswith("REDIS"):
+        return "cache", "server"
+    if u.startswith("APACHE"):
+        return "web_server", "server"
     return "server", "server"
 
 
@@ -381,20 +385,57 @@ def _q_dashboard() -> dict:
     }
 
 
+def _gs(sr: float, mrt: float, rr: float) -> dict:
+    """Compute the 4 Google SRE Golden Signals normalized to 0-100 (higher = worse)."""
+    return {
+        "latency":    round(min(mrt / 10.0, 100.0), 1),   # 1000 ms → 100
+        "traffic":    round(min(rr,          100.0), 1),   # req/s capped at 100
+        "errors":     round(min(100.0 - sr,  100.0), 1),   # 0 % error → 0
+        "saturation": 0.0,                                  # filled in by callers
+    }
+
+
 def _q_services() -> dict:
     if not is_dataset_available():
         return {"services": [], "dataset_available": False}
     shm = _svc_host_map()
     ma = _metric_app()
 
+    # Latest row — used for current health/SLA display
     latest = (
         ma.sort_values("timestamp_s", ascending=False)
-          .groupby("service")
-          .first()
-          .reset_index()
+          .groupby("service").first().reset_index()
     )
     latest_map = {r.service: r for r in latest.itertuples()}
+
+    # Period aggregates — used for golden signals (whole dataset = better signal)
+    period = (
+        ma.groupby("service")
+          .agg(avg_sr=("sr", "mean"), avg_mrt=("mrt", "mean"),
+               avg_rr=("rr", "mean"), min_sr=("sr", "min"),
+               p90_mrt=("mrt", lambda x: float(x.quantile(0.90))))
+          .reset_index()
+    )
+    period_map = {r.service: r for r in period.itertuples()}
+
     svc_hosts = shm.groupby("service")["cmdb_id"].apply(list).to_dict()
+
+    # Latest CPU per host (for saturation of services via their hosts)
+    CPU_KPIS = ["OSLinux-CPU_CPU_CPUCpuUtil", "OSLinux-CPU_CPU_CPULoad"]
+    try:
+        mc = _load("metric_container.parquet")
+        cpu_df = mc[mc["kpi_name"].isin(CPU_KPIS)].sort_values(
+            ["cmdb_id", "kpi_name", "timestamp_s"], ascending=[True, True, False]
+        )
+        host_cpu: dict[str, float] = {}
+        for cid, grp in cpu_df.groupby("cmdb_id"):
+            for kpi in CPU_KPIS:
+                row = grp[grp["kpi_name"] == kpi]
+                if not row.empty:
+                    host_cpu[str(cid)] = float(row.iloc[0]["value"])
+                    break
+    except Exception:
+        host_cpu = {}
 
     services: list[dict] = []
 
@@ -406,6 +447,15 @@ def _q_services() -> dict:
         rr  = float(r.rr)  if r else 0.0
         health = "critical" if sr < 95 else ("degraded" if sr < 99 else "healthy")
         risk = round(max(0.0, (100 - sr) * 2 + max(0.0, mrt - 200) / 10), 1)
+
+        # Golden signals from period aggregates (captures anomalies, not just latest)
+        p = period_map.get(svc)
+        gs_sr  = float(p.avg_sr)  if p else sr
+        gs_mrt = float(p.p90_mrt) if p else mrt   # P90 latency is a better signal
+        gs_rr  = float(p.avg_rr)  if p else rr
+        cpu_vals = [host_cpu[h] for h in hosts if h in host_cpu]
+        gs = _gs(gs_sr, gs_mrt, gs_rr)
+        gs["saturation"] = round(sum(cpu_vals) / len(cpu_vals), 1) if cpu_vals else 0.0
 
         services.append({
             "id": svc,
@@ -419,6 +469,7 @@ def _q_services() -> dict:
                 "mean_response_time": round(mrt, 2),
                 "incident_count": 0,
                 "risk_score": risk,
+                **gs,
             },
             "health": health,
             "sla": {
@@ -452,6 +503,7 @@ def _q_services() -> dict:
                 "mean_response_time": round(avg_mrt, 2),
                 "incident_count": 0,
                 "risk_score": risk,
+                **gs,
             },
             "health": health,
             "sla": {
@@ -467,37 +519,93 @@ def _q_infrastructure() -> dict:
     if not is_dataset_available():
         return {"nodes": [], "dataset_available": False}
     shm = _svc_host_map()
+    ma = _metric_app()
 
+    # Period aggregates for infra proxy signals (whole dataset captures anomalies)
+    period_svc = (
+        ma.groupby("service")
+          .agg(avg_sr=("sr", "mean"), avg_rr=("rr", "mean"),
+               p90_mrt=("mrt", lambda x: float(x.quantile(0.90))))
+          .reset_index()
+    )
+    period_svc_map = {r.service: r for r in period_svc.itertuples()}
+    # All-service averages — used for gateway/LB/storage nodes that serve everything
+    all_sr  = [float(r.avg_sr)  for r in period_svc_map.values()]
+    all_mrt = [float(r.p90_mrt) for r in period_svc_map.values()]
+    all_rr  = [float(r.avg_rr)  for r in period_svc_map.values()]
+    global_gs = _gs(
+        sum(all_sr)  / len(all_sr)  if all_sr  else 100.0,
+        sum(all_mrt) / len(all_mrt) if all_mrt else 0.0,
+        sum(all_rr)  / len(all_rr)  if all_rr  else 0.0,
+    )
+
+    # Prefer CPUCpuUtil; fall back to CPULoad for hosts that only report that
+    CPU_KPIS = ["OSLinux-CPU_CPU_CPUCpuUtil", "OSLinux-CPU_CPU_CPULoad"]
     try:
-        latest_cpu = (
-            _metric_cpu()
-            .sort_values("timestamp_s", ascending=False)
-            .groupby("cmdb_id")["value"]
-            .first()
-            .to_dict()
+        mc = _load("metric_container.parquet")
+        cpu_df = (
+            mc[mc["kpi_name"].isin(CPU_KPIS)]
+            .sort_values(["cmdb_id", "kpi_name", "timestamp_s"],
+                         ascending=[True, True, False])
         )
+        latest_cpu: dict[str, float] = {}
+        for cid, grp in cpu_df.groupby("cmdb_id"):
+            for kpi in CPU_KPIS:
+                row = grp[grp["kpi_name"] == kpi]
+                if not row.empty:
+                    latest_cpu[str(cid)] = float(row.iloc[0]["value"])
+                    break
     except Exception:
         latest_cpu = {}
 
     host_services = shm.groupby("cmdb_id")["service"].apply(list).to_dict()
 
+    # Union of hosts from service_host_map AND metric_container
+    try:
+        all_cmdb_ids = sorted(
+            set(shm["cmdb_id"].unique()) | set(_load("metric_container.parquet")["cmdb_id"].unique())
+        )
+    except Exception:
+        all_cmdb_ids = sorted(shm["cmdb_id"].unique())
+
+    # Hosts that handle all traffic (gateways, LBs, web servers, storage backends)
+    GLOBAL_SIGNAL_PREFIXES = ("IG", "MG", "APACHE", "MYSQL", "REDIS")
+
     nodes: list[dict] = []
-    for cid in sorted(shm["cmdb_id"].unique()):
+    for cid in all_cmdb_ids:
         htype, layer = _host_type_layer(cid)
         cpu = float(latest_cpu.get(cid, 0.0))
         health = "critical" if cpu > 90 else ("degraded" if cpu > 75 else "healthy")
+
+        # Compute golden signals from associated service metrics
+        use_global = cid.upper().startswith(GLOBAL_SIGNAL_PREFIXES)
+        svcs = host_services.get(cid, [])
+        if use_global or not svcs:
+            gs = dict(global_gs)          # gateway/LB/storage → all-service proxy
+        else:
+            svc_rows = [period_svc_map[s] for s in svcs if s in period_svc_map]
+            if svc_rows:
+                gs = _gs(
+                    sum(float(r.avg_sr)  for r in svc_rows) / len(svc_rows),
+                    sum(float(r.p90_mrt) for r in svc_rows) / len(svc_rows),
+                    sum(float(r.avg_rr)  for r in svc_rows) / len(svc_rows),
+                )
+            else:
+                gs = dict(global_gs)
+        gs["saturation"] = round(cpu, 1)   # CPU is the primary saturation signal
 
         nodes.append({
             "id": cid,
             "name": cid,
             "type": htype,
             "layer": layer,
-            "services": host_services.get(cid, []),
+            "services": svcs,
             "metrics": {
                 "cpu": round(cpu, 2),
                 "memory": 0.0,
                 "incident_count": 0,
                 "risk_score": round(cpu / 10, 1),
+                **gs,
             },
             "health": health,
             "platform": "on-prem-physical",
@@ -524,14 +632,60 @@ def _q_dep_graph() -> dict:
                 "type": "service_dependency",
             })
 
-    # microservice → host edges (from service_host_map)
-    for r in shm.itertuples():
-        edges.append({
-            "source": r.service,
-            "target": r.cmdb_id,
-            "relationship": "runs_on",
-            "type": "infra_dependency",
-        })
+    # ── Microservice → Gateway  (curated 1-to-1 for clean presentation) ─────────
+    # Each MS routes through exactly one gateway; gateways then route to compute.
+    _SVC_GATEWAY: dict[str, str] = {
+        "ServiceTest1":  "IG01",   # Payment Auth
+        "ServiceTest2":  "IG02",
+        "ServiceTest3":  "IG01",   # Settlement Processing
+        "ServiceTest4":  "MG01",
+        "ServiceTest5":  "IG02",   # Fraud Detection
+        "ServiceTest6":  "MG02",
+        "ServiceTest7":  "MG01",   # Merchant Services
+        "ServiceTest8":  "MG02",
+        "ServiceTest9":  "IG01",   # API Gateway Services
+        "ServiceTest10": "IG02",
+        "ServiceTest11": "MG01",   # Partner Integrations
+    }
+    for svc, gw in _SVC_GATEWAY.items():
+        edges.append({"source": svc, "target": gw,
+                      "relationship": "routes_through", "type": "infra_dependency"})
+
+    # ── Physical topology: Network → Compute → Storage (1-to-1 chain) ───────────
+    # IG → apache (one-to-one)
+    for ig, apache in (("IG01", "apache01"), ("IG02", "apache02")):
+        edges.append({"source": ig, "target": apache,
+                      "relationship": "forwards_to", "type": "infra_dependency"})
+
+    # MG → Tomcat (one-to-one)
+    for mg, tomcat in (("MG01", "Tomcat03"), ("MG02", "Tomcat04")):
+        edges.append({"source": mg, "target": tomcat,
+                      "relationship": "forwards_to", "type": "infra_dependency"})
+
+    # apache → Tomcat (one-to-one)
+    for apache, tomcat in (("apache01", "Tomcat01"), ("apache02", "Tomcat02")):
+        edges.append({"source": apache, "target": tomcat,
+                      "relationship": "proxies_to", "type": "infra_dependency"})
+
+    # Tomcat → Storage (specific pairing)
+    for tomcat, redis, mysql in (
+        ("Tomcat01", "Redis01", "Mysql01"),
+        ("Tomcat02", "Redis02", "Mysql02"),
+        ("Tomcat03", "Redis01", "Mysql01"),
+        ("Tomcat04", "Redis02", "Mysql02"),
+    ):
+        edges.append({"source": tomcat, "target": redis,
+                      "relationship": "uses_cache", "type": "infra_dependency"})
+        edges.append({"source": tomcat, "target": mysql,
+                      "relationship": "uses_db",    "type": "infra_dependency"})
+
+    # Docker containers → Storage (A-side cache, B-side DB)
+    for d in ("dockerA1", "dockerA2"):
+        edges.append({"source": d, "target": "Redis01",
+                      "relationship": "uses_cache", "type": "infra_dependency"})
+    for d in ("dockerB1", "dockerB2"):
+        edges.append({"source": d, "target": "Mysql01",
+                      "relationship": "uses_db", "type": "infra_dependency"})
 
     return {"edges": edges}
 
@@ -910,6 +1064,8 @@ def _host_layer(host: str) -> str:
     if u.startswith("TOMCAT"): return "app server"
     if u.startswith("DOCKER"): return "container"
     if u.startswith("MYSQL"):  return "database"
+    if u.startswith("REDIS"):  return "cache"
+    if u.startswith("APACHE"): return "web server"
     return "host"
 
 
@@ -1083,44 +1239,112 @@ def _build_runbook_steps(
     return steps
 
 
+# Hosts that always have log_service entries (Tomcat/Apache app tier)
+_LOG_HOSTS = ["Tomcat01", "Tomcat02", "Tomcat03", "Tomcat04", "apache01", "apache02"]
+
+# Which services flow through each infra node
+_INFRA_SVCS: dict[str, list[str]] = {
+    "IG01":     ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+    "IG02":     ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+    "MG01":     ["ServiceTest4", "ServiceTest7", "ServiceTest11"],
+    "MG02":     ["ServiceTest6", "ServiceTest8"],
+    "apache01": ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+    "apache02": ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+    "Tomcat01": ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+    "Tomcat02": ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+    "Tomcat03": ["ServiceTest4", "ServiceTest7", "ServiceTest11"],
+    "Tomcat04": ["ServiceTest6", "ServiceTest8"],
+    "Redis01":  ["ServiceTest1", "ServiceTest3", "ServiceTest4", "ServiceTest7", "ServiceTest9", "ServiceTest11"],
+    "Redis02":  ["ServiceTest2", "ServiceTest5", "ServiceTest6", "ServiceTest8", "ServiceTest10"],
+    "Mysql01":  ["ServiceTest1", "ServiceTest3", "ServiceTest4", "ServiceTest7", "ServiceTest9", "ServiceTest11"],
+    "Mysql02":  ["ServiceTest2", "ServiceTest5", "ServiceTest6", "ServiceTest8", "ServiceTest10"],
+}
+
+
+def infer_services_from_hosts(hosts: list[str]) -> list[str]:
+    """Given a list of infra host IDs, return all service IDs that flow through them."""
+    seen: set[str] = set()
+    for h in hosts:
+        for svc in _INFRA_SVCS.get(h, []):
+            seen.add(svc)
+    return sorted(seen)
+
+
 def query_incident_telemetry(
     service: str,
     cmdb_ids: list[str],
     start_ts: int,
     end_ts: int,
 ) -> dict:
-    """Query logs, metrics, and traces from parquet for a specific incident time window."""
-    # Cap to 4-hour window to prevent excessive data
+    """
+    Query metrics, logs, and traces for a specific incident time window.
+
+    When `service` is empty (infra-only incidents), metrics are fetched for
+    all services inferred from the `cmdb_ids` host list.
+    Logs are always queried from the known app-tier log hosts (Tomcat/Apache)
+    as well as any explicitly provided `cmdb_ids`.
+    """
     end_ts = min(end_ts, start_ts + 14400)
 
+    # Infer services when the incident has no explicit service (infra entities only)
+    services: list[str] = []
+    if service:
+        services = [service]
+    else:
+        services = infer_services_from_hosts(cmdb_ids) or []
+
+    # Log hosts = explicitly provided cmdb_ids + all known app-tier hosts
+    log_hosts = sorted(set(cmdb_ids) | set(_LOG_HOSTS))
+
     result: dict = {
-        "service": service,
+        "service": service or (services[0] if services else ""),
+        "services": services,
         "window": {"start": _ts_iso(start_ts), "end": _ts_iso(end_ts)},
         "metrics": [],
+        "service_metrics": {},   # per-service breakdown
         "host_metrics": [],
         "logs": [],
         "traces": [],
     }
 
-    # ── App metrics (already cached, fast) ───────────────────────────────────
+    # ── App metrics — all inferred services ─────────────────────────────────
     try:
         ma = _metric_app()
-        svc_df = ma[
-            (ma["service"] == service)
+        w = ma[
+            (ma["service"].isin(services))
             & (ma["timestamp_s"] >= start_ts)
             & (ma["timestamp_s"] <= end_ts)
-        ].sort_values("timestamp_s")
+        ].sort_values("timestamp_s") if services else ma.iloc[0:0]
+
+        # Aggregate across services for backward-compat "metrics" list
         result["metrics"] = [
             {
                 "timestamp": _ts_iso(int(r.timestamp_s)),
+                "service": str(r.service),
                 "request_rate": round(float(r.rr), 2),
                 "success_rate": round(float(r.sr), 2),
                 "request_count": int(r.cnt),
                 "mean_response_time": round(float(r.mrt), 2),
             }
-            for r in svc_df.itertuples()
+            for r in w.itertuples()
         ]
-        # Host CPU for impacted components
+
+        # Per-service summary (min/avg/max) for richer context
+        for svc, grp in w.groupby("service"):
+            result["service_metrics"][str(svc)] = {
+                "success_rate":        {"min": round(float(grp["sr"].min()), 2),
+                                        "avg": round(float(grp["sr"].mean()), 2),
+                                        "max": round(float(grp["sr"].max()), 2)},
+                "mean_response_time":  {"min": round(float(grp["mrt"].min()), 0),
+                                        "avg": round(float(grp["mrt"].mean()), 0),
+                                        "max": round(float(grp["mrt"].max()), 0)},
+                "request_rate":        {"min": round(float(grp["rr"].min()), 2),
+                                        "avg": round(float(grp["rr"].mean()), 2),
+                                        "max": round(float(grp["rr"].max()), 2)},
+                "data_points": len(grp),
+            }
+
+        # Host CPU
         if cmdb_ids:
             try:
                 cpu = _metric_cpu()
@@ -1135,21 +1359,21 @@ def query_incident_telemetry(
                         "host": str(r.cmdb_id),
                         "cpu": round(float(r.value), 2),
                     }
-                    for r in host_df.head(100).itertuples()
+                    for r in host_df.head(200).itertuples()
                 ]
             except Exception:
                 pass
     except Exception as e:
         result["metric_error"] = str(e)
 
-    # ── Logs (predicate pushdown on time + host) ──────────────────────────────
+    # ── Logs — include known app-tier hosts even if not in entities ──────────
     try:
         log_filters: list = [
             ("timestamp_s", ">=", start_ts),
             ("timestamp_s", "<=", end_ts),
         ]
-        if cmdb_ids:
-            log_filters.append(("cmdb_id", "in", cmdb_ids))
+        if log_hosts:
+            log_filters.append(("cmdb_id", "in", log_hosts))
         log_df = pd.read_parquet(
             PARQUET_DIR / "log_service.parquet",
             filters=log_filters,
@@ -1164,47 +1388,51 @@ def query_incident_telemetry(
                 "severity": (
                     "error"
                     if any(
-                        w in str(r.value).lower()
-                        for w in ("error", "exception", "fail", "oom", "timeout", "critical")
+                        kw in str(r.value).lower()
+                        for kw in ("error", "exception", "fail", "oom", "timeout", "critical",
+                                   "allocation failure", "gc pause", "full gc")
                     )
                     else "info"
                 ),
             }
-            for r in log_df.sort_values("timestamp_s").head(100).itertuples()
+            for r in log_df.sort_values("timestamp_s").head(200).itertuples()
         ]
     except Exception as e:
         result["log_error"] = str(e)
 
-    # ── Traces (predicate pushdown on time + service) ─────────────────────────
+    # ── Traces ────────────────────────────────────────────────────────────────
     try:
-        trace_filters: list = [
-            ("timestamp_s", ">=", start_ts),
-            ("timestamp_s", "<=", end_ts),
-            ("service", "==", service),
-        ]
-        trace_df = pd.read_parquet(
-            PARQUET_DIR / "trace_span.parquet",
-            filters=trace_filters,
-            columns=["service", "cmdb_id", "parent_span_id", "trace_id", "timestamp_s"],
-        )
-        if not trace_df.empty:
-            sampled = (
-                trace_df.sort_values("timestamp_s")
-                .groupby("trace_id", observed=True)
-                .first()
-                .reset_index()
-                .head(20)
-            )
-            result["traces"] = [
-                {
-                    "trace_id": str(r.trace_id),
-                    "service": str(r.service),
-                    "host": str(r.cmdb_id),
-                    "timestamp": _ts_iso(int(r.timestamp_s)),
-                    "has_parent": bool(r.parent_span_id),
-                }
-                for r in sampled.itertuples()
+        for svc in services[:3]:   # try up to 3 services
+            trace_filters: list = [
+                ("timestamp_s", ">=", start_ts),
+                ("timestamp_s", "<=", end_ts),
+                ("service", "==", svc),
             ]
+            trace_df = pd.read_parquet(
+                PARQUET_DIR / "trace_span.parquet",
+                filters=trace_filters,
+                columns=["service", "cmdb_id", "parent_span_id", "trace_id", "timestamp_s"],
+            )
+            if not trace_df.empty:
+                sampled = (
+                    trace_df.sort_values("timestamp_s")
+                    .groupby("trace_id", observed=True)
+                    .first()
+                    .reset_index()
+                    .head(20)
+                )
+                result["traces"] += [
+                    {
+                        "trace_id": str(r.trace_id),
+                        "service": str(r.service),
+                        "host": str(r.cmdb_id),
+                        "timestamp": _ts_iso(int(r.timestamp_s)),
+                        "has_parent": bool(r.parent_span_id),
+                    }
+                    for r in sampled.itertuples()
+                ]
+                if result["traces"]:
+                    break
     except Exception as e:
         result["trace_error"] = str(e)
 
@@ -1367,6 +1595,339 @@ def query_slo_burn_multiservice(
     }
 
 
+def query_node_metrics_timeseries(node_id: str, window_minutes: int) -> dict:
+    """
+    Return per-metric time-series with type-aware anomaly detection for one dependency-map node.
+
+    Window anchor = latest available timestamp for that node (parquet data, not real-time).
+    Baseline     = all data *before* the window (falls back to full dataset if window covers all data).
+
+    Metric types and anomaly methods:
+      Gauge        → MAD / robust-z vs baseline
+      Rate         → MAD / robust-z vs baseline
+      Counter      → diff() / interval → rate  then MAD / robust-z on rate
+      State        → event detection: 0→1 transitions in incident window (sr < 99 %)
+      HighWaterMark→ monotone break: value rising faster than baseline linear trend
+    """
+    import numpy as np
+
+    window_sec = window_minutes * 60
+    bs_ids = {bs["id"] for bs in get_business_services()}
+    ms_set = {ms for bs in get_business_services() for ms in bs["microservices"]}
+
+    # ── anomaly helpers ──────────────────────────────────────────────────────────
+
+    def _robust_z(arr: np.ndarray, baseline: np.ndarray):
+        valid_b = baseline[~np.isnan(baseline)]
+        if len(valid_b) == 0:
+            valid_b = arr[~np.isnan(arr)]
+        med = float(np.nanmedian(valid_b)) if len(valid_b) else 0.0
+        mad = float(np.nanmedian(np.abs(valid_b - med))) if len(valid_b) else 0.0
+        # Fall back to std-based scaling when MAD ≈ 0 (uniform baseline)
+        scale = 1.4826 * mad
+        if scale < 1e-6:
+            scale = float(np.nanstd(valid_b)) if len(valid_b) > 1 else 1.0
+            if scale < 1e-6:
+                scale = 1.0
+        zs = np.clip((arr - med) / scale, -99.9, 99.9)
+        return zs, med, mad
+
+    def _severity(max_abs_z: float) -> str:
+        if max_abs_z >= 3.5: return "critical"
+        if max_abs_z >= 2.0: return "warning"
+        return "normal"
+
+    def _z_ok(z: float) -> bool:
+        return not (np.isnan(z) or np.isinf(z))
+
+    def _max_absz(zs: np.ndarray) -> float:
+        valid = zs[np.isfinite(zs)]
+        return float(np.max(np.abs(valid))) if len(valid) else 0.0
+
+    # ── series builders ──────────────────────────────────────────────────────────
+
+    def _gauge(name: str, label: str, unit: str, w_df, b_df, col: str) -> dict | None:
+        if w_df.empty: return None
+        vals = w_df[col].values.astype(float)
+        ts   = w_df["timestamp_s"].values.astype(float)
+        b_v  = b_df[col].values.astype(float) if not b_df.empty else vals
+        zs, med, mad = _robust_z(vals, b_v)
+        mz = _max_absz(zs)
+        return {
+            "name": name, "label": label, "unit": unit,
+            "metric_type": "Gauge",
+            "anomaly_method": "MAD / robust-z vs baseline",
+            "preprocessing": None,
+            "points": [
+                {"ts": _ts_iso(int(t)), "value": round(float(v), 3),
+                 "z_score": round(float(z), 3) if _z_ok(z) else None,
+                 "is_anomaly": bool(_z_ok(z) and abs(z) >= 3.5)}
+                for t, v, z in zip(ts, vals, zs)
+            ],
+            "current_value": round(float(vals[-1]), 3),
+            "baseline_median": round(med, 3),
+            "baseline_mad": round(mad, 3),
+            "max_z_score": round(mz, 3),
+            "anomaly_severity": _severity(mz),
+        }
+
+    def _rate(name: str, label: str, unit: str, w_df, b_df, col: str) -> dict | None:
+        """Already a rate (e.g. req/s) — same as gauge but labelled Rate."""
+        s = _gauge(name, label, unit, w_df, b_df, col)
+        if s: s["metric_type"] = "Rate"
+        return s
+
+    def _counter(name: str, label: str, unit: str, w_df, b_df, col: str) -> dict | None:
+        if len(w_df) < 2: return None
+        ts   = w_df["timestamp_s"].values.astype(float)
+        raw  = w_df[col].values.astype(float)
+        dt   = np.diff(ts);   dc = np.diff(raw)
+        rates = np.where(dt > 0, np.clip(dc, 0, None) / dt, 0.0)
+        # baseline rates
+        if len(b_df) >= 2:
+            b_ts  = b_df["timestamp_s"].values.astype(float)
+            b_raw = b_df[col].values.astype(float)
+            b_dt  = np.diff(b_ts); b_dc = np.diff(b_raw)
+            b_rates = np.where(b_dt > 0, np.clip(b_dc, 0, None) / b_dt, 0.0)
+        else:
+            b_rates = rates
+        zs, med, mad = _robust_z(rates, b_rates)
+        mz = _max_absz(zs)
+        pts = [
+            {"ts": _ts_iso(int(ts[i+1])), "value": round(float(r), 4),
+             "raw_count": round(float(raw[i+1]), 1),
+             "z_score": round(float(z), 3) if _z_ok(z) else None,
+             "is_anomaly": bool(_z_ok(z) and abs(z) >= 3.5)}
+            for i, (r, z) in enumerate(zip(rates, zs))
+        ]
+        if not pts: return None
+        return {
+            "name": name, "label": label, "unit": unit,
+            "metric_type": "Counter",
+            "anomaly_method": "MAD / robust-z on rate",
+            "preprocessing": "diff() / interval → rate",
+            "points": pts,
+            "current_value": round(float(rates[-1]), 4),
+            "baseline_median": round(med, 4),
+            "baseline_mad": round(mad, 4),
+            "max_z_score": round(mz, 3),
+            "anomaly_severity": _severity(mz),
+        }
+
+    def _state(name: str, label: str, w_df, col: str, threshold: float = 99.0) -> dict | None:
+        """Binary state derived from success_rate: 1 = incident (sr < threshold)."""
+        if w_df.empty: return None
+        vals   = w_df[col].values.astype(float)
+        ts     = w_df["timestamp_s"].values.astype(float)
+        states = (vals < threshold).astype(int)
+        onsets      = [] if len(states) < 2 else np.where(np.diff(states) > 0)[0].tolist()
+        recoveries  = [] if len(states) < 2 else np.where(np.diff(states) < 0)[0].tolist()
+        has_incident = bool(states.any())
+        return {
+            "name": name, "label": label, "unit": "state",
+            "metric_type": "State",
+            "anomaly_method": "Event detection: 0→1 in incident window",
+            "preprocessing": None,
+            "threshold": threshold,
+            "points": [
+                {"ts": _ts_iso(int(t)), "value": round(float(v), 2), "state": int(s)}
+                for t, v, s in zip(ts, vals, states)
+            ],
+            "current_value": float(states[-1]) if len(states) else None,
+            "state_events": {"onsets": onsets, "recoveries": recoveries},
+            "anomaly_severity": "critical" if has_incident else "normal",
+            "max_z_score": None,
+            "baseline_median": None,
+            "baseline_mad": None,
+        }
+
+    def _hwm(name: str, label: str, unit: str, w_df, b_df, col: str) -> dict | None:
+        """High-water mark: flag monotone rise faster than baseline linear trend."""
+        if w_df.empty: return None
+        vals = w_df[col].values.astype(float)
+        ts   = w_df["timestamp_s"].values.astype(float)
+        b_v  = b_df[col].values.astype(float) if not b_df.empty else vals
+        zs, med, mad = _robust_z(vals, b_v)
+        mz = _max_absz(zs)
+        # Monotone break
+        hwm_break = False
+        trend_slope = None
+        if len(vals) >= 2:
+            span = float(max(ts[-1] - ts[0], 1))
+            val_slope = (vals[-1] - vals[0]) / span * 60  # per minute
+            valid_b   = b_v[~np.isnan(b_v)]
+            if len(valid_b) >= 3:
+                try:
+                    coeffs     = np.polyfit(np.arange(len(valid_b), dtype=float), valid_b, 1)
+                    bl_slope   = float(coeffs[0])
+                    bl_std     = float(np.nanstd(valid_b))
+                    hwm_break  = bool(val_slope > bl_slope + 2 * bl_std)
+                    trend_slope = round(bl_slope, 4)
+                except Exception:
+                    pass
+        return {
+            "name": name, "label": label, "unit": unit,
+            "metric_type": "HighWaterMark",
+            "anomaly_method": "Monotone break: value rises faster than baseline trend",
+            "preprocessing": None,
+            "points": [
+                {"ts": _ts_iso(int(t)), "value": round(float(v), 2),
+                 "z_score": round(float(z), 3) if _z_ok(z) else None,
+                 "is_anomaly": bool(_z_ok(z) and abs(z) >= 3.5)}
+                for t, v, z in zip(ts, vals, zs)
+            ],
+            "current_value": round(float(vals[-1]), 2),
+            "baseline_median": round(med, 2),
+            "baseline_mad": round(mad, 2),
+            "max_z_score": round(mz, 3),
+            "anomaly_severity": "critical" if hwm_break else _severity(mz),
+            "hwm_break": hwm_break,
+            "trend_slope": trend_slope,
+        }
+
+    # ── node resolution ──────────────────────────────────────────────────────────
+
+    metrics: list[dict] = []
+    anchor_ts = None
+    node_type = "unknown"
+
+    if node_id in bs_ids or node_id in ms_set:
+        ma = _metric_app()
+        if node_id in bs_ids:
+            bs = next(b for b in get_business_services() if b["id"] == node_id)
+            svc_df = (
+                ma[ma["service"].isin(bs["microservices"])]
+                .groupby("timestamp_s", observed=True, as_index=False)
+                .agg(rr=("rr", "mean"), sr=("sr", "mean"),
+                     cnt=("cnt", "sum"), mrt=("mrt", "mean"))
+            )
+            node_type = "business_service"
+        else:
+            svc_df = ma[ma["service"] == node_id].copy()
+            node_type = "microservice"
+
+        svc_df = svc_df.sort_values("timestamp_s").reset_index(drop=True)
+        if svc_df.empty:
+            return {"node_id": node_id, "data_available": False, "metrics": []}
+
+        max_ts    = int(svc_df["timestamp_s"].max())
+        anchor_ts = _ts_iso(max_ts)
+        t0        = max_ts - window_sec
+        w = svc_df[svc_df["timestamp_s"] >= t0].reset_index(drop=True)
+        b = svc_df[svc_df["timestamp_s"] <  t0].reset_index(drop=True)
+        if b.empty: b = svc_df  # fall back to full history as baseline
+
+        for builder in [
+            lambda: _rate("request_rate",       "Request Rate",    "req/s", w, b, "rr"),
+            lambda: _gauge("success_rate",       "Success Rate",    "%",     w, b, "sr"),
+            lambda: _gauge("mean_response_time", "Response Time",   "ms",    w, b, "mrt"),
+            lambda: _counter("request_count",    "Request Volume",  "req/s", w, b, "cnt"),
+            lambda: _state("error_state",        "Error State",     w, "sr", 99.0),
+        ]:
+            s = builder()
+            if s: metrics.append(s)
+
+    else:
+        # ── infra node ───────────────────────────────────────────────────────────
+        node_type = _host_type_layer(node_id)[0]
+
+        # Curated mapping: infra node → microservices whose traffic passes through it
+        _INFRA_SVCS: dict[str, list[str]] = {
+            "IG01":     ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+            "IG02":     ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+            "MG01":     ["ServiceTest4", "ServiceTest7", "ServiceTest11"],
+            "MG02":     ["ServiceTest6", "ServiceTest8"],
+            "apache01": ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+            "apache02": ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+            "Tomcat01": ["ServiceTest1", "ServiceTest3", "ServiceTest9"],
+            "Tomcat02": ["ServiceTest2", "ServiceTest5", "ServiceTest10"],
+            "Tomcat03": ["ServiceTest4", "ServiceTest7", "ServiceTest11"],
+            "Tomcat04": ["ServiceTest6", "ServiceTest8"],
+            "Redis01":  ["ServiceTest1", "ServiceTest3", "ServiceTest4",
+                         "ServiceTest7", "ServiceTest9", "ServiceTest11"],
+            "Redis02":  ["ServiceTest2", "ServiceTest5", "ServiceTest6",
+                         "ServiceTest8", "ServiceTest10"],
+            "Mysql01":  ["ServiceTest1", "ServiceTest3", "ServiceTest4",
+                         "ServiceTest7", "ServiceTest9", "ServiceTest11"],
+            "Mysql02":  ["ServiceTest2", "ServiceTest5", "ServiceTest6",
+                         "ServiceTest8", "ServiceTest10"],
+        }
+        svcs = next((v for k, v in _INFRA_SVCS.items() if k.upper() == node_id.upper()), [])
+
+        # ── Service-derived KPIs (traffic / latency / errors) ─────────────────
+        if svcs:
+            try:
+                ma = _metric_app()
+                svc_df = (
+                    ma[ma["service"].isin(svcs)]
+                    .groupby("timestamp_s", observed=True, as_index=False)
+                    .agg(rr=("rr", "mean"), sr=("sr", "mean"),
+                         cnt=("cnt", "sum"), mrt=("mrt", "mean"))
+                    .sort_values("timestamp_s").reset_index(drop=True)
+                )
+                if not svc_df.empty:
+                    max_ts_svc = int(svc_df["timestamp_s"].max())
+                    anchor_ts  = _ts_iso(max_ts_svc)
+                    t0_svc     = max_ts_svc - window_sec
+                    sw = svc_df[svc_df["timestamp_s"] >= t0_svc].reset_index(drop=True).copy()
+                    sb = svc_df[svc_df["timestamp_s"] <  t0_svc].reset_index(drop=True).copy()
+                    if sb.empty: sb = svc_df.copy()
+                    sw["error_rate"] = 100.0 - sw["sr"]
+                    sb["error_rate"] = 100.0 - sb["sr"]
+
+                    for builder in [
+                        lambda: _rate("traffic",        "Traffic",        "req/s", sw, sb, "rr"),
+                        lambda: _gauge("latency",       "Latency",        "ms",    sw, sb, "mrt"),
+                        lambda: _gauge("error_rate",    "Error Rate",     "%",     sw, sb, "error_rate"),
+                        lambda: _counter("req_volume",  "Request Volume", "req/s", sw, sb, "cnt"),
+                        lambda: _state("svc_health",    "Service Health", sw, "sr", 99.0),
+                    ]:
+                        s = builder()
+                        if s: metrics.append(s)
+            except Exception:
+                pass
+
+        # ── Host metrics (CPU saturation) ──────────────────────────────────────
+        try:
+            mc = _load("metric_container.parquet")
+            nd = (
+                mc[mc["cmdb_id"].str.upper() == node_id.upper()]
+                .sort_values("timestamp_s").reset_index(drop=True)
+            )
+            if not nd.empty:
+                max_ts_cpu = int(nd["timestamp_s"].max())
+                if anchor_ts is None:
+                    anchor_ts = _ts_iso(max_ts_cpu)
+                t0_cpu = max_ts_cpu - window_sec
+
+                for kpi_name, label, mtype in [
+                    ("OSLinux-CPU_CPU_CPUCpuUtil", "CPU Saturation", "hwm"),
+                    ("OSLinux-CPU_CPU_CPULoad",    "CPU Load",       "gauge"),
+                ]:
+                    kpi_all = nd[nd["kpi_name"] == kpi_name].reset_index(drop=True)
+                    if kpi_all.empty: continue
+                    kw = kpi_all[kpi_all["timestamp_s"] >= t0_cpu].reset_index(drop=True)
+                    kb = kpi_all[kpi_all["timestamp_s"] <  t0_cpu].reset_index(drop=True)
+                    if kb.empty: kb = kpi_all
+                    slug = kpi_name.lower().replace("-", "_").replace(".", "_")
+                    s = (_hwm if mtype == "hwm" else _gauge)(slug, label, "%", kw, kb, "value")
+                    if s: metrics.append(s)
+        except Exception:
+            pass
+
+        if not metrics:
+            return {"node_id": node_id, "data_available": False, "metrics": []}
+
+    return {
+        "node_id":        node_id,
+        "node_type":      node_type,
+        "window_minutes": window_minutes,
+        "anchor_ts":      anchor_ts,
+        "data_available": len(metrics) > 0,
+        "metrics":        metrics,
+    }
+
+
 def query_slo_burn(service: str, incident_ts: int, slo_target: float = 0.999) -> dict:
     if not is_dataset_available():
         return {
@@ -1467,3 +2028,234 @@ def query_slo_burn(service: str, incident_ts: int, slo_target: float = 0.999) ->
             for a in alerts
         ],
     }
+
+
+# ── Incident Telemetry Scanner ───────────────────────────────────────────────
+
+def query_incident_telemetry_by_entities(t_start: int, t_end: int, entities: list[str]) -> dict:
+    """
+    Scan metrics, logs, and traces for the given time window and entity list.
+    entities: mix of service names (ServiceTestN) and/or host/cmdb_id values.
+    Returns structured data ready for LLM context injection.
+    """
+    import numpy as np
+
+    # ── Resolve entities to services + hosts ────────────────────────────────
+    shm = _svc_host_map()
+    known_services: set[str] = set(shm["service"].unique())
+    known_hosts: set[str] = set(shm["cmdb_id"].unique())
+    try:
+        mc_all = _load("metric_container.parquet")
+        known_hosts.update(mc_all["cmdb_id"].unique())
+    except Exception:
+        pass
+
+    target_services: set[str] = set()
+    target_hosts: set[str] = set()
+
+    for e in entities:
+        eu = e.upper()
+        matched = False
+        for s in known_services:
+            if e == s or e.lower() == s.lower():
+                target_services.add(s)
+                matched = True
+        for h in known_hosts:
+            if eu == h.upper():
+                target_hosts.add(h)
+                matched = True
+        if not matched:
+            # partial / fuzzy match
+            for s in known_services:
+                if e.lower() in s.lower():
+                    target_services.add(s)
+            for h in known_hosts:
+                if e.lower() in h.lower():
+                    target_hosts.add(h)
+
+    # Use all services if none matched
+    if not target_services and not target_hosts:
+        target_services = set(known_services)
+
+    # Expand services → their hosts
+    if target_services:
+        svc_hosts_df = shm[shm["service"].isin(target_services)]["cmdb_id"]
+        target_hosts.update(svc_hosts_df.unique())
+
+    result: dict = {
+        "window": {
+            "t_start": t_start,
+            "t_end": t_end,
+            "target_services": sorted(target_services),
+            "target_hosts": sorted(target_hosts),
+        }
+    }
+
+    # ── Metrics scan (metric_app.parquet) ───────────────────────────────────
+    try:
+        ma = _metric_app()
+        win = ma[(ma["timestamp_s"] >= t_start) & (ma["timestamp_s"] <= t_end)]
+        if target_services:
+            win = win[win["service"].isin(target_services)]
+
+        metrics_summary: list[dict] = []
+        if not win.empty:
+            total_intervals = max(1, len(win) // max(1, win["service"].nunique()))
+            for svc, grp in win.groupby("service"):
+                n = len(grp)
+                err_ivl = int((grp["sr"] < 99.0).sum())
+                slow_ivl = int((grp["mrt"] > 500.0).sum())
+                worst_idx = grp["sr"].idxmin()
+                worst_ts = int(grp.loc[worst_idx, "timestamp_s"])
+                metrics_summary.append({
+                    "service": str(svc),
+                    "samples": n,
+                    "avg_success_rate_pct": round(float(grp["sr"].mean()), 2),
+                    "min_success_rate_pct": round(float(grp["sr"].min()), 2),
+                    "avg_request_rate_rps": round(float(grp["rr"].mean()), 2),
+                    "avg_response_time_ms": round(float(grp["mrt"].mean()), 1),
+                    "max_response_time_ms": round(float(grp["mrt"].max()), 1),
+                    "total_requests": int(grp["cnt"].sum()),
+                    "error_intervals": err_ivl,
+                    "slow_intervals": slow_ivl,
+                    "error_interval_pct": round(100.0 * err_ivl / n, 1),
+                    "worst_sr_at": _ts_iso(worst_ts),
+                })
+            metrics_summary.sort(key=lambda x: x["avg_success_rate_pct"])
+        result["metrics"] = metrics_summary
+    except Exception as exc:
+        result["metrics"] = []
+        result["metrics_error"] = str(exc)
+
+    # ── Infra / container metrics scan (metric_container.parquet) ────────────
+    try:
+        mc = _load("metric_container.parquet")
+        win_mc = mc[(mc["timestamp_s"] >= t_start) & (mc["timestamp_s"] <= t_end)]
+        if target_hosts:
+            win_mc = win_mc[win_mc["cmdb_id"].isin(target_hosts)]
+
+        infra_summary: list[dict] = []
+        if not win_mc.empty:
+            CPU_KPI = "OSLinux-CPU_CPU_CPUCpuUtil"
+            for host, grp in win_mc.groupby("cmdb_id"):
+                cpu_grp = grp[grp["kpi_name"] == CPU_KPI]
+                if cpu_grp.empty:
+                    continue
+                vals = cpu_grp["value"].dropna()
+                infra_summary.append({
+                    "host": str(host),
+                    "avg_cpu_pct": round(float(vals.mean()), 1),
+                    "max_cpu_pct": round(float(vals.max()), 1),
+                    "high_cpu_intervals": int((vals > 80.0).sum()),
+                    "samples": int(len(vals)),
+                })
+            infra_summary.sort(key=lambda x: -x["avg_cpu_pct"])
+        result["infra_metrics"] = infra_summary
+    except Exception as exc:
+        result["infra_metrics"] = []
+        result["infra_metrics_error"] = str(exc)
+
+    # ── Log scan (log_service.parquet) ──────────────────────────────────────
+    ERROR_KWS = ("error", "exception", "fail", "oom", "timeout", "critical", "alert", "crash", "warn")
+    try:
+        pf_log = pq.ParquetFile(PARQUET_DIR / "log_service.parquet")
+        log_chunks: list[pd.DataFrame] = []
+        for batch in pf_log.iter_batches(
+            batch_size=200_000, columns=["cmdb_id", "log_name", "value", "timestamp_s"]
+        ):
+            df = batch.to_pandas()
+            df = df[(df["timestamp_s"] >= t_start) & (df["timestamp_s"] <= t_end)]
+            if target_hosts:
+                df = df[df["cmdb_id"].isin(target_hosts)]
+            if not df.empty:
+                log_chunks.append(df)
+            if sum(len(c) for c in log_chunks) >= 100_000:
+                break
+
+        if log_chunks:
+            logs_df = pd.concat(log_chunks, ignore_index=True)
+            log_name_lc = logs_df["log_name"].str.lower()
+            is_err = log_name_lc.apply(lambda n: any(kw in n for kw in ERROR_KWS))
+
+            top_types = (
+                logs_df.groupby(["cmdb_id", "log_name"]).size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
+                .head(20)
+            )
+            result["logs"] = {
+                "total_entries": int(len(logs_df)),
+                "unique_hosts": int(logs_df["cmdb_id"].nunique()),
+                "error_entries": int(is_err.sum()),
+                "error_rate_pct": round(100.0 * is_err.sum() / max(1, len(logs_df)), 1),
+                "top_log_types": [
+                    {
+                        "host": r["cmdb_id"],
+                        "log_type": r["log_name"],
+                        "count": int(r["count"]),
+                        "is_error": any(kw in str(r["log_name"]).lower() for kw in ERROR_KWS),
+                    }
+                    for _, r in top_types.iterrows()
+                ],
+            }
+        else:
+            result["logs"] = {
+                "total_entries": 0, "unique_hosts": 0,
+                "error_entries": 0, "error_rate_pct": 0.0, "top_log_types": [],
+            }
+    except Exception as exc:
+        result["logs"] = {"error": str(exc)}
+
+    # ── Trace scan (trace_span.parquet) ─────────────────────────────────────
+    try:
+        pf_tr = pq.ParquetFile(PARQUET_DIR / "trace_span.parquet")
+        tr_chunks: list[pd.DataFrame] = []
+        for batch in pf_tr.iter_batches(
+            batch_size=200_000,
+            columns=["cmdb_id", "span_id", "trace_id", "duration", "timestamp_s"],
+        ):
+            df = batch.to_pandas()
+            df = df[(df["timestamp_s"] >= t_start) & (df["timestamp_s"] <= t_end)]
+            if target_hosts:
+                df = df[df["cmdb_id"].isin(target_hosts)]
+            if not df.empty:
+                tr_chunks.append(df)
+            if sum(len(c) for c in tr_chunks) >= 100_000:
+                break
+
+        if tr_chunks:
+            tr_df = pd.concat(tr_chunks, ignore_index=True)
+            dur = tr_df["duration"].dropna()
+            if not dur.empty:
+                p95 = float(np.percentile(dur, 95))
+                p99 = float(np.percentile(dur, 99))
+                slow_df = tr_df[tr_df["duration"] > p95]
+                host_span_counts = (
+                    tr_df.groupby("cmdb_id").size()
+                    .reset_index(name="span_count")
+                    .sort_values("span_count", ascending=False)
+                )
+                result["traces"] = {
+                    "total_spans": int(len(tr_df)),
+                    "unique_traces": int(tr_df["trace_id"].nunique()),
+                    "avg_duration_ms": round(float(dur.mean()), 1),
+                    "median_duration_ms": round(float(dur.median()), 1),
+                    "p95_duration_ms": round(p95, 1),
+                    "p99_duration_ms": round(p99, 1),
+                    "max_duration_ms": round(float(dur.max()), 1),
+                    "slow_span_count": int(len(slow_df)),
+                    "slow_span_pct": round(100.0 * len(slow_df) / max(1, len(tr_df)), 1),
+                    "hosts_with_slow_spans": slow_df["cmdb_id"].unique().tolist()[:10],
+                    "spans_per_host": [
+                        {"host": r["cmdb_id"], "span_count": int(r["span_count"])}
+                        for _, r in host_span_counts.head(10).iterrows()
+                    ],
+                }
+            else:
+                result["traces"] = {"total_spans": 0, "unique_traces": 0}
+        else:
+            result["traces"] = {"total_spans": 0, "unique_traces": 0}
+    except Exception as exc:
+        result["traces"] = {"error": str(exc)}
+
+    return result

@@ -1,4 +1,20 @@
-"""GROQ LLM client with model routing and fallback."""
+"""
+LLM client — routes all inference to a local Qwen2.5-0.5B-Instruct endpoint.
+
+Endpoint:  POST http://192.168.3.221:8001/generate
+Payload:   {"prompt": str, "max_tokens": int, "temperature": float}
+Response:  {"response": str}
+
+The server applies Qwen's chat template internally, wrapping our prompt as the
+user turn.  So _messages_to_prompt embeds system instructions, history, and the
+final question as structured plain text inside that single user turn.
+
+Public interface (unchanged — all existing callers work without modification):
+  chat_completion(messages, model, temperature, response_format, max_tokens, timeout) -> dict
+  chat_with_fallback(messages, model, temperature, max_tokens, timeout) -> (str, str)
+  select_model(page_type, message_count) -> str
+  PRIMARY_MODEL, SECONDARY_MODEL, FAST_MODEL, FALLBACK_MODEL  (str constants)
+"""
 
 from __future__ import annotations
 
@@ -8,9 +24,9 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Robust .env loading — walks up from this file until .env is found.
-# Works regardless of where uvicorn/python is launched from.
+# Configuration
 # ---------------------------------------------------------------------------
+
 try:
     from dotenv import load_dotenv
 
@@ -28,131 +44,200 @@ try:
 except ImportError:
     pass
 
+# Model name constants kept for API compatibility — not used for routing.
+PRIMARY_MODEL   = "local"
+SECONDARY_MODEL = "local"
+FAST_MODEL      = "local"
+FALLBACK_MODEL  = "local"
+
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://192.168.3.221:8001")
+LLM_GENERATE_PATH = os.environ.get("LLM_GENERATE_PATH", "/generate")
+
 try:
-    import httpx  # type: ignore[import]
+    import httpx
     _USE_HTTPX = True
 except ImportError:
     import urllib.request
-    import urllib.error
     _USE_HTTPX = False
 
 
-def _env(key: str, default: str) -> str:
-    return os.environ.get(key, default)
-
-
-GROQ_BASE_URL = _env("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-PRIMARY_MODEL   = _env("PRIMARY_MODEL",   "llama-3.3-70b-versatile")
-SECONDARY_MODEL = _env("SECONDARY_MODEL", "llama-3.3-70b-versatile")
-FAST_MODEL      = _env("FAST_MODEL",      "llama-3.3-70b-versatile")
-FALLBACK_MODEL  = _env("FALLBACK_MODEL",  "llama-3.3-70b-versatile")
-
-
-def _resolve_groq_base_urls() -> list[str]:
-    env_url = os.environ.get("GROQ_BASE_URL", "").strip().rstrip("/")
-    urls = []
-    if env_url:
-        urls.append(env_url)
-    urls.extend([
-        "https://api.groq.com/openai/v1",
-        "https://api.groq.com/v1",
-    ])
-    return list(dict.fromkeys(urls))
-
-
 def select_model(page_type: str, message_count: int) -> str:
-    """Route to the appropriate model based on page type and conversation depth."""
-    if message_count > 2:
-        return FAST_MODEL
-    if page_type in {"executive", "rca", "incident"}:
-        return PRIMARY_MODEL
-    return SECONDARY_MODEL
+    """Kept for API compatibility — routing always resolves to the local model."""
+    return "local"
 
+
+# ---------------------------------------------------------------------------
+# Messages → prompt conversion
+# ---------------------------------------------------------------------------
+
+def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
+    """
+    Convert an OpenAI-style messages list into a single text block suitable
+    for the Qwen2.5 server.
+
+    The server wraps our entire prompt as the user turn in Qwen's chat
+    template, so we embed all roles as labelled sections inside that one
+    user message:
+
+        [Instructions]
+        <system content>
+
+        [Conversation]
+        User: ...
+        Assistant: ...
+        User: ...          ← last user turn (the actual question)
+
+        Respond concisely and only based on the information above.
+    """
+    system_parts: list[str] = []
+    history_parts: list[str] = []
+
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "system":
+            system_parts.append(content)
+        elif role == "user":
+            history_parts.append(f"User: {content}")
+        elif role == "assistant":
+            history_parts.append(f"Assistant: {content}")
+
+    sections: list[str] = []
+    if system_parts:
+        sections.append("[Instructions]\n" + "\n\n".join(system_parts))
+    if history_parts:
+        sections.append("[Conversation]\n" + "\n".join(history_parts))
+    sections.append("Respond concisely and only based on the information above.")
+    return "\n\n".join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Response parsing
+# ---------------------------------------------------------------------------
+
+def _extract_text(response_json: Any) -> str:
+    """
+    Extract generated text from the Qwen server response shape:
+      {"response": "..."}          ← primary (Qwen2.5 server)
+      {"text": "..."}              ← vLLM fallback
+      {"text": ["..."]}
+      {"generated_text": "..."}
+      {"choices": [{"text": "..."}]}
+      {"choices": [{"message": {"content": "..."}}]}
+    """
+    if isinstance(response_json, str):
+        return response_json
+
+    if isinstance(response_json, dict):
+        # Qwen2.5 server primary shape
+        if "response" in response_json:
+            return str(response_json["response"])
+
+        # OpenAI chat-completions shape
+        choices = response_json.get("choices")
+        if choices and isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                msg = first.get("message")
+                if msg and isinstance(msg, dict):
+                    return str(msg.get("content", ""))
+                text = first.get("text", "")
+                if text:
+                    return str(text)
+
+        # vLLM / generic
+        text = response_json.get("text") or response_json.get("generated_text", "")
+        if isinstance(text, list):
+            text = text[0] if text else ""
+        return str(text)
+
+    return str(response_json)
+
+
+def _wrap_as_chat_response(content: str) -> dict[str, Any]:
+    """Wrap plain text in an OpenAI-compatible dict so callers need no changes."""
+    return {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+                "index": 0,
+            }
+        ],
+        "model": "local",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Core HTTP call
+# ---------------------------------------------------------------------------
+
+def _post_generate(
+    prompt: str,
+    max_tokens: int = 512,
+    temperature: float = 0.2,
+    timeout: int = 60,
+) -> str:
+    """POST to /generate and return the generated text string."""
+    url = f"{LLM_BASE_URL}{LLM_GENERATE_PATH}"
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    body_bytes = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+
+    if _USE_HTTPX:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(url, content=body_bytes, headers=headers)
+            response.raise_for_status()
+            return _extract_text(response.json())
+    else:
+        req = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return _extract_text(json.loads(resp.read().decode("utf-8")))
+
+
+# ---------------------------------------------------------------------------
+# Public interface (same signatures as before)
+# ---------------------------------------------------------------------------
 
 def chat_completion(
     messages: list[dict[str, str]],
-    model: str,
+    model: str = "local",
     temperature: float = 0.2,
     response_format: dict | None = None,
-    max_tokens: int = 2048,
-    timeout: int = 20,
+    max_tokens: int = 512,
+    timeout: int = 60,
 ) -> dict[str, Any]:
-    """Call GROQ chat completions API. Raises on failure."""
-    api_key = os.environ.get("GROQ_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY not configured")
-
-    body: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    if response_format:
-        body["response_format"] = response_format
-
-    # Send the minimal required headers plus a stable User-Agent so Cloudflare does not block the request.
-    # Avoid Groq-specific extra headers like HTTP-Referer and X-Title, which trigger bot protection.
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    }
-
-    urls = _resolve_groq_base_urls()
-    last_error: Exception | None = None
-    for base_url in urls:
-        url = f"{base_url}/chat/completions"
-        if _USE_HTTPX:
-            try:
-                with httpx.Client(timeout=timeout) as client:
-                    response = client.post(url, headers=headers, json=body)
-                    response.raise_for_status()
-                    return response.json()
-            except httpx.HTTPStatusError as exc:
-                detail = exc.response.text
-                last_error = RuntimeError(f"GROQ HTTP {exc.response.status_code} @ {base_url}: {detail}")
-                continue
-        else:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(body).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as response:
-                    return json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                last_error = RuntimeError(f"GROQ HTTP {exc.code} @ {base_url}: {detail}")
-                continue
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("GROQ request failed: no available endpoint could be reached.")
+    """
+    Drop-in replacement for the Groq chat_completion function.
+    Converts messages to a prompt and calls the local /generate endpoint.
+    Returns an OpenAI-compatible response dict.
+    """
+    prompt = _messages_to_prompt(messages)
+    content = _post_generate(prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout)
+    return _wrap_as_chat_response(content)
 
 
 def chat_with_fallback(
     messages: list[dict[str, str]],
-    model: str,
+    model: str = "local",
     temperature: float = 0.2,
-    max_tokens: int = 2048,
-    timeout: int = 20,
+    max_tokens: int = 512,
+    timeout: int = 60,
 ) -> tuple[str, str]:
-    """Try primary model, then fallback. Returns (content, model_used)."""
-    models = [model]
-    if model != FALLBACK_MODEL:
-        models.append(FALLBACK_MODEL)
+    """
+    Drop-in replacement for chat_with_fallback.
+    Returns (generated_content, model_used).
+    """
+    prompt = _messages_to_prompt(messages)
+    content = _post_generate(prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout)
+    return content, "local"
 
-    last_error: Exception | None = None
-    for m in models:
-        try:
-            result = chat_completion(messages, m, temperature, max_tokens=max_tokens, timeout=timeout)
-            content = result["choices"][0]["message"]["content"]
-            return content, m
-        except Exception as exc:
-            last_error = exc
-            continue
 
     raise RuntimeError(f"All models failed: {last_error}")
 

@@ -19,6 +19,7 @@ export interface GraphNode {
   metrics: NodeMetrics;
   heatmap_value: number;
   platform?: string;
+  region?: string;
 }
 
 export interface GraphEdge {
@@ -110,12 +111,7 @@ export type ViewType =
   | 'azure';
 
 export type HeatmapMetric =
-  | 'cpu'
-  | 'memory'
-  | 'storage'
-  | 'io'
-  | 'network'
   | 'latency'
-  | 'error_rate'
-  | 'incident_count'
-  | 'risk_score';
+  | 'traffic'
+  | 'errors'
+  | 'saturation';

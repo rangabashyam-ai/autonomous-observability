@@ -156,3 +156,15 @@ def get_events(limit: int = Query(default=50, le=500)):
     data   = parquet_store.query("monitoring/events.json")
     events = data.get("events", [])
     return {"events": events[:limit], "total": len(events)}
+
+
+@router.get("/node-metrics/{node_id}")
+def get_node_metrics(node_id: str, window: int = Query(default=30, ge=1, le=60)):
+    """
+    Time-series metrics with type-aware anomaly detection for a single dependency-map node.
+    window = look-back minutes (5 | 10 | 30 | 60); anchored to latest data point, not real-time.
+    """
+    from app import parquet_store
+    # Snap to one of the four UI options
+    window = min([w for w in (5, 10, 30, 60) if w >= window] or [60])
+    return parquet_store.query_node_metrics_timeseries(node_id, window)

@@ -26,6 +26,71 @@ _CSV_PATH = Path(
 _csv_cache: list[dict] | None = None
 _csv_mtime: float = 0.0
 
+# ---------------------------------------------------------------------------
+# Bank-incident JSON store (openRCA_Bank/incidents/incident_INC-XXXX.json)
+# ---------------------------------------------------------------------------
+
+_BANK_INC_DIR = Path(
+    os.environ.get(
+        "BANK_INCIDENTS_DIR",
+        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\incidents",
+    )
+)
+
+_BANK_INC_CACHE: dict[str, dict] = {}
+
+
+def _load_bank_incident(incident_id: str) -> dict | None:
+    """Load a single bank incident JSON by ID (e.g. 'INC-0001'). Cached per process."""
+    if incident_id in _BANK_INC_CACHE:
+        return _BANK_INC_CACHE[incident_id]
+    path = _BANK_INC_DIR / f"incident_{incident_id}.json"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    _BANK_INC_CACHE[incident_id] = data
+    return data
+
+
+def resolve_bank_incident_meta(raw: dict) -> dict:
+    """
+    Convert a raw bank incident JSON into the metadata shape expected by
+    run_incident_chat (service, services, impacted_components, start_ts, end_ts, …).
+
+    Bank incidents have `entities` that may contain only infra nodes (IG/MG/MySQL/Redis).
+    We infer the affected services via the host→service mapping and always include the
+    app-tier log hosts (Tomcat/Apache) in `impacted_components` so logs are queryable.
+    """
+    from app.parquet_store import infer_services_from_hosts, _LOG_HOSTS
+
+    entities: list[str] = raw.get("entities", [])
+    # Explicit service entities (ServiceTestN)
+    svc_entities = [e for e in entities if e.lower().startswith("servicetest")]
+    # Infra entities (everything else)
+    infra_entities = [e for e in entities if not e.lower().startswith("servicetest")]
+
+    # When no services listed, infer from infra entities
+    all_services = svc_entities if svc_entities else infer_services_from_hosts(infra_entities)
+    primary_service = all_services[0] if all_services else ""
+
+    # Always include app-tier log hosts so query_logs returns real data
+    all_hosts = sorted(set(infra_entities) | set(_LOG_HOSTS))
+
+    tw = raw.get("timeWindow", {})
+    return {
+        "title":               raw.get("title", ""),
+        "service":             primary_service,
+        "services":            all_services,
+        "severity":            raw.get("severity", ""),
+        "root_cause":          raw.get("description", ""),
+        "impacted_components": all_hosts,
+        "start_time":          tw.get("start", ""),
+        "end_time":            tw.get("end", ""),
+        "start_ts":            _parse_ts(tw.get("start", "")),
+        "end_ts":              _parse_ts(tw.get("end", "")),
+    }
+
 
 def _load_csv_incidents() -> list[dict] | None:
     """Read incidents.csv, join with parquet supplementary data, cache by mtime."""

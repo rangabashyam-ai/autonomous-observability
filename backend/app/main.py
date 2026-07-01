@@ -11,8 +11,20 @@ from app.routers import dependencies, monitoring, incidents, intelligence, admin
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
-def _warm_parquet_cache() -> None:
-    """Pre-load parquet files into memory so the first HTTP request is instant."""
+_DEP_FILES = [
+    "dependencies/services.json",
+    "dependencies/infrastructure.json",
+    "dependencies/dependency_graph.json",
+]
+
+
+def _prebuild_dependency_files() -> None:
+    """
+    Pre-compute dependency graph data from parquet and persist to JSON files.
+    On first run this takes a few seconds; on every subsequent startup the JSON
+    files are already present so this returns immediately.
+    Delete any of the three files to force a rebuild.
+    """
     import logging
     log = logging.getLogger(__name__)
     try:
@@ -33,9 +45,9 @@ def _warm_parquet_cache() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio, logging
+    import asyncio
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _warm_parquet_cache)
+    await loop.run_in_executor(None, _prebuild_dependency_files)
     from app.integrations.scheduler import start_scheduler, stop_scheduler
     start_scheduler()
     yield

@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/rca", tags=["rca-engine"])
@@ -175,6 +175,21 @@ def query_rca(req: QueryRequest):
         ],
         analysis_time_ms=round(elapsed_ms, 1),
     )
+
+
+@router.get("/incident-telemetry")
+def get_incident_telemetry(
+    t_start: int = Query(..., description="Window start epoch seconds"),
+    t_end: int = Query(..., description="Window end epoch seconds"),
+    entities: str = Query(default="", description="Comma-separated entity/component names"),
+):
+    """
+    Scan metrics, logs, and traces for the given incident time window.
+    Returns structured telemetry data for LLM context injection.
+    """
+    from app import parquet_store
+    entity_list = [e.strip() for e in entities.split(",") if e.strip()]
+    return parquet_store.query_incident_telemetry_by_entities(t_start, t_end, entity_list)
 
 
 @router.get("/evaluate")

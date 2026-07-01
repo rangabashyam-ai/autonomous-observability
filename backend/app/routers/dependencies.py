@@ -3,13 +3,14 @@ import csv
 import io
 import json
 import sqlite3
+from functools import lru_cache
 from typing import Optional
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from app.data_store import read_json, write_json, DATA_DIR
-from app.models import DependencyEdgeCreate, DependencyUploadJSON
+from app.models import DependencyEdgeCreate, DependencyUploadJSON, NodeCreate
 
 router = APIRouter(prefix="/api/dependencies", tags=["dependencies"])
 
@@ -62,7 +63,9 @@ def _get_db():
     return conn
 
 
+@lru_cache(maxsize=1)
 def _get_all_nodes() -> dict[str, dict]:
+    """Load node data from pre-built JSON files (cached in-process after first call)."""
     services_data = read_json("dependencies/services.json")
     infra_data    = read_json("dependencies/infrastructure.json")
 
@@ -81,7 +84,9 @@ def _get_all_nodes() -> dict[str, dict]:
     return nodes
 
 
+@lru_cache(maxsize=1)
 def _get_edges() -> list[dict]:
+    """Load edges from pre-built JSON file (cached in-process after first call)."""
     data = read_json("dependencies/dependency_graph.json")
     if not data:
         from app import parquet_store
@@ -122,6 +127,7 @@ def _save_edges(edges: list[dict]) -> None:
         "edges": edges,
         "generated_at": datetime.utcnow().isoformat() + "Z",
     })
+    _get_edges.cache_clear()  # invalidate in-process cache after manual edit
 
 
 def _health_from_metric(value: float) -> str:
@@ -322,6 +328,25 @@ def list_nodes(layer: Optional[str] = None):
     if layer:
         nodes = [n for n in nodes if n.get("layer") == layer]
     return {"nodes": nodes, "count": len(nodes)}
+
+
+@router.post("/nodes")
+def add_node(node: NodeCreate):
+    """Upsert a node into the dependency graph JSON files."""
+    nodes_map = dict(_get_all_nodes())
+    new_node: dict = {
+        "id": node.id,
+        "name": node.name,
+        "type": node.type,
+        "layer": node.layer,
+        "health": node.health,
+        "metrics": node.metrics or {},
+    }
+    if node.platform:
+        new_node["platform"] = node.platform
+    nodes_map[node.id] = new_node
+    _save_nodes_to_files(nodes_map)
+    return {"message": "Node saved", "node": new_node}
 
 
 @router.get("/edges")
