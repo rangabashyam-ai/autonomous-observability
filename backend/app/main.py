@@ -1,3 +1,4 @@
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
@@ -78,6 +79,7 @@ app.include_router(copilot.router)
 app.include_router(integrations.router)
 app.include_router(otel.router)
 app.include_router(vm.router, prefix="/api/vm", tags=["VM"])
+app.include_router(rca_engine.router)
 
 
 @app.get("/api/health")

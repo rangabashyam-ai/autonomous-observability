@@ -16,12 +16,18 @@ from functools import lru_cache
 import pandas as pd
 import pyarrow.parquet as pq
 
-PARQUET_DIR = Path(
-    os.environ.get(
-        "PARQUET_DIR",
-        str(Path(__file__).resolve().parent.parent.parent / "data" / "parquet"),
-    )
-)
+def _resolve_parquet_dir() -> Path:
+    env_dir = os.environ.get("PARQUET_DIR")
+    if env_dir:
+        return Path(env_dir)
+    # Primary: openRCA_Bank/parquet next to project root (same as parquet_store.py)
+    local_path = Path(__file__).resolve().parent.parent.parent / "openRCA_Bank" / "parquet"
+    if (local_path / "metric_app.parquet").exists():
+        return local_path
+    # Fallback: legacy data/parquet location
+    return Path(__file__).resolve().parent.parent.parent / "data" / "parquet"
+
+PARQUET_DIR = _resolve_parquet_dir()
 
 # ── in-memory cache ──────────────────────────────────────────────────────────
 _cache: dict[str, pd.DataFrame] = {}

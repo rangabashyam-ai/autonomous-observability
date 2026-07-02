@@ -1502,57 +1502,7 @@ export default function EarlyDetectionDashboard() {
               </div>
             )}
 
-            {/* Live Alert Conditions */}
-            <Card>
-              <CardHeader className="pb-2">
-                <button
-                  type="button"
-                  onClick={() => openDrill({ panel: 'live-conditions' })}
-                  className="w-full text-left group"
-                >
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-warning" />
-                    Live Alert Conditions
-                    <span className="text-[10px] font-normal text-primary ml-auto opacity-70 group-hover:opacity-100">
-                      View all →
-                    </span>
-                    {analyzedAt && (
-                      <span className="text-[11px] font-normal text-text-secondary ml-auto">
-                        Analyzed {analyzedAt}
-                      </span>
-                    )}
-                  </CardTitle>
-                </button>
-              </CardHeader>
-              <div className="px-5 pb-4">
-                {loading ? (
-                  <div className="h-8 bg-card-hover rounded animate-pulse" />
-                ) : activeConditions.length === 0 ? (
-                  <p className="text-sm text-text-secondary">No active alert conditions</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {activeConditions.map((c) => (
-                      <button
-                        key={c.title}
-                        type="button"
-                        onClick={() => openDrill({ panel: 'live-conditions', conditionTitle: c.title })}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card-hover text-xs hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
-                      >
-                        {severityBadge(c.severity)}
-                        <span className="font-medium text-text-primary">{c.title}</span>
-                        {c.count > 1 && (
-                          <span className="text-text-secondary">×{c.count}</span>
-                        )}
-                        <span className="text-text-secondary hidden sm:inline">
-                          · {c.entities.slice(0, 2).join(', ')}
-                          {c.entities.length > 2 ? ` +${c.entities.length - 2}` : ''}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Card>
+
           </div>
 
           {/* Right Column: Service Risk Overview and Ranked Threats */}
@@ -1691,6 +1641,58 @@ export default function EarlyDetectionDashboard() {
                   );
                 })}
             </div>
+
+            {/* Live Alert Conditions */}
+            <Card>
+              <CardHeader className="pb-2">
+                <button
+                  type="button"
+                  onClick={() => openDrill({ panel: 'live-conditions' })}
+                  className="w-full text-left group"
+                >
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-warning" />
+                    Live Alert Conditions
+                    <span className="text-[10px] font-normal text-primary ml-auto opacity-70 group-hover:opacity-100">
+                      View all →
+                    </span>
+                    {analyzedAt && (
+                      <span className="text-[11px] font-normal text-text-secondary ml-auto">
+                        Analyzed {analyzedAt}
+                      </span>
+                    )}
+                  </CardTitle>
+                </button>
+              </CardHeader>
+              <div className="px-5 pb-4">
+                {loading ? (
+                  <div className="h-8 bg-card-hover rounded animate-pulse" />
+                ) : activeConditions.length === 0 ? (
+                  <p className="text-sm text-text-secondary">No active alert conditions</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {activeConditions.map((c) => (
+                      <button
+                        key={c.title}
+                        type="button"
+                        onClick={() => openDrill({ panel: 'live-conditions', conditionTitle: c.title })}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card-hover text-xs hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                      >
+                        {severityBadge(c.severity)}
+                        <span className="font-medium text-text-primary">{c.title}</span>
+                        {c.count > 1 && (
+                          <span className="text-text-secondary">×{c.count}</span>
+                        )}
+                        <span className="text-text-secondary hidden sm:inline">
+                          · {c.entities.slice(0, 2).join(', ')}
+                          {c.entities.length > 2 ? ` +${c.entities.length - 2}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         </div>
       )}

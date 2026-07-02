@@ -2091,11 +2091,11 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Owner</p>
-                <p className="font-medium text-slate-800 dark:text-slate-200">{incident.owner.assignedTo ?? 'Unassigned'}</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">{incident.owner?.assignedTo ?? 'Unassigned'}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Alerts</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{incident.evidence.alertCount}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{incident.evidence?.alertCount ?? incident.alerts?.count ?? 0}</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Created</p>
@@ -2122,13 +2122,13 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
             </div>
 
             {/* Entities + Tactics */}
-            {(incident.entities.length > 0 || incident.tactics.length > 0) && (
+            {((incident.entities?.length ?? 0) > 0 || (incident.tactics?.length ?? 0) > 0) && (
               <div className="grid grid-cols-2 gap-4">
-                {incident.entities.length > 0 && (
+                {(incident.entities?.length ?? 0) > 0 && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">Entities</p>
                     <div className="flex flex-wrap gap-1">
-                      {incident.entities.map((e) => (
+                      {(incident.entities ?? []).map((e) => (
                         <span key={e} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono">
                           {e}
                         </span>
@@ -2136,11 +2136,11 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
                     </div>
                   </div>
                 )}
-                {incident.tactics.length > 0 && (
+                {(incident.tactics?.length ?? 0) > 0 && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">Tactics</p>
                     <div className="flex flex-wrap gap-1">
-                      {incident.tactics.map((t) => (
+                      {(incident.tactics ?? []).map((t) => (
                         <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400">
                           {t}
                         </span>
@@ -2156,7 +2156,7 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
               onClick={() => setShowFullDetails(true)}
               className="w-full py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
             >
-              View all {incident.alerts.count} alerts
+              View all {incident.alerts?.count ?? incident.alerts?.items?.length ?? 0} alerts
             </button>
 
             {/* AI Assistant */}
