@@ -75,7 +75,8 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
     ]
 
     # 3. Gather recent incidents affecting blast radius nodes
-    all_incidents = read_json("incidents/service_now_incidents.json").get("incidents", [])
+    from app.routers.incidents import get_all_merged_incidents
+    all_incidents = get_all_merged_incidents()
     relevant_incidents = [
         {
             "incident_id": inc["incident_id"],

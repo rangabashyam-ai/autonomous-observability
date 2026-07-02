@@ -2046,11 +2046,33 @@ export function BankSentinelView() {
   const [bankSearch, setBankSearch] = useState('');
 
   useEffect(() => {
-    fetch('/api/vm/incidents')
+    fetch('/api/incidents/?limit=500')
       .then((r) => r.json())
       .then((data: any) => {
-        const payload = Array.isArray(data) ? data : data.incidents || [];
-        setBankIncidents(payload);
+        const raw: any[] = Array.isArray(data) ? data : data.incidents || [];
+        // Normalize unified incidents into BankIncident shape
+        const mapped: BankIncident[] = raw.map((inc: any) => ({
+          incidentId:    inc.incident_id || inc.incidentId || inc.id || '',
+          title:         inc.title || '',
+          description:   inc.description || inc.resolution_notes || '',
+          severity:      inc.severity || 'Low',
+          status:        inc.state === 'Open' ? 'New' : inc.state === 'In Progress' ? 'Active' : (inc.status || inc.state || 'New'),
+          productName:   inc.productName || inc.owner_team || 'Platform',
+          owner:         { assignedTo: inc.owner_team || null, email: null },
+          createdTime:   inc.start_time || inc.createdTime || '',
+          lastUpdateTime:inc.end_time || inc.lastUpdateTime || '',
+          timeWindow:    inc.timeWindow || { start: inc.start_time || '', end: inc.end_time || '' },
+          alerts:        inc.alerts && typeof inc.alerts === 'object' && 'count' in inc.alerts
+                           ? inc.alerts
+                           : { count: Array.isArray(inc.alerts) ? inc.alerts.length : 0, items: [] },
+          evidence:      inc.evidence || { alertCount: 0, eventCount: 0, bookmarkCount: 0 },
+          entities:      Array.isArray(inc.entities) ? inc.entities : (inc.impacted_components || []),
+          tactics:       Array.isArray(inc.tactics) ? inc.tactics : (inc.symptoms || []),
+          queryIndex:    inc.queryIndex || '',
+          taskType:      inc.taskType || '',
+          rcaStatus:     inc.rcaStatus || 'Pending',
+        }));
+        setBankIncidents(mapped);
         setBankLoading(false);
       })
       .catch(() => setBankLoading(false));

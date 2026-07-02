@@ -36,7 +36,8 @@ METRIC_THRESHOLDS: dict[str, float] = {
 
 
 def _load_incidents() -> list[dict]:
-    return read_json("incidents/service_now_incidents.json").get("incidents", [])
+    from app.routers.incidents import get_all_merged_incidents
+    return get_all_merged_incidents()
 
 
 def _load_dep_edges() -> list[dict]:

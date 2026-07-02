@@ -165,10 +165,8 @@ def _slug(text: str) -> str:
 
 
 def _load_incidents() -> list[dict]:
-    data = read_json("incidents/service_now_incidents.json")
-    if data:
-        return data.get("incidents", [])
-    return _load_bank_incidents()
+    from app.routers.incidents import get_all_merged_incidents
+    return get_all_merged_incidents()
 
 
 def _load_knowledge_graph() -> dict:

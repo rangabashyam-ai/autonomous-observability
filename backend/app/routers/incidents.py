@@ -83,40 +83,73 @@ def _load_csv_incidents() -> list[dict] | None:
 
 
 def _load_custom_incidents() -> list[dict]:
+    """Load custom incidents created via the admin form.
+    Reads from custom_incidents.json (clean custom-only store)."""
     project_root = Path(__file__).resolve().parent.parent.parent.parent
-    path = project_root / "openRCA_Bank" / "incidents" / "all_incidents.json"
-    if path.exists():
+    incidents_dir = project_root / "openRCA_Bank" / "incidents"
+
+    # Primary: custom_incidents.json (clean custom-only list)
+    custom_path = incidents_dir / "custom_incidents.json"
+    if custom_path.exists():
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(custom_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return data if isinstance(data, list) else []
         except Exception:
             pass
+
     return []
 
-
-def _find_incident(incident_id: str) -> dict | None:
-    """Find an incident by IN-XXXX id, original INC-XXXX id, or hash id."""
-    custom = _load_custom_incidents()
-    for inc in custom:
-        if inc.get("incidentId") == incident_id:
-            inc["incident_id"] = inc.get("incidentId", "")
-            inc["id"] = inc.get("incidentId", "")
-            status = inc.get("status", "Open")
-            inc["state"] = "Open" if status in ("New", "Active") else status
-            tw = inc.get("timeWindow", {})
-            start_t = tw.get("start", "")
-            inc["start_time"] = inc.get("start_time", start_t)
-            inc["incident_time"] = inc.get("incident_time", start_t)
-            entities = inc.get("entities", [])
-            inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
-            inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
-            return dict(inc)
-
+def get_all_merged_incidents() -> list[dict]:
+    # 1. Load CSV/base incidents
     incidents = _load_csv_incidents()
     if incidents is None:
         data = read_json("incidents/service_now_incidents.json")
         incidents = data.get("incidents", []) if isinstance(data, dict) else data
+        
+    # 2. Load custom incidents
+    custom = _load_custom_incidents()
+    formatted_custom = []
+    for inc in custom:
+        formatted_inc = dict(inc)
+        formatted_inc["incident_id"] = formatted_inc.get("incidentId", "")
+        formatted_inc["id"] = formatted_inc.get("incidentId", "")
+        status = formatted_inc.get("status", "Open")
+        formatted_inc["state"] = "Open" if status in ("New", "Active") else status
+        tw = formatted_inc.get("timeWindow", {})
+        start_t = tw.get("start", "")
+        formatted_inc["start_time"] = formatted_inc.get("start_time", start_t)
+        formatted_inc["incident_time"] = formatted_inc.get("incident_time", start_t)
+        entities = formatted_inc.get("entities", [])
+        formatted_inc["component"] = formatted_inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
+        formatted_inc["true_root_cause"] = formatted_inc.get("true_root_cause", formatted_inc.get("root_cause", ""))
+        
+        # Add typical fields expected by intelligence
+        formatted_inc["service"] = formatted_inc["component"]
+        formatted_inc["service_id"] = formatted_inc["component"]
+        formatted_inc["root_cause"] = formatted_inc["true_root_cause"]
+        
+        formatted_custom.append(formatted_inc)
+        
+    # 3. Combine and Deduplicate (prioritizing custom/enriched versions)
+    seen_ids = set()
+    unique_incidents = []
+    
+    for inc in formatted_custom + incidents:
+        inc_id = inc.get("incident_id") or inc.get("id")
+        if inc_id and inc_id not in seen_ids:
+            seen_ids.add(inc_id)
+            unique_incidents.append(inc)
+            
+    # 4. Sort by start_time descending (newest first)
+    unique_incidents.sort(key=lambda x: _parse_ts(x.get("start_time", "")), reverse=True)
+    
+    return unique_incidents
+
+
+def _find_incident(incident_id: str) -> dict | None:
+    """Find an incident by IN-XXXX id, original INC-XXXX id, or hash id."""
+    incidents = get_all_merged_incidents()
     for inc in incidents:
         if (
             inc.get("incident_id") == incident_id
@@ -233,26 +266,7 @@ def get_incidents(
     state: Optional[str] = None,
     active: Optional[bool] = None,
 ):
-    incidents = _load_csv_incidents()
-    if incidents is None:
-        data = read_json("incidents/service_now_incidents.json")
-        incidents = data.get("incidents", [])
-        
-    custom = _load_custom_incidents()
-    for inc in custom:
-        inc["incident_id"] = inc.get("incidentId", "")
-        inc["id"] = inc.get("incidentId", "")
-        status = inc.get("status", "Open")
-        inc["state"] = "Open" if status in ("New", "Active") else status
-        tw = inc.get("timeWindow", {})
-        start_t = tw.get("start", "")
-        inc["start_time"] = inc.get("start_time", start_t)
-        inc["incident_time"] = inc.get("incident_time", start_t)
-        entities = inc.get("entities", [])
-        inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
-        inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
-            
-    incidents = custom + incidents
+    incidents = get_all_merged_incidents()
     incidents = _apply_resolutions(incidents)
     incidents = _filter_incidents(incidents, severity, service, search, state, active)
     total = len(incidents)

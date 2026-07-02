@@ -58,8 +58,8 @@ def load_alerts() -> list[dict]:
 
 
 def load_incidents() -> list[dict]:
-    data = read_json("incidents/service_now_incidents.json")
-    return data.get("incidents", [])
+    from app.routers.incidents import get_all_merged_incidents
+    return get_all_merged_incidents()
 
 
 def load_changes() -> list[dict]:

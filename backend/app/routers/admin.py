@@ -324,26 +324,26 @@ async def add_incident(incident: dict):
     if not isinstance(incident.get("entities"), list):
         raise HTTPException(status_code=400, detail="entities must be a list of strings.")
 
-    # 2. Load existing incidents from openRCA_Bank/incidents/all_incidents.json
+    # 2. Load existing CUSTOM incidents from openRCA_Bank/incidents/custom_incidents.json
+    #    (we use a separate file so base bank incidents are never overwritten)
     project_root = Path(__file__).resolve().parent.parent.parent.parent
     openrca_bank_dir = project_root / "openRCA_Bank"
     dest_incidents_dir = openrca_bank_dir / "incidents"
     dest_incidents_dir.mkdir(parents=True, exist_ok=True)
-    all_json_path = dest_incidents_dir / "all_incidents.json"
-    
-    incidents = []
-    if all_json_path.exists():
+    custom_json_path = dest_incidents_dir / "custom_incidents.json"
+
+    custom_incidents: list[dict] = []
+    if custom_json_path.exists():
         try:
-            with open(all_json_path, "r", encoding="utf-8") as f:
-                incidents = json.load(f)
-                if not isinstance(incidents, list):
-                    incidents = []
+            with open(custom_json_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                custom_incidents = loaded if isinstance(loaded, list) else []
         except Exception:
-            incidents = []
-            
+            custom_incidents = []
+
     # 3. Check for duplicate incidentId
     existing_idx = -1
-    for idx, inc in enumerate(incidents):
+    for idx, inc in enumerate(custom_incidents):
         if inc.get("incidentId") == incident.get("incidentId"):
             existing_idx = idx
             break
@@ -353,17 +353,24 @@ async def add_incident(incident: dict):
             status_code=409,
             detail=f"Incident '{incident.get('incidentId')}' already exists. Set overwrite=true to replace it."
         )
-            
+
     if existing_idx != -1:
-        incidents[existing_idx] = incident
+        custom_incidents[existing_idx] = incident
     else:
-        incidents.append(incident)
-        
-    # 4. Write back to file
-    with open(all_json_path, "w", encoding="utf-8") as f:
-        json.dump(incidents, f, indent=2)
-        
-    # 5. Clear caches
+        custom_incidents.append(incident)
+
+    # 4a. Write to custom_incidents.json (the clean custom-only store)
+    with open(custom_json_path, "w", encoding="utf-8") as f:
+        json.dump(custom_incidents, f, indent=2)
+
+    # 4b. Also write individual incident_<id>.json file so it appears in directory scans
+    incident_id = incident.get("incidentId", "UNKNOWN")
+    safe_id = incident_id.replace("/", "-").replace("\\", "-")
+    individual_path = dest_incidents_dir / f"incident_{safe_id}.json"
+    with open(individual_path, "w", encoding="utf-8") as f:
+        json.dump(incident, f, indent=2)
+
+    # 5. Clear all caches so next request picks up the new incident immediately
     from app import parquet_store
     parquet_store.clear_cache()
     from app.services import intelligence as intel
@@ -372,5 +379,5 @@ async def add_incident(incident: dict):
     inc_router._csv_cache = None
     inc_router._csv_mtime = 0.0
 
-    return {"status": "success", "message": f"Incident {incident.get('incidentId')} saved successfully."}
+    return {"status": "success", "message": f"Incident {incident_id} saved successfully."}
 
