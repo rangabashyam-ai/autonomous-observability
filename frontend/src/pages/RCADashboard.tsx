@@ -12,9 +12,9 @@ const BANK_SEV_DOT: Record<string, string> = {
   High: 'bg-red-500', Medium: 'bg-orange-400', Low: 'bg-yellow-400', Informational: 'bg-blue-400',
 };
 const BANK_SEV_BADGE: Record<string, string> = {
-  High:          'bg-red-50    text-red-700    border-red-200    dark:bg-red-950/30    dark:text-red-400    dark:border-red-800',
-  Medium:        'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',
-  Low:           'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-500 dark:border-yellow-800',
+  High: 'bg-red-50    text-red-700    border-red-200    dark:bg-red-950/30    dark:text-red-400    dark:border-red-800',
+  Medium: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',
+  Low: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-500 dark:border-yellow-800',
   Informational: 'bg-blue-50   text-blue-700   border-blue-200   dark:bg-blue-950/30   dark:text-blue-400   dark:border-blue-800',
 };
 const ALERT_SEV_DOT: Record<string, string> = {
@@ -27,8 +27,8 @@ const ALERT_SEV_BADGE: Record<string, string> = {
 };
 const SIGNAL_TYPE_BADGE: Record<string, string> = {
   Metric: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-950/40 dark:border-blue-800',
-  Log:    'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
-  Trace:  'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
+  Log: 'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
+  Trace: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
 };
 const ALERT_CATEGORY_LABEL: Record<string, string> = {
   CPU: 'High CPU usage', MEM: 'High memory usage',
@@ -64,11 +64,10 @@ function IncidentListItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 transition-colors ${
-        selected
+      className={`w-full text-left px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 transition-colors ${selected
           ? 'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500'
           : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border-l-2 border-l-transparent'
-      }`}
+        }`}
     >
       <div className="flex items-center gap-2 mb-0.5">
         <span className={`w-2 h-2 rounded-full shrink-0 ${BANK_SEV_DOT[incident.severity] ?? 'bg-slate-400'}`} />
@@ -300,13 +299,13 @@ export default function RCADashboard() {
       .then((data: any) => {
         const payload = Array.isArray(data) ? data : data.incidents || [];
         setIncidents(payload);
-        
+
         const serviceParam = searchParams.get('service');
         if (serviceParam) {
           setSearch(serviceParam);
           const found = payload.find(
-            (i: BankIncident) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) || 
-                   i.description?.toLowerCase().includes(serviceParam.toLowerCase())
+            (i: BankIncident) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) ||
+              i.description?.toLowerCase().includes(serviceParam.toLowerCase())
           );
           setSelected(found ?? payload[0] ?? null);
         } else {

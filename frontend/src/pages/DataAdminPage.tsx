@@ -1,34 +1,18 @@
 import { useEffect, useState } from 'react';
-import { getDataStatus, regenerateData, uploadDataFile, uploadDatasetJson, addIncident } from '../api/client';
+import { getDataStatus, uploadDataFile, uploadDatasetJson, addIncident } from '../api/client';
 import { PageHeader } from '../components/ui';
 
 export default function DataAdminPage() {
-  const [files, setFiles] = useState<{ file: string; exists: boolean; size_bytes: number; records: number }[]>([]);
-  const [regenerating, setRegenerating] = useState(false);
   const [message, setMessage] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
-  const load = () => getDataStatus().then((r) => setFiles(r.files));
+  const load = () => getDataStatus().then(() => {});
 
   useEffect(() => { load(); }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
-  };
-
-  const handleRegenerate = async () => {
-    setRegenerating(true);
-    setMessage('');
-    try {
-      await regenerateData();
-      setMessage('Data regenerated successfully');
-      load();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Regeneration failed');
-    } finally {
-      setRegenerating(false);
-    }
   };
 
   const handleUpload = async (category: string, file: File) => {
@@ -67,8 +51,8 @@ export default function DataAdminPage() {
   const [endTime, setEndTime] = useState(new Date(Date.now() + 1800000).toISOString().slice(0, 16));
   const [entities, setEntities] = useState('');
   const [tactics, setTactics] = useState<string[]>([]);
-  const [rootCause, setRootCause] = useState('');
-  const [suggestedFix, setSuggestedFix] = useState('');
+  const [rootCause] = useState('');
+  const [suggestedFix] = useState('');
   const [alerts, setAlerts] = useState<{ alertRule: string; severity: string; signalType: string; firedAt: string; description: string }[]>([]);
   const [customTactic, setCustomTactic] = useState('');
   const [duplicateConflict, setDuplicateConflict] = useState(false);

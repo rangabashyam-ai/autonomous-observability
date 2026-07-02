@@ -65,7 +65,7 @@ function buildFlow(
   const rfEdges = buildEdges(graph, highlightIds);
 
   const hierarchicalSpecs = buildHierarchicalSpecs(graph, selectedViews);
-  
+
   if (hierarchicalSpecs.length > 0 && selectedViews.size > 0) {
     const computedLayouts = calcTreeLayout(hierarchicalSpecs);
     const flattenedNodes = flattenComputedLayout(computedLayouts, graph, selectedNodeId, highlightIds);
@@ -181,10 +181,10 @@ function GroupNode({ id, data }: { id: string, data: { label: string; textColor:
 }
 
 const GOLDEN_SIGNALS: { id: HeatmapMetric; label: string; desc: string; accent: string }[] = [
-  { id: 'latency',    label: 'Latency',    desc: 'Request response time — high latency = red',         accent: 'blue'   },
-  { id: 'traffic',    label: 'Traffic',    desc: 'Demand on the system — very high load = red',         accent: 'purple' },
-  { id: 'errors',     label: 'Errors',     desc: 'Request failure rate — high error rate = red',        accent: 'red'    },
-  { id: 'saturation', label: 'Saturation', desc: 'Resource utilisation (CPU/disk) — near-full = red',  accent: 'orange' },
+  { id: 'latency', label: 'Latency', desc: 'Request response time — high latency = red', accent: 'blue' },
+  { id: 'traffic', label: 'Traffic', desc: 'Demand on the system — very high load = red', accent: 'purple' },
+  { id: 'errors', label: 'Errors', desc: 'Request failure rate — high error rate = red', accent: 'red' },
+  { id: 'saturation', label: 'Saturation', desc: 'Resource utilisation (CPU/disk) — near-full = red', accent: 'orange' },
 ];
 
 function buildNodes(graph: DependencyGraph, selectedId: string | null): Node[] {
@@ -368,28 +368,27 @@ function GroupDetailsPopup({ groupId, graph, nodes, heatmapMetric, onClose, onNo
       </div>
 
       <div className="p-6 overflow-y-auto flex-1 space-y-4">
-        <input 
-          type="text" 
-          placeholder="Filter components..." 
+        <input
+          type="text"
+          placeholder="Filter components..."
           className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        
+
         <div className="space-y-3">
           {filtered.map(node => (
-            <div 
-              key={node.id} 
+            <div
+              key={node.id}
               className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-blue-500 transition-colors"
               onClick={() => onNodeSelect(node.id)}
             >
               <div className="flex justify-between items-center mb-2">
                 <span className="font-semibold text-sm text-slate-900 dark:text-white">{node.label}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  node.health === 'healthy' ? 'bg-emerald-100 text-emerald-700' :
-                  node.health === 'warning' ? 'bg-amber-100 text-amber-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${node.health === 'healthy' ? 'bg-emerald-100 text-emerald-700' :
+                    node.health === 'warning' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                  }`}>
                   {node.health.toUpperCase()}
                 </span>
               </div>
@@ -568,15 +567,15 @@ export default function DependencyMap() {
 
   // Maps node type → functional category suffix used in group node IDs
   const TYPE_CATEGORY_SUFFIX: Record<string, string> = {
-    microservice:     'microservices',
+    microservice: 'microservices',
     business_service: 'business_service',
-    database:         'storage',
-    cache:            'storage',
-    server:           'compute',
-    container:        'compute',
-    load_balancer:    'network',
-    gateway:          'network',
-    web_server:       'network',
+    database: 'storage',
+    cache: 'storage',
+    server: 'compute',
+    container: 'compute',
+    load_balancer: 'network',
+    gateway: 'network',
+    web_server: 'network',
   };
 
   const KNOWN_PLATFORMS = ['on-prem-physical', 'on-prem-vmware', 'aws', 'gcp', 'azure'];
@@ -683,7 +682,7 @@ export default function DependencyMap() {
 
     // Persist connection to backend only — no visual edge on map (avoids cross-group arrows)
     if (connectFrom.trim() && connectTo.trim()) {
-      addDependency(connectFrom.trim(), connectTo.trim(), relationship || 'calls').catch(() => {});
+      addDependency(connectFrom.trim(), connectTo.trim(), relationship || 'calls').catch(() => { });
     }
     setShowAddNodeWizard(false);
   };
@@ -760,11 +759,10 @@ export default function DependencyMap() {
             {/* Platform button */}
             <button
               onClick={() => setPlatformExpanded((p) => !p)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors flex items-center gap-1 ${
-                PLATFORM_VIEWS.some((p) => selectedViews.has(p.id))
+              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors flex items-center gap-1 ${PLATFORM_VIEWS.some((p) => selectedViews.has(p.id))
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
-              }`}
+                }`}
             >
               Platform
               <span className="text-[10px] opacity-70">{platformExpanded ? '▴' : '▾'}</span>
@@ -800,9 +798,9 @@ export default function DependencyMap() {
           {GOLDEN_SIGNALS.map((gs) => {
             const active = heatmap === gs.id;
             const accentClasses: Record<string, { on: string; off: string }> = {
-              blue:   { on: 'bg-blue-600/20 border-blue-500 text-blue-300',     off: 'border-blue-900/40 text-blue-400/60 hover:border-blue-600 hover:text-blue-300' },
+              blue: { on: 'bg-blue-600/20 border-blue-500 text-blue-300', off: 'border-blue-900/40 text-blue-400/60 hover:border-blue-600 hover:text-blue-300' },
               purple: { on: 'bg-purple-600/20 border-purple-500 text-purple-300', off: 'border-purple-900/40 text-purple-400/60 hover:border-purple-600 hover:text-purple-300' },
-              red:    { on: 'bg-red-600/20 border-red-500 text-red-300',         off: 'border-red-900/40 text-red-400/60 hover:border-red-600 hover:text-red-300' },
+              red: { on: 'bg-red-600/20 border-red-500 text-red-300', off: 'border-red-900/40 text-red-400/60 hover:border-red-600 hover:text-red-300' },
               orange: { on: 'bg-orange-600/20 border-orange-500 text-orange-300', off: 'border-orange-900/40 text-orange-400/60 hover:border-orange-600 hover:text-orange-300' },
             };
             const cls = accentClasses[gs.accent] ?? accentClasses.blue;
@@ -1057,9 +1055,9 @@ export default function DependencyMap() {
           heatmapMetric={heatmap}
           onClose={closeGroupPopup}
           onNodeSelect={(id) => {
-             setSelectedGroupId(null);
-             setSelectedNodeId(id);
-             setNodePopupOpen(true);
+            setSelectedGroupId(null);
+            setSelectedNodeId(id);
+            setNodePopupOpen(true);
           }}
         />
       )}
@@ -1091,7 +1089,7 @@ export default function DependencyMap() {
                   getDependencyPaths(selectedNodeId).then(setPaths).catch(() => setPaths(null));
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
             setShowAddConnectionWizard(false);
           }}
           onClose={() => setShowAddConnectionWizard(false)}
@@ -1179,9 +1177,9 @@ const NODE_TYPES = [
 ] as const;
 
 const COLOR_CLASSES: Record<string, { card: string; icon: string; badge: string }> = {
-  blue:   { card: 'border-blue-500 bg-blue-50 dark:bg-blue-950/30',     icon: 'text-blue-600 dark:text-blue-400',   badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' },
+  blue: { card: 'border-blue-500 bg-blue-50 dark:bg-blue-950/30', icon: 'text-blue-600 dark:text-blue-400', badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' },
   purple: { card: 'border-purple-500 bg-purple-50 dark:bg-purple-950/30', icon: 'text-purple-600 dark:text-purple-400', badge: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' },
-  green:  { card: 'border-green-500 bg-green-50 dark:bg-green-950/30',   icon: 'text-green-600 dark:text-green-400',  badge: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' },
+  green: { card: 'border-green-500 bg-green-50 dark:bg-green-950/30', icon: 'text-green-600 dark:text-green-400', badge: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' },
   orange: { card: 'border-orange-500 bg-orange-50 dark:bg-orange-950/30', icon: 'text-orange-600 dark:text-orange-400', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' },
 };
 const COLOR_IDLE = 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-500';
@@ -1339,15 +1337,15 @@ type ConnCategory = 'microservices' | 'storage' | 'compute' | 'network';
 
 const CONN_CATEGORIES: { id: ConnCategory; label: string; icon: string }[] = [
   { id: 'microservices', label: 'Microservices', icon: '⚙️' },
-  { id: 'storage',       label: 'Storage',       icon: '🛢️' },
-  { id: 'compute',       label: 'Compute',        icon: '🖥️' },
-  { id: 'network',       label: 'Network',        icon: '⚖️' },
+  { id: 'storage', label: 'Storage', icon: '🛢️' },
+  { id: 'compute', label: 'Compute', icon: '🖥️' },
+  { id: 'network', label: 'Network', icon: '⚖️' },
 ];
 
 function nodeCategory(type: string, layer: string): ConnCategory | null {
   // Service layers (type or layer match)
   if (['microservice', 'application', 'business_service'].includes(layer) ||
-      ['microservice', 'business_service'].includes(type)) return 'microservices';
+    ['microservice', 'business_service'].includes(type)) return 'microservices';
   // Infrastructure — use type as the discriminator since layer is often "server"
   if (['database', 'cache'].includes(type)) return 'storage';
   if (['server', 'container', 'kubernetes_cluster'].includes(type)) return 'compute';
@@ -1389,11 +1387,10 @@ function NodePicker({
             key={cat.id}
             type="button"
             onClick={() => { setCategory(cat.id); onChange(''); }}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
-              category === cat.id
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${category === cat.id
                 ? 'bg-blue-600 border-blue-500 text-white'
                 : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
-            }`}
+              }`}
           >
             <span>{cat.icon}</span>
             {cat.label}
@@ -1407,11 +1404,10 @@ function NodePicker({
           <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 ${
-              error
+            className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 ${error
                 ? 'border-red-500 focus:ring-red-500/30'
                 : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500/30 focus:border-blue-500'
-            }`}
+              }`}
           >
             <option value="">— select a component —</option>
             {filtered.map((n) => (

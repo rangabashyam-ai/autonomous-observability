@@ -50,7 +50,7 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
             "likely_downstream": blast.get('likely_downstream_services', []),
             "impacted_infrastructure": blast.get('impacted_infrastructure', []),
             "impacted_regions": blast.get('impacted_regions', []),
-            "answer": "Hey! 👋 I'm your AI incident analyst. I can help you understand this blast radius, identify root causes, track impact propagation, and recommend next steps. What would you like to know?"
+            "answer": f"Hey! I'm your incident analyst. Ask me about the blast radius, root cause, affected services, or next steps for this {service.replace('-', ' ').title()} incident."
         }
     rca = analyze_rca(
         alerts=default_alerts,
@@ -94,7 +94,7 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
         role_label = "User" if msg.get("role") == "user" else "Assistant"
         history_str += f"{role_label}: {msg.get('content')}\n"
 
-    # 4b. Format context objects to be highly compact and rich (reducing token load and quotes overhead)
+    # 4b. Format context objects to be highly compact and rich
     rca_candidates_list = [
         f"- {c.get('root_cause', 'Unknown')} (Confidence: {c.get('confidence', 0)}%, Matches: {c.get('matching_incident_count', 0)}, Suggested Action: {', '.join(c.get('suggested_fixes', []))})"
         for c in rca.get('root_cause_candidates', [])
@@ -115,14 +115,12 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
 
     # 5. Build prompt
     prompt = f"""
-You are an expert SRE and Incident Commander Assistant specializing in Blast Radius Investigation.
-Your role is to analyze the active incident's blast radius and guide SREs through propagation paths, root cause assumptions, service degradation, business impact, and next investigation steps.
-
-Rules for your response:
-1. Provide a clear, structured analysis. Use headers, bullet points, or paragraphs where appropriate. Keep it professional, highly technical, and actionable.
-2. Limit the response to a maximum of 500 words.
-3. Be concise and prioritize high-risk signals.
-4. If the user query is a greeting or casual message (e.g. "hi", "hello", "hey", "how are you", "help", "what can you do"), respond in a warm, friendly, non-technical human manner: "Hey! 👋 I'm your AI incident analyst. I can help you understand this blast radius, identify root causes, track impact propagation, and recommend next steps. What would you like to know?". Do NOT use any markdown for casual responses. Use relevant emoji sparingly.
+You are a senior SRE incident analyst assistant.
+Give concise, professional responses under 200 words.
+Never use markdown syntax like ** or ## or *.
+Use plain text only. Be direct and actionable.
+Format lists with • character only.
+Sound like an expert, not a document generator.
 
 === INCIDENT INVESTIGATION CONTEXT ===
 Target Service / Analysis Origin: {service}
@@ -192,70 +190,73 @@ Recent Incidents:
         fixes = rca_candidates[0]['suggested_fixes'] if rca_candidates else []
 
         if any(w in q for w in ["explain this blast radius", "explain"]):
+            propagation_status = "spreading fast" if len(currently_impacted) >= 3 else "contained"
             ans_lines = [
-                f"### Blast Radius Analysis for {service.title()}",
-                f"The blast radius is initiated by the operational degradation of **{service}**.",
-                f"It propagates to **{len(currently_impacted)}** currently impacted services: {', '.join(currently_impacted)}.",
-                f"Due to cascading traffic pressure, the issue is likely to degrade **{len(likely_downstream)}** downstream services: {', '.join(likely_downstream)}.",
-                f"The incident scope is classified as **{blast.get('issue_scope', 'unknown').upper()}** with a Business Impact Score of **{blast.get('business_impact_score', 0)}/100**."
+                f"The target service {service} is experiencing critical degradation. Request timeouts and cascading failures are propagating downstream, causing backups in dependent services. Active remediation is required to isolate the failure zone.",
+                f"• Root cause and where it started: CPU saturation on {service}.",
+                f"• How many services and customers affected: {len(currently_impacted)} services and est. {blast.get('impacted_customers_estimate', 0):,} affected.",
+                f"• Current propagation status: Failures are {propagation_status} along dependency paths."
             ]
-            answer = "\n\n".join(ans_lines)
+            answer = "\n".join(ans_lines)
             
         elif any(w in q for w in ["identify the root cause", "root cause", "cause"]):
+            candidate_lines = []
+            for c in rca_candidates[:3]:
+                candidate_lines.append(f"• {c['root_cause']} [{c['confidence']}% confidence]")
+            candidates_str = "\n".join(candidate_lines) if candidate_lines else "• Unknown Cause [50% confidence]"
+            
             ans_lines = [
-                f"### Root Cause Identification",
-                f"RCA correlation indicates the primary suspected root cause is **{top_rca}** with a confidence score of **{top_confidence}%**.",
-                "Telemetry signals reveal active errors propagating downstream along dependency call paths.",
-                f"**Recommended Action**: Consider performing: {', '.join(fixes)} immediately to stabilize the component."
+                f"RCA correlation indicates the primary suspected root cause is {top_rca}.",
+                candidates_str,
+                f"Recommended First Action: Consider performing: {fixes[0] if fixes else 'Restart service'} immediately to stabilize the component."
             ]
             answer = "\n\n".join(ans_lines)
             
         elif any(w in q for w in ["show impact propagation", "propagation", "propagate"]):
+            propagation_status = "spreading fast" if len(currently_impacted) >= 3 else "contained"
+            flow_chain = " → ".join(currently_impacted[:5])
             ans_lines = [
-                f"### Impact Propagation Pathway",
-                f"1. **Failure Origin**: {service}",
-                f"2. **Direct Cascade**: request timeouts and socket exhaustion spread to: {', '.join(currently_impacted)}.",
-                f"3. **Downstream Pipeline**: secondary degradation expected on: {', '.join(likely_downstream)}.",
-                f"4. **Shared Platform Exposure**: resource contention is observed on backend servers and platforms: {', '.join(impacted_infrastructure)}."
+                f"The failure is currently {propagation_status} along the downstream dependency chain.",
+                flow_chain
             ]
             answer = "\n\n".join(ans_lines)
             
         elif any(w in q for w in ["list affected services", "affected services", "affected", "systems"]):
+            critical_list = ", ".join(currently_impacted[:4])
+            risk_list = ", ".join(likely_downstream[:4])
+            total_count = len(currently_impacted) + len(likely_downstream)
             ans_lines = [
-                f"### Affected Systems Inventory",
-                f"- **Currently Degraded Services**: {', '.join(currently_impacted)}",
-                f"- **Vulnerable Downstream Services**: {', '.join(likely_downstream)}",
-                f"- **Impacted Platform Infrastructure**: {', '.join(impacted_infrastructure)}"
+                f"[CRITICAL] {critical_list}",
+                f"[AT RISK] {risk_list}",
+                f"Total count: {total_count}"
             ]
             answer = "\n\n".join(ans_lines)
             
         elif any(w in q for w in ["summarize business impact", "business impact", "impact", "customers"]):
+            impact_score = blast.get('business_impact_score', 0)
+            customers = blast.get('impacted_customers_estimate', 0)
+            regions_list = ", ".join(blast.get('impacted_regions', []))
             ans_lines = [
-                f"### Business Impact Summary",
-                f"- **Criticality Rating**: {blast.get('severity_recommendation', 'unknown')}",
-                f"- **Business Impact Score**: {blast.get('business_impact_score', 0)} / 100",
-                f"- **Estimated Accounts Exposed**: {blast.get('impacted_customers_estimate', 0):,} customers",
-                f"Active SLA metrics show elevated p99 latency spikes and transaction error counts."
+                f"Business Impact Score: {impact_score}/100",
+                f"Affected Customers: est. {customers:,}",
+                f"Regions Affected: {regions_list}"
             ]
-            answer = "\n\n".join(ans_lines)
+            answer = "\n".join(ans_lines)
             
         elif any(w in q for w in ["recommend next", "next investigation", "investigate next", "next"]):
-            alert_titles = [a['title'] for a in active_alerts]
             ans_lines = [
-                f"### Recommended Next Steps",
-                f"1. **Audit Logs**: Review configuration history and deployment commits on **{service}**.",
-                f"2. **Mitigate Alert Spike**: Troubleshoot the active alerts: {', '.join(alert_titles[:3]) if alert_titles else 'telemetry spikes'}.",
-                f"3. **Monitor Infrastructure**: Check hypervisor CPU and database locks on shared infrastructure: {', '.join(impacted_infrastructure[:3])}."
+                "1. Audit recent configuration changes and deployments on the origin service.",
+                "2. Check CPU utilization and database thread pools for lock contention.",
+                "3. Monitor gateway error rates and latency on downstream paths.",
+                "4. Assess regional traffic load and initiate failover routing if required."
             ]
-            answer = "\n\n".join(ans_lines)
+            answer = "\n".join(ans_lines)
             
         else:
             ans_lines = [
-                f"### Blast Radius Investigation Helper",
-                f"I am analyzing the incident blast radius originating at **{service}**.",
-                f"Currently, the degradation impacts **{', '.join(currently_impacted)}** and threatens downstream dependencies **{', '.join(likely_downstream)}**.",
-                "You can select one of the quick actions below to learn more about the root cause, impact propagation, affected systems, or recommended SRE mitigation tasks.",
-                "*Note: Running SRE heuristic rules offline engine. Configure GROQ_API_KEY in the backend env for full dynamic AI diagnostics.*"
+                f"Analyzing incident originating at {service}.",
+                f"Operational degradation currently impacts {', '.join(currently_impacted[:3])} and downstream systems.",
+                "Select a quick action below for details on root cause, propagation, affected services, or next steps."
             ]
             answer = "\n\n".join(ans_lines)
 

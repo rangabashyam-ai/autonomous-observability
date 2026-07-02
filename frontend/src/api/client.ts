@@ -494,7 +494,7 @@ export async function uploadDatasetJson(file: File) {
     try {
       const parsed = JSON.parse(text);
       if (parsed.detail) throw new Error(parsed.detail);
-    } catch {}
+    } catch { }
     throw new Error(text || 'JSON Upload failed');
   }
   return res.json();
@@ -511,7 +511,7 @@ export async function addIncident(incident: any) {
     try {
       const parsed = JSON.parse(text);
       if (parsed.detail) throw new Error(parsed.detail);
-    } catch {}
+    } catch { }
     throw new Error(text || 'Failed to add incident');
   }
   return res.json();
@@ -563,4 +563,11 @@ export async function chatBlastRadius(
     }
   );
 }
+
+export async function getNodeLogs(nodeId: string, health: string) {
+  return fetchJson<{ logs: string[] }>(
+    `${BASE}/dependencies/nodes/${nodeId}/logs?health=${health}`
+  );
+}
+
 

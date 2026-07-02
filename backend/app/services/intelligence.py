@@ -210,6 +210,20 @@ def _load_alerts() -> list[dict]:
     return _load_bank_alerts()
 
 
+def _load_infrastructure_nodes() -> list[dict]:
+    data = read_json("dependencies/infrastructure.json")
+    if data:
+        return data.get("nodes", [])
+    try:
+        from app import parquet_store
+        res = parquet_store.query("dependencies/infrastructure.json")
+        if res:
+            return res.get("nodes", [])
+    except Exception:
+        pass
+    return []
+
+
 def get_service_for_entity(entity_id: str) -> str | None:
     if not entity_id:
         return None
@@ -466,7 +480,16 @@ def analyze_blast_radius(
 
     currently_impacted = list(set(downstream[:5] + [source_component]))
     likely_downstream = downstream[1:8]
-    infra_components = [c for c in downstream + upstream if "cluster" in c or "lb" in c or "k8s" in c][:6]
+    infra_nodes = _load_infrastructure_nodes()
+    infra_ids = {n["id"].lower() for n in infra_nodes}
+    infra_keywords = {"cluster", "lb", "k8s", "docker", "tomcat", "ig", "mg", "db", "vm", "host", "switch", "router", "gw", "gateway", "postgres", "mysql", "redis", "kafka"}
+    infra_components = []
+    for c in downstream + upstream:
+        c_lower = c.lower()
+        if c_lower in infra_ids or any(kw in c_lower for kw in infra_keywords):
+            if c not in infra_components:
+                infra_components.append(c)
+    infra_components = infra_components[:6]
 
     # Determine localized vs systemic
     is_systemic = len(downstream) > 4 or any("gateway" in c for c in downstream)

@@ -21,9 +21,9 @@ export interface DependencyNodeData {
 }
 
 const SIGNAL_FORMAT: Record<string, (v: number) => string> = {
-  latency:    (v) => `${(v * 10).toFixed(0)}ms`,
-  traffic:    (v) => `${v.toFixed(0)}%`,
-  errors:     (v) => `${v.toFixed(1)}%`,
+  latency: (v) => `${(v * 10).toFixed(0)}ms`,
+  traffic: (v) => `${v.toFixed(0)}%`,
+  errors: (v) => `${v.toFixed(1)}%`,
   saturation: (v) => `${v.toFixed(0)}%`,
 };
 
@@ -31,9 +31,9 @@ function DependencyNode({ id, data }: NodeProps<DependencyNodeData>) {
   const color = heatmapColor(data.heatmapValue, data.heatmapMetric as HeatmapMetric);
   const borderColor = data.isSelected ? '#3b82f6' : data.isSearchMatch ? '#f59e0b' : color;
 
-  const isRed    = color === '#ef4444';
+  const isRed = color === '#ef4444';
   const isOrange = color === '#f97316';
-  const isAlert  = isRed || isOrange;
+  const isAlert = isRed || isOrange;
 
   const getIcon = () => {
     if (data.type === 'database') return '🛢️';
@@ -61,8 +61,8 @@ function DependencyNode({ id, data }: NodeProps<DependencyNodeData>) {
   const glow = isRed
     ? `0 0 10px ${color}, 0 0 22px ${color}55`
     : isOrange
-    ? `0 0 8px ${color}99`
-    : undefined;
+      ? `0 0 8px ${color}99`
+      : undefined;
 
   return (
     <div

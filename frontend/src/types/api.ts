@@ -68,6 +68,7 @@ export interface ServiceMetric {
 }
 
 export interface MonitoringDashboard {
+  dataset_available?: boolean;
   executive: ExecutiveMetrics;
   service: { services: ServiceMetric[] };
   technical: {
@@ -114,4 +115,13 @@ export type HeatmapMetric =
   | 'latency'
   | 'traffic'
   | 'errors'
-  | 'saturation';
+  | 'saturation'
+  | 'cpu'
+  | 'memory'
+  | 'storage'
+  | 'io'
+  | 'network'
+  | 'error_rate'
+  | 'incident_count'
+  | 'risk_score';
+

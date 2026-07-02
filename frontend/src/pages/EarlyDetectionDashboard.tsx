@@ -262,8 +262,8 @@ function isServiceId(id: string, serviceRisksList?: ServiceRisk[]): boolean {
     return true;
   }
   const known = [
-    'frontend', 'payment-service', 'ad-service', 'email-service', 'cart-service', 
-    'shipping-service', 'recommendation-service', 'product-catalog-service', 
+    'frontend', 'payment-service', 'ad-service', 'email-service', 'cart-service',
+    'shipping-service', 'recommendation-service', 'product-catalog-service',
     'currency-service', 'checkout-service', 'payment-authorization', 'settlement-processing',
     'api-gateway-services', 'account-service', 'user-service', 'auth-service'
   ].map(s => s.toLowerCase().replace(/[\s-_]+/g, ''));

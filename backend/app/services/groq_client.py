@@ -61,6 +61,29 @@ except ImportError:
     _USE_HTTPX = False
 
 
+def _env(key: str, default: str) -> str:
+    return os.environ.get(key, default)
+
+
+GROQ_BASE_URL = _env("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+PRIMARY_MODEL   = _env("PRIMARY_MODEL",   "llama-3.3-70b-versatile")
+SECONDARY_MODEL = _env("SECONDARY_MODEL", "llama-3.3-70b-versatile")
+FAST_MODEL      = _env("FAST_MODEL",      "llama-3.3-70b-versatile")
+FALLBACK_MODEL  = _env("FALLBACK_MODEL",  "llama-3.3-70b-versatile")
+
+
+def _resolve_groq_base_urls() -> list[str]:
+    env_url = os.environ.get("GROQ_BASE_URL", "").strip().rstrip("/")
+    urls = []
+    if env_url:
+        urls.append(env_url)
+    urls.extend([
+        "https://api.groq.com/openai/v1",
+        "https://api.groq.com/v1",
+    ])
+    return list(dict.fromkeys(urls))
+
+
 def select_model(page_type: str, message_count: int) -> str:
     """Kept for API compatibility — routing always resolves to the local model."""
     return "local"

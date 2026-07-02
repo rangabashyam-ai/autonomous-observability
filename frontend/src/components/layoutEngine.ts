@@ -2,7 +2,7 @@ import type { Node, Edge } from 'reactflow';
 import type { DependencyGraph, ViewType } from '../types/api';
 import * as dagre from 'dagre';
 
-export type LayoutNode = 
+export type LayoutNode =
   | { type: 'leaf'; id: string; nodeData?: any }
   | { type: 'group'; spec: HierarchicalGroupSpec };
 
@@ -22,30 +22,30 @@ const GRP_GAP_Y = 38;
 const GRP_MAX_COLS = 3;
 
 export const GROUP_PALETTE = [
-  { bg: 'rgba(59,130,246,0.09)',  border: '#3b82f6', text: '#60a5fa' },
+  { bg: 'rgba(59,130,246,0.09)', border: '#3b82f6', text: '#60a5fa' },
   { bg: 'rgba(139,92,246,0.09)', border: '#8b5cf6', text: '#a78bfa' },
   { bg: 'rgba(245,158,11,0.09)', border: '#f59e0b', text: '#fbbf24' },
-  { bg: 'rgba(34,197,94,0.08)',  border: '#22c55e', text: '#4ade80' },
-  { bg: 'rgba(239,68,68,0.08)',  border: '#ef4444', text: '#f87171' },
+  { bg: 'rgba(34,197,94,0.08)', border: '#22c55e', text: '#4ade80' },
+  { bg: 'rgba(239,68,68,0.08)', border: '#ef4444', text: '#f87171' },
   { bg: 'rgba(168,85,247,0.09)', border: '#a855f7', text: '#c084fc' },
 ];
 
 export const PLATFORM_PALETTE: Record<string, typeof GROUP_PALETTE[0]> = {
-  aws:    { bg: 'rgba(245,158,11,0.12)',  border: '#f59e0b', text: '#fbbf24' },
-  gcp:   { bg: 'rgba(34,197,94,0.12)',   border: '#22c55e', text: '#4ade80' },
-  azure: { bg: 'rgba(99,102,241,0.12)',  border: '#6366f1', text: '#818cf8' },
-  'on-prem-vmware':{ bg: 'rgba(59,130,246,0.12)',  border: '#3b82f6', text: '#60a5fa' },
-  'on-prem-physical':{ bg: 'rgba(168,85,247,0.12)',  border: '#a855f7', text: '#c084fc' },
+  aws: { bg: 'rgba(245,158,11,0.12)', border: '#f59e0b', text: '#fbbf24' },
+  gcp: { bg: 'rgba(34,197,94,0.12)', border: '#22c55e', text: '#4ade80' },
+  azure: { bg: 'rgba(99,102,241,0.12)', border: '#6366f1', text: '#818cf8' },
+  'on-prem-vmware': { bg: 'rgba(59,130,246,0.12)', border: '#3b82f6', text: '#60a5fa' },
+  'on-prem-physical': { bg: 'rgba(168,85,247,0.12)', border: '#a855f7', text: '#c084fc' },
 };
 
 const FUNCTIONAL_CATEGORY_MAP: Record<string, 'compute' | 'storage' | 'network'> = {
-  server:       'compute',
-  container:    'compute',
-  database:     'storage',
-  cache:        'storage',
-  load_balancer:'network',
-  gateway:      'network',
-  web_server:   'network',
+  server: 'compute',
+  container: 'compute',
+  database: 'storage',
+  cache: 'storage',
+  load_balancer: 'network',
+  gateway: 'network',
+  web_server: 'network',
 };
 
 const CATEGORY_META: Record<string, { label: string; palette: typeof GROUP_PALETTE[0] }> = {
@@ -80,12 +80,20 @@ function getUpstreamAppOrBs(nodeId: string, graph: DependencyGraph): string | nu
   return null;
 }
 
+export function getUpstreamBsFromApp(appId: string, graph: DependencyGraph): string | null {
+  let parent = graph.edges.find(e => e.target === appId && e.relationship === 'contains')?.source;
+  if (!parent) return null;
+  const pNode = graph.nodes.find(n => n.id === parent);
+  if (pNode?.layer === 'business_service') return pNode.id;
+  return null;
+}
+
 export function buildHierarchicalSpecs(graph: DependencyGraph, selectedViews: Set<ViewType>): LayoutNode[] {
   const views = Array.from(selectedViews);
   const platformIds = PLATFORM_VIEWS.map(p => p.id);
   const activePlatforms = views.filter(v => platformIds.includes(v as any));
   const hasPlatformView = activePlatforms.length > 0;
-  
+
   const hasBS = views.includes('business_service');
   const hasMS = views.includes('microservice');
 
@@ -96,7 +104,7 @@ export function buildHierarchicalSpecs(graph: DependencyGraph, selectedViews: Se
   const buildMSBoxes = (msNodes: any[]) => {
     const msGroups = new Map<string, LayoutNode[]>();
     const strayMs: LayoutNode[] = [];
-    
+
     msNodes.forEach(ms => {
       const parentId = getUpstreamAppOrBs(ms.id, graph);
       if (parentId) {
@@ -123,7 +131,7 @@ export function buildHierarchicalSpecs(graph: DependencyGraph, selectedViews: Se
       });
       cIdx++;
     });
-    
+
     // Wrap all ungrouped microservices in a single "Microservices" box
     if (strayMs.length > 0) {
       boxes.push({
@@ -274,14 +282,14 @@ function layoutNode(node: LayoutNode): ComputedLayoutNode {
 
   // Layout group children
   const computedChildren = node.spec.children.map(c => layoutNode(c));
-  
+
   // Arrange children in a grid
   // Simple square-ish grid
   const cols = Math.max(1, Math.min(GRP_MAX_COLS, Math.ceil(Math.sqrt(computedChildren.length))));
   let currentX = GRP_PAD;
   let currentY = GRP_HEADER + GRP_PAD;
   let rowMaxHeight = 0;
-  
+
   let totalWidth = 0;
   let totalHeight = 0;
 
@@ -291,13 +299,13 @@ function layoutNode(node: LayoutNode): ComputedLayoutNode {
       currentY += rowMaxHeight + GRP_GAP_Y;
       rowMaxHeight = 0;
     }
-    
+
     child.x = currentX;
     child.y = currentY;
-    
+
     currentX += child.width + GRP_GAP_X;
     rowMaxHeight = Math.max(rowMaxHeight, child.height);
-    
+
     totalWidth = Math.max(totalWidth, currentX - GRP_GAP_X + GRP_PAD);
     totalHeight = Math.max(totalHeight, currentY + rowMaxHeight + GRP_PAD);
   });
@@ -328,7 +336,7 @@ export function flattenComputedLayout(
       if (!gNode) return false;
       const isDimmed = isHighlighting && !highlightIds.has(gNode.id);
       hasHighlightedChild = !isDimmed;
-      
+
       rfNodes.push({
         id: gNode.id,
         type: 'dependency',
@@ -351,12 +359,16 @@ export function flattenComputedLayout(
     } else {
       const spec = cnode.spec;
 
+      // We need to push the group node first to preserve order, but we don't know if it's dimmed until we traverse children.
+      // So we will traverse children first into a temporary array? 
+      // Actually, React Flow doesn't care about order as long as parent nodes exist.
+      // We can push the group node, traverse children, and then update the group node!
       const groupNodeIdx = rfNodes.length;
       rfNodes.push({
         id: spec.id,
         type: 'nodeGroup',
         position: { x: computed.x, y: computed.y },
-        ...(parentId ? { parentId, extent: 'parent' } : {}),
+        ...(parentId ? { parentNode: parentId, extent: 'parent' } : {}),
         style: {
           width: computed.width,
           height: computed.height,

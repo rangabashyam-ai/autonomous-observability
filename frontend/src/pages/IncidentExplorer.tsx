@@ -788,10 +788,9 @@ function TelemetryPanel({ incidentId }: { incidentId: string }) {
   if (!data) return null;
 
   const tabCls = (t: typeof tab) =>
-    `px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
-      tab === t
-        ? 'bg-cyan-600 text-white'
-        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+    `px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${tab === t
+      ? 'bg-cyan-600 text-white'
+      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
     }`;
 
   return (
@@ -900,11 +899,10 @@ function TelemetryPanel({ incidentId }: { incidentId: string }) {
               {data.logs.map((log, i) => (
                 <div
                   key={i}
-                  className={`p-2 rounded-lg border text-[11px] ${
-                    log.severity === 'error'
+                  className={`p-2 rounded-lg border text-[11px] ${log.severity === 'error'
                       ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
                       : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className={`font-semibold text-[10px] ${log.severity === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
@@ -969,10 +967,10 @@ function TelemetryPanel({ incidentId }: { incidentId: string }) {
 // ---------------------------------------------------------------------------
 
 const TIER_CFG: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
-  P0: { bg: 'bg-red-100 dark:bg-red-950/40',     text: 'text-red-700 dark:text-red-300',     border: 'border-red-300 dark:border-red-700',     dot: 'bg-red-500',     label: 'Critical' },
+  P0: { bg: 'bg-red-100 dark:bg-red-950/40', text: 'text-red-700 dark:text-red-300', border: 'border-red-300 dark:border-red-700', dot: 'bg-red-500', label: 'Critical' },
   P1: { bg: 'bg-orange-100 dark:bg-orange-950/40', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', dot: 'bg-orange-500', label: 'High' },
-  P2: { bg: 'bg-amber-100 dark:bg-amber-950/40',   text: 'text-amber-700 dark:text-amber-300',   border: 'border-amber-300 dark:border-amber-700',   dot: 'bg-amber-400',   label: 'Medium' },
-  P3: { bg: 'bg-blue-100 dark:bg-blue-950/40',     text: 'text-blue-700 dark:text-blue-300',     border: 'border-blue-300 dark:border-blue-700',     dot: 'bg-blue-400',    label: 'Low' },
+  P2: { bg: 'bg-amber-100 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700', dot: 'bg-amber-400', label: 'Medium' },
+  P3: { bg: 'bg-blue-100 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-300 dark:border-blue-700', dot: 'bg-blue-400', label: 'Low' },
 };
 
 const WINDOWS_ORDERED = ['5m', '30m', '1h', '2h', '6h', '24h', '72h'];
@@ -1204,8 +1202,8 @@ function SloBurnPanel({ incidentId }: { incidentId: string }) {
 const CAT_CFG = {
   diagnose: { label: 'Diagnose', bg: 'bg-blue-100 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800' },
   mitigate: { label: 'Mitigate', bg: 'bg-amber-100 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800' },
-  verify:   { label: 'Verify',   bg: 'bg-green-100 dark:bg-green-950/40', text: 'text-green-700 dark:text-green-400', border: 'border-green-200 dark:border-green-800' },
-  resolve:  { label: 'Resolve',  bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+  verify: { label: 'Verify', bg: 'bg-green-100 dark:bg-green-950/40', text: 'text-green-700 dark:text-green-400', border: 'border-green-200 dark:border-green-800' },
+  resolve: { label: 'Resolve', bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
 } as const;
 
 const CONF_CLS = {
@@ -1376,16 +1374,14 @@ function RunbookPanel({ incidentId }: { incidentId: string }) {
                 <div
                   key={step.id}
                   onClick={() => toggle(step.id)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all select-none ${
-                    done
+                  className={`p-3 rounded-lg border cursor-pointer transition-all select-none ${done
                       ? 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-700 opacity-50'
                       : `${cfg.bg} ${cfg.border}`
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className={`shrink-0 mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                      done ? 'bg-emerald-500 border-emerald-500' : `${cfg.border} ${cfg.text}`
-                    }`}>
+                    <div className={`shrink-0 mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${done ? 'bg-emerald-500 border-emerald-500' : `${cfg.border} ${cfg.text}`
+                      }`}>
                       {done && (
                         <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1484,22 +1480,22 @@ const BANK_SEV_DOT: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 const ALERT_CATEGORY_LABEL: Record<string, string> = {
-  CPU:        'High CPU usage',
-  MEM:        'High memory usage',
-  DISK_IO:    'High disk I/O read usage',
-  DISK_SP:    'High disk space usage',
-  NET_LAT:    'Network latency',
-  NET_PKT:    'Network packet loss',
-  JVM_OOM:    'JVM Out of Memory (OOM) Heap',
-  JVM_CPU:    'High JVM CPU load',
-  APP_ERR:    'Low application success rate',
-  APP_LAT:    'High application response latency',
+  CPU: 'High CPU usage',
+  MEM: 'High memory usage',
+  DISK_IO: 'High disk I/O read usage',
+  DISK_SP: 'High disk space usage',
+  NET_LAT: 'Network latency',
+  NET_PKT: 'Network packet loss',
+  JVM_OOM: 'JVM Out of Memory (OOM) Heap',
+  JVM_CPU: 'High JVM CPU load',
+  APP_ERR: 'Low application success rate',
+  APP_LAT: 'High application response latency',
   TRACE_SLOW: 'Slow distributed trace span',
 };
 
 function parseAlertRule(rule: string): { component: string; catKey: string; label: string } {
   const parts = rule.split('-');
-  const catKey   = (parts[parts.length - 1] ?? '').toUpperCase();
+  const catKey = (parts[parts.length - 1] ?? '').toUpperCase();
   const component = parts.slice(1, -1).join('-');
   return { component, catKey, label: ALERT_CATEGORY_LABEL[catKey] ?? catKey };
 }
@@ -1516,8 +1512,8 @@ const ALERT_SEV_BADGE: Record<string, string> = {
 };
 const SIGNAL_TYPE_BADGE: Record<string, string> = {
   Metric: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-950/40 dark:border-blue-800',
-  Log:    'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
-  Trace:  'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
+  Log: 'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
+  Trace: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
 };
 
 function BankAlertsModal({ incident, onClose }: { incident: BankIncident; onClose: () => void }) {
@@ -1637,10 +1633,10 @@ const BANK_SEV_TEXT: Record<string, string> = {
   Informational: 'text-blue-600 dark:text-blue-400',
 };
 const BANK_SEV_BARS = [
-  { key: 'High',          dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400'       },
-  { key: 'Medium',        dot: 'bg-orange-400', text: 'text-orange-700 dark:text-orange-400'  },
-  { key: 'Low',           dot: 'bg-yellow-400', text: 'text-yellow-700 dark:text-yellow-500'  },
-  { key: 'Informational', dot: 'bg-blue-400',   text: 'text-blue-700 dark:text-blue-400'      },
+  { key: 'High', dot: 'bg-red-500', text: 'text-red-700 dark:text-red-400' },
+  { key: 'Medium', dot: 'bg-orange-400', text: 'text-orange-700 dark:text-orange-400' },
+  { key: 'Low', dot: 'bg-yellow-400', text: 'text-yellow-700 dark:text-yellow-500' },
+  { key: 'Informational', dot: 'bg-blue-400', text: 'text-blue-700 dark:text-blue-400' },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -1648,14 +1644,14 @@ const BANK_SEV_BARS = [
 // ---------------------------------------------------------------------------
 
 const REASON_COLOR: Record<string, { bg: string; text: string; border: string; badge: string }> = {
-  'high CPU usage':               { bg: 'bg-red-50 dark:bg-red-950/20',     text: 'text-red-700 dark:text-red-400',     border: 'border-red-200 dark:border-red-800',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'     },
-  'high memory usage':            { bg: 'bg-orange-50 dark:bg-orange-950/20', text: 'text-orange-700 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-  'high disk I/O read usage':     { bg: 'bg-amber-50 dark:bg-amber-950/20',  text: 'text-amber-700 dark:text-amber-400',  border: 'border-amber-200 dark:border-amber-800',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'  },
-  'high disk space usage':        { bg: 'bg-amber-50 dark:bg-amber-950/20',  text: 'text-amber-700 dark:text-amber-400',  border: 'border-amber-200 dark:border-amber-800',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'  },
-  'network packet loss':          { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
-  'network latency':              { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
-  'high JVM CPU load':            { bg: 'bg-blue-50 dark:bg-blue-950/20',    text: 'text-blue-700 dark:text-blue-400',    border: 'border-blue-200 dark:border-blue-800',    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'    },
-  'JVM Out of Memory (OOM) Heap': { bg: 'bg-red-50 dark:bg-red-950/20',     text: 'text-red-700 dark:text-red-400',     border: 'border-red-200 dark:border-red-800',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'     },
+  'high CPU usage': { bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-400', border: 'border-red-200 dark:border-red-800', badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  'high memory usage': { bg: 'bg-orange-50 dark:bg-orange-950/20', text: 'text-orange-700 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+  'high disk I/O read usage': { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+  'high disk space usage': { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+  'network packet loss': { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
+  'network latency': { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
+  'high JVM CPU load': { bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+  'JVM Out of Memory (OOM) Heap': { bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-400', border: 'border-red-200 dark:border-red-800', badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
 };
 const DEFAULT_REASON_COLOR = { bg: 'bg-slate-50 dark:bg-slate-800/50', text: 'text-slate-700 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' };
 
@@ -1697,9 +1693,9 @@ function isRawDump(text: string): boolean {
 function ZBadge({ z }: { z: string }) {
   const v = parseFloat(z);
   const cls = Math.abs(v) >= 10 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-            : Math.abs(v) >= 5  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
-            : Math.abs(v) >= 3  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-            : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+    : Math.abs(v) >= 5 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+      : Math.abs(v) >= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
   return (
     <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold ${cls}`}>
       z={z}
@@ -1736,7 +1732,7 @@ export function BankRCAPanel({ timeWindow }: { timeWindow: { start: string; end:
 
   const runRCA = () => {
     const t_start = Math.floor(new Date(timeWindow.start).getTime() / 1000);
-    const t_end   = Math.floor(new Date(timeWindow.end).getTime()   / 1000);
+    const t_end = Math.floor(new Date(timeWindow.end).getTime() / 1000);
     setStatus('loading');
     setResults([]);
     setErrorMsg('');
@@ -1947,7 +1943,7 @@ function buildBankIncidentContext(inc: BankIncident): string {
   return lines.join('\n');
 }
 
-function buildTelemetryContext(tel: Record<string, any>): string {
+export function buildTelemetryContext(tel: Record<string, any>): string {
   if (!tel || Object.keys(tel).length === 0) return '';
   const lines: string[] = ['', '=== TELEMETRY (live parquet scan) ==='];
 
@@ -2036,7 +2032,7 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
   useEffect(() => {
     // Fetch live telemetry for this incident's time window
     const tStart = Math.floor(new Date(incident.timeWindow.start).getTime() / 1000);
-    const tEnd   = Math.floor(new Date(incident.timeWindow.end).getTime()   / 1000);
+    const tEnd = Math.floor(new Date(incident.timeWindow.end).getTime() / 1000);
     setTelLoading(true);
     fetchIncidentTelemetry(tStart, tEnd, incident.entities)
       .then((data) => { setTelemetry(data); setTelLoading(false); })
@@ -2161,10 +2157,10 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
 
             {/* AI Assistant */}
             <ReportChat
-              reportContext={buildBankIncidentContext(incident)}
+              reportContext={buildBankIncidentContext(incident) + buildTelemetryContext(telemetry)}
               reportType="bank_incident"
               incidentId={incident.incidentId}
-              subtitle="Metrics · Logs · Traces · Incidents"
+              subtitle={telLoading ? "Syncing telemetry..." : "Metrics · Logs · Traces · Incidents"}
               entityName={`Incident ${incident.incidentId}`}
               suggestedQuestions={[
                 'Summarize this incident',
@@ -2232,7 +2228,7 @@ export function BankSentinelView() {
     });
   }, [bankIncidents, filterSev, filterStatus, bankSearch]);
 
-  const newCount    = bankIncidents.filter((i) => i.status === 'New').length;
+  const newCount = bankIncidents.filter((i) => i.status === 'New').length;
   const activeCount = bankIncidents.filter((i) => i.status === 'Active').length;
 
   if (bankLoading) {
@@ -2244,8 +2240,8 @@ export function BankSentinelView() {
       {/* Header stats — matches StatCard style used across the app */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="Open incidents" value={bankIncidents.length} />
-        <StatCard label="New"            value={newCount} />
-        <StatCard label="Active"         value={activeCount} alert={activeCount > 0} />
+        <StatCard label="New" value={newCount} />
+        <StatCard label="Active" value={activeCount} alert={activeCount > 0} />
       </div>
 
       {/* Severity filter pills */}
@@ -2254,11 +2250,10 @@ export function BankSentinelView() {
           <button
             key={key}
             onClick={() => setFilterSev(filterSev === key ? 'All' : key)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-              filterSev === key
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${filterSev === key
                 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 shadow-sm'
                 : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-            }`}
+              }`}
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
             <span className={text}>{key}</span>
@@ -2269,7 +2264,7 @@ export function BankSentinelView() {
 
       {/* Filter bar — uses shared inputClass */}
       <div className="flex items-center gap-2 flex-wrap">
-        <select value={filterSev}    onChange={(e) => setFilterSev(e.target.value)}    className={inputClass}>
+        <select value={filterSev} onChange={(e) => setFilterSev(e.target.value)} className={inputClass}>
           <option value="All">Severity: All</option>
           {BANK_SEV_BARS.map(({ key }) => <option key={key} value={key}>{key}</option>)}
         </select>
@@ -2315,11 +2310,10 @@ export function BankSentinelView() {
                 <tr
                   key={inc.incidentId}
                   onClick={() => setSelectedInc(selectedInc?.incidentId === inc.incidentId ? null : inc)}
-                  className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer transition-colors ${
-                    selectedInc?.incidentId === inc.incidentId
+                  className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer transition-colors ${selectedInc?.incidentId === inc.incidentId
                       ? 'bg-blue-50 dark:bg-blue-950/30'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                  }`}
+                    }`}
                 >
                   <td className="px-3 py-2.5">
                     <span className={`inline-block w-2.5 h-2.5 rounded-full ${BANK_SEV_DOT[inc.severity] ?? 'bg-slate-400'}`} title={inc.severity} />
@@ -2602,7 +2596,7 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
 
           {/* Chat */}
           <ReportChat
-            reportContext={buildIncidentContext(incident, analysis ?? {}, changeRequests)}
+            reportContext={buildIncidentContext(incident, analysis ?? ({} as IncidentClickAnalysis), changeRequests)}
             reportType={analysis?.type ?? 'incident'}
             incidentId={incident.incident_id}
             subtitle="Metrics · Logs · Traces · Incidents"
@@ -2786,146 +2780,146 @@ export default function IncidentExplorer() {
 
       {false && <>
 
-      {/* Search / filter bar */}
-      <div className="flex gap-4 mb-4">
-        <input
-          placeholder="Search incidents..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearchClick()}
-          className={`flex-1 ${inputClass}`}
-        />
-        <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={inputClass}>
-          <option value="">All severities</option>
-          {['P1', 'P2', 'P3', 'P4'].map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <button onClick={handleSearchClick} className={btnPrimary}>Search</button>
-      </div>
-
-      {/* Results summary */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            Showing <span className="font-semibold text-slate-900 dark:text-white">{incidents.length}</span> of{' '}
-            <span className="font-semibold text-slate-900 dark:text-white">{total}</span> incidents
-            {totalPages > 1 && (
-              <span className="ml-2 text-slate-400">(page {currentPage} of {totalPages})</span>
-            )}
-          </p>
-          {isActiveFilter && (
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-[10px] font-semibold font-mono">
-                Filtered to Active
-              </span>
-              <button
-                onClick={() => navigate('/incidents')}
-                className="text-[10px] text-blue-500 hover:underline font-semibold"
-              >
-                Show All
-              </button>
-            </div>
-          )}
+        {/* Search / filter bar */}
+        <div className="flex gap-4 mb-4">
+          <input
+            placeholder="Search incidents..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearchClick()}
+            className={`flex-1 ${inputClass}`}
+          />
+          <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={inputClass}>
+            <option value="">All severities</option>
+            {['P1', 'P2', 'P3', 'P4'].map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={handleSearchClick} className={btnPrimary}>Search</button>
         </div>
 
-        {hasMore && !loading && (
-          <button
-            onClick={() => load(false)}
-            disabled={loadingMore}
-            className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
-          >
-            {loadingMore ? 'Loading...' : `Load next ${Math.min(PAGE_SIZE, total - incidents.length)}`}
-          </button>
-        )}
-      </div>
+        {/* Results summary */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Showing <span className="font-semibold text-slate-900 dark:text-white">{incidents.length}</span> of{' '}
+              <span className="font-semibold text-slate-900 dark:text-white">{total}</span> incidents
+              {totalPages > 1 && (
+                <span className="ml-2 text-slate-400">(page {currentPage} of {totalPages})</span>
+              )}
+            </p>
+            {isActiveFilter && (
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-[10px] font-semibold font-mono">
+                  Filtered to Active
+                </span>
+                <button
+                  onClick={() => navigate('/incidents')}
+                  className="text-[10px] text-blue-500 hover:underline font-semibold"
+                >
+                  Show All
+                </button>
+              </div>
+            )}
+          </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-              <th className="pb-2 pr-3 w-28">ID</th>
-              <th className="pb-2 pr-3">Title</th>
-              <th className="pb-2 pr-3 w-20">Severity</th>
-              <th className="pb-2 pr-3 w-28">Status</th>
-              <th className="pb-2 w-20">Fix</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={5} className="py-8 text-center text-slate-500">Loading…</td></tr>
-            ) : incidents.length === 0 ? (
-              <tr><td colSpan={5} className="py-8 text-center text-slate-500">No incidents found</td></tr>
-            ) : incidents.map((inc) => (
-              <tr
-                key={inc.incident_id}
-                onClick={() => handleRowClick(inc)}
-                className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
-              >
-                <td className="py-2.5 pr-3 font-mono text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">{inc.incident_id}</td>
-                <td className="py-2.5 pr-3 max-w-[480px]">
-                  <div className="text-xs text-slate-900 dark:text-white leading-snug line-clamp-2" title={inc.details || inc.title}>
-                    {inc.details || inc.title}
-                  </div>
-                </td>
-                <td className="py-2.5 pr-3">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${severityClass(inc.severity)}`}>{inc.severity}</span>
-                </td>
-                <td className="py-2.5 pr-3"><StateBadge state={inc.state} /></td>
-                <td className="py-2.5 text-xs">
-                  {isResolved(inc.state)
-                    ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">Resolved</span>
-                    : <span className="text-slate-400 dark:text-slate-500 italic">{inc.fix || 'Pending'}</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Bottom load-more / all-loaded footer */}
-      {!loading && incidents.length > 0 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {incidents.length} of {total} incidents loaded
-          </p>
-          {hasMore ? (
+          {hasMore && !loading && (
             <button
               onClick={() => load(false)}
               disabled={loadingMore}
-              className="flex items-center gap-2 text-sm px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-900 dark:text-white font-medium rounded-lg transition-colors"
+              className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
             >
-              {loadingMore ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                `Load More (${total - incidents.length} remaining)`
-              )}
+              {loadingMore ? 'Loading...' : `Load next ${Math.min(PAGE_SIZE, total - incidents.length)}`}
             </button>
-          ) : total > PAGE_SIZE ? (
-            <p className="text-xs text-green-600 dark:text-green-400 font-medium">✓ All incidents loaded</p>
-          ) : null}
+          )}
         </div>
-      )}
 
-      {/* Incident detail popup */}
-      {selected && (
-        <IncidentPopup
-          incident={selected!}
-          analysis={analysis}
-          analysisLoading={analysisLoading}
-          analysisError={analysisError}
-          changeRequests={changeRequests}
-          onClose={handleClose}
-          onResolved={(updated) => {
-            setSelected(updated);
-            setIncidents((prev) =>
-              prev.map((inc) => (inc.incident_id === updated.incident_id ? updated : inc))
-            );
-          }}
-        />
-      )}
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                <th className="pb-2 pr-3 w-28">ID</th>
+                <th className="pb-2 pr-3">Title</th>
+                <th className="pb-2 pr-3 w-20">Severity</th>
+                <th className="pb-2 pr-3 w-28">Status</th>
+                <th className="pb-2 w-20">Fix</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={5} className="py-8 text-center text-slate-500">Loading…</td></tr>
+              ) : incidents.length === 0 ? (
+                <tr><td colSpan={5} className="py-8 text-center text-slate-500">No incidents found</td></tr>
+              ) : incidents.map((inc) => (
+                <tr
+                  key={inc.incident_id}
+                  onClick={() => handleRowClick(inc)}
+                  className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
+                >
+                  <td className="py-2.5 pr-3 font-mono text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">{inc.incident_id}</td>
+                  <td className="py-2.5 pr-3 max-w-[480px]">
+                    <div className="text-xs text-slate-900 dark:text-white leading-snug line-clamp-2" title={inc.details || inc.title}>
+                      {inc.details || inc.title}
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${severityClass(inc.severity)}`}>{inc.severity}</span>
+                  </td>
+                  <td className="py-2.5 pr-3"><StateBadge state={inc.state} /></td>
+                  <td className="py-2.5 text-xs">
+                    {isResolved(inc.state)
+                      ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">Resolved</span>
+                      : <span className="text-slate-400 dark:text-slate-500 italic">{inc.fix || 'Pending'}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom load-more / all-loaded footer */}
+        {!loading && incidents.length > 0 && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {incidents.length} of {total} incidents loaded
+            </p>
+            {hasMore ? (
+              <button
+                onClick={() => load(false)}
+                disabled={loadingMore}
+                className="flex items-center gap-2 text-sm px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-900 dark:text-white font-medium rounded-lg transition-colors"
+              >
+                {loadingMore ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  `Load More (${total - incidents.length} remaining)`
+                )}
+              </button>
+            ) : total > PAGE_SIZE ? (
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">✓ All incidents loaded</p>
+            ) : null}
+          </div>
+        )}
+
+        {/* Incident detail popup */}
+        {selected && (
+          <IncidentPopup
+            incident={selected!}
+            analysis={analysis}
+            analysisLoading={analysisLoading}
+            analysisError={analysisError}
+            changeRequests={changeRequests}
+            onClose={handleClose}
+            onResolved={(updated) => {
+              setSelected(updated);
+              setIncidents((prev) =>
+                prev.map((inc) => (inc.incident_id === updated.incident_id ? updated : inc))
+              );
+            }}
+          />
+        )}
       </>}
     </div>
   );
