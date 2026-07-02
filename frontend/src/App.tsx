@@ -15,6 +15,7 @@ import ServiceDetailPage from './pages/ServiceDetailPage';
 import CloudIntegrationsPage from './pages/CloudIntegrationsPage';
 import SettingsPage from './pages/SettingsPage';
 import OpsConfigurationPage from './pages/OpsConfigurationPage';
+import DistributedTracesPage from './pages/DistributedTracesPage';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           {/* Legacy redirects */}
           <Route path="monitoring" element={<Navigate to="/operations" replace />} />
           <Route path="dependencies" element={<DependencyMapPage />} />
+          <Route path="traces" element={<DistributedTracesPage />} />
           <Route path="incidents" element={<IncidentExplorer />} />
           <Route path="rca" element={<RCADashboard />} />
           <Route path="blast-radius" element={<BlastRadiusDashboard />} />

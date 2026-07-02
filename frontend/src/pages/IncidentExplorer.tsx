@@ -36,6 +36,11 @@ function isResolved(state?: string) {
   return state === 'Resolved' || state === 'Closed';
 }
 
+function safeReplaceT(str?: string | null): string {
+  if (!str) return '—';
+  return String(str).replace('T', ' ');
+}
+
 // ---------------------------------------------------------------------------
 // Metric pill
 // ---------------------------------------------------------------------------
@@ -1616,7 +1621,7 @@ function BankAlertsModal({ incident, onClose }: { incident: BankIncident; onClos
                         </span>
                       </td>
                       <td className="px-4 py-2 font-mono text-text-secondary whitespace-nowrap">
-                        {a.firedAt.replace('T', ' ')}
+                        {safeReplaceT(a.firedAt)}
                       </td>
                     </tr>
                   );
@@ -1855,7 +1860,7 @@ export function BankRCAPanel({ timeWindow }: { timeWindow: { start: string; end:
             {/* Modal footer */}
             <div className="shrink-0 px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                Investigation window: {timeWindow.start.replace('T', ' ')} — {timeWindow.end.replace('T', ' ')}
+                Investigation window: {safeReplaceT(timeWindow?.start)} — {safeReplaceT(timeWindow?.end)}
               </span>
               <button
                 onClick={() => setShowModal(false)}
@@ -1927,15 +1932,16 @@ function buildBankIncidentContext(inc: BankIncident): string {
     `TITLE: ${inc.title}`,
     `SEVERITY: ${inc.severity}`,
     `STATUS: ${inc.status}`,
-    `INVESTIGATION_WINDOW: ${inc.timeWindow.start.replace('T', ' ')} — ${inc.timeWindow.end.replace('T', ' ')}`,
+    `INVESTIGATION_WINDOW: ${safeReplaceT(inc.timeWindow?.start)} — ${safeReplaceT(inc.timeWindow?.end)}`,
     `DESCRIPTION: ${inc.description}`,
-    `ENTITIES: ${inc.entities.join(', ') || 'none'}`,
-    `TACTICS: ${inc.tactics.join(', ') || 'none'}`,
-    `ALERT_COUNT: ${inc.alerts.count}`,
+    `ENTITIES: ${(inc.entities ?? []).join(', ') || 'none'}`,
+    `TACTICS: ${(inc.tactics ?? []).join(', ') || 'none'}`,
+    `ALERT_COUNT: ${inc.alerts?.count ?? 0}`,
   ];
-  if (inc.alerts.items.length > 0) {
+  const alertItems = inc.alerts?.items ?? [];
+  if (alertItems.length > 0) {
     lines.push('ALERT_SAMPLES:');
-    const top = inc.alerts.items
+    const top = alertItems
       .slice()
       .sort((a, b) => (a.severity < b.severity ? -1 : 1))
       .slice(0, 10);
@@ -2098,11 +2104,11 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Created</p>
-              <p className="font-mono text-slate-700 dark:text-slate-300">{incident.createdTime.replace('T', ' ')}</p>
+              <p className="font-mono text-slate-700 dark:text-slate-300">{safeReplaceT(incident.createdTime)}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Last update</p>
-              <p className="font-mono text-slate-700 dark:text-slate-300">{incident.lastUpdateTime.replace('T', ' ')}</p>
+              <p className="font-mono text-slate-700 dark:text-slate-300">{safeReplaceT(incident.lastUpdateTime)}</p>
             </div>
           </div>
 
@@ -2110,7 +2116,7 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
           <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Investigation window</p>
             <p className="font-mono text-slate-700 dark:text-slate-300">
-              {incident.timeWindow.start.replace('T', ' ')} — {incident.timeWindow.end.replace('T', ' ')}
+              {safeReplaceT(incident.timeWindow?.start)} — {safeReplaceT(incident.timeWindow?.end)}
             </p>
           </div>
 
@@ -2332,7 +2338,7 @@ export function BankSentinelView() {
                   </td>
                   <td className="px-3 py-2.5 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{inc.alerts.count}</td>
                   <td className="px-3 py-2.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                    {inc.createdTime.replace('T', ' ')}
+                    {safeReplaceT(inc.createdTime)}
                   </td>
                 </tr>
               ))}
