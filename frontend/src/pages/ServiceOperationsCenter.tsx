@@ -46,6 +46,13 @@ export default function ServiceOperationsCenter() {
 
   const [drawer, setDrawer] = useState<OpsDrawer | null>(null);
   const [opsEntity, setOpsEntity] = useState<OpsEntity | null>(null);
+  const [visibleIncidentsCount, setVisibleIncidentsCount] = useState(20);
+
+  useEffect(() => {
+    if (drawer?.kind === 'incidents-list') {
+      setVisibleIncidentsCount(20);
+    }
+  }, [drawer?.kind]);
 
   const {
     entities: opsEntities,
@@ -591,7 +598,7 @@ export default function ServiceOperationsCenter() {
               <button type="button" onClick={() => setDrawer({ kind: 'incidents-list' })} className="text-xs text-primary hover:underline">All →</button>
             </CardHeader>
             <div className="space-y-2">
-              {overview.recent_incidents.slice(0, exec?.active_incidents || 2).map((inc) => (
+              {overview.recent_incidents.slice(0, 5).map((inc) => (
                 <button
                   key={inc.incident_id}
                   type="button"
@@ -826,20 +833,31 @@ export default function ServiceOperationsCenter() {
             {overview.recent_incidents.length === 0 ? (
               <p className="text-sm text-text-secondary">No active incidents</p>
             ) : (
-              overview.recent_incidents.map((inc) => (
-                <button
-                  key={inc.incident_id}
-                  type="button"
-                  onClick={() => openIncident(inc)}
-                  className="w-full text-left p-3 rounded-lg border border-border hover:bg-card-hover transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>{inc.severity}</Badge>
-                    <span className="text-xs text-text-secondary">{inc.service}</span>
-                  </div>
-                  <p className="text-sm text-text-primary">{inc.title}</p>
-                </button>
-              ))
+              <>
+                {overview.recent_incidents.slice(0, visibleIncidentsCount).map((inc) => (
+                  <button
+                    key={inc.incident_id}
+                    type="button"
+                    onClick={() => openIncident(inc)}
+                    className="w-full text-left p-3 rounded-lg border border-border hover:bg-card-hover transition-colors"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>{inc.severity}</Badge>
+                      <span className="text-xs text-text-secondary">{inc.service}</span>
+                    </div>
+                    <p className="text-sm text-text-primary">{inc.title}</p>
+                  </button>
+                ))}
+                {overview.recent_incidents.length > visibleIncidentsCount && (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleIncidentsCount((prev) => prev + 20)}
+                    className="w-full py-2 text-xs font-semibold text-center rounded-lg border border-border hover:bg-card-hover text-text-primary transition-colors mt-2"
+                  >
+                    Load More (+20)
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
