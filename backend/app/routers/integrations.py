@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "data"
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data"
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,11 @@ _DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "data"
 
 class AWSConnectRequest(BaseModel):
     connection_name: str
+    # Auth Mode 1: IAM Access Key (takes priority if both key and role_arn provided)
+    access_key_id: Optional[str] = None
+    secret_access_key: Optional[str] = None
+    session_token: Optional[str] = None
+    # Auth Mode 2: STS AssumeRole
     role_arn: str = ""
     region: str = "us-east-1"
     external_id: Optional[str] = None
@@ -104,6 +109,9 @@ def connect_aws(req: AWSConnectRequest, background_tasks: BackgroundTasks):
         "role_arn": req.role_arn,
         "region": req.region,
         "external_id": req.external_id or "",
+        "access_key_id": req.access_key_id or "",
+        "secret_access_key": req.secret_access_key or "",
+        "session_token": req.session_token or "",
     }
 
     ok, message = validate_credentials(config)
@@ -339,3 +347,106 @@ def delete_connection(connection_id: str, provider: str = Query(..., description
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Connection '{connection_id}' not found for provider '{provider}'")
     return {"status": "deleted", "connection_id": connection_id, "provider": provider}
+
+
+# ---------------------------------------------------------------------------
+# New telemetry endpoints — Logs, Traces, Audit Events, Config Compliance
+# ---------------------------------------------------------------------------
+
+@router.get("/logs")
+def get_integration_logs(
+    source: Optional[str] = Query(None, description="Filter by source: cloudwatch_logs|vpc_flow_logs"),
+    log_group: Optional[str] = Query(None, description="Filter by log group name"),
+    limit: int = Query(default=200, le=2000),
+):
+    """Return CloudWatch log events and VPC Flow Log events."""
+    data = _read_json(_DATA_DIR / "integrations" / "logs.json")
+    all_events: list[dict] = data.get("log_events", []) + data.get("vpc_flow_events", [])
+
+    if source:
+        all_events = [e for e in all_events if e.get("source") == source]
+    if log_group:
+        all_events = [e for e in all_events if log_group in e.get("log_group", "")]
+
+    return {
+        "events": all_events[:limit],
+        "total": len(all_events),
+        "log_groups": data.get("log_groups", []),
+        "updated_at": data.get("updated_at", ""),
+    }
+
+
+@router.get("/traces")
+def get_integration_traces(
+    has_error: Optional[bool] = Query(None, description="Filter traces with errors"),
+    has_fault: Optional[bool] = Query(None, description="Filter traces with faults"),
+    service: Optional[str] = Query(None, description="Filter by root service name"),
+    limit: int = Query(default=100, le=1000),
+):
+    """Return X-Ray distributed traces and service map."""
+    data = _read_json(_DATA_DIR / "integrations" / "traces.json")
+    traces: list[dict] = data.get("traces", [])
+
+    if has_error is not None:
+        traces = [t for t in traces if t.get("has_error") == has_error]
+    if has_fault is not None:
+        traces = [t for t in traces if t.get("has_fault") == has_fault]
+    if service:
+        traces = [t for t in traces if service.lower() in (t.get("root_service", "") or "").lower()]
+
+    return {
+        "traces": traces[:limit],
+        "total": len(traces),
+        "service_map": data.get("service_map", []),
+        "updated_at": data.get("updated_at", ""),
+    }
+
+
+@router.get("/audit-events")
+def get_audit_events(
+    severity: Optional[str] = Query(None, description="Filter by severity: critical|warning|info"),
+    event_name: Optional[str] = Query(None, description="Filter by event name (partial match)"),
+    username: Optional[str] = Query(None, description="Filter by IAM username"),
+    limit: int = Query(default=200, le=2000),
+):
+    """Return CloudTrail audit events."""
+    data = _read_json(_DATA_DIR / "integrations" / "audit_events.json")
+    events: list[dict] = data.get("events", [])
+
+    if severity:
+        events = [e for e in events if e.get("severity") == severity]
+    if event_name:
+        events = [e for e in events if event_name.lower() in e.get("event_name", "").lower()]
+    if username:
+        events = [e for e in events if username.lower() in (e.get("username", "") or "").lower()]
+
+    return {
+        "events": events[:limit],
+        "total": len(events),
+        "updated_at": data.get("updated_at", ""),
+    }
+
+
+@router.get("/config-compliance")
+def get_config_compliance(
+    compliant: Optional[bool] = Query(None, description="Filter: true=compliant only, false=non-compliant only"),
+    rule_name: Optional[str] = Query(None, description="Filter by rule name (partial match)"),
+):
+    """Return AWS Config rule compliance status."""
+    data = _read_json(_DATA_DIR / "integrations" / "config_compliance.json")
+    rules: list[dict] = data.get("rules", [])
+    non_compliant: list[dict] = data.get("non_compliant_resources", [])
+
+    if compliant is not None:
+        rules = [r for r in rules if r.get("is_compliant") == compliant]
+    if rule_name:
+        rules = [r for r in rules if rule_name.lower() in r.get("rule_name", "").lower()]
+        non_compliant = [r for r in non_compliant if rule_name.lower() in r.get("rule_name", "").lower()]
+
+    return {
+        "rules": rules,
+        "non_compliant_resources": non_compliant,
+        "total_rules": data.get("total_rules", 0),
+        "non_compliant_rule_count": data.get("non_compliant_rule_count", 0),
+        "updated_at": data.get("updated_at", ""),
+    }

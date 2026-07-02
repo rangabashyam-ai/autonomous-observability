@@ -69,14 +69,17 @@ _SENSITIVE_FIELDS = {
     "token",
     "kubeconfig",
     "ca_cert",
-    "role_arn",  # not truly secret but we encrypt for consistency
+    "role_arn",          # not truly secret but we encrypt for consistency
+    "access_key_id",     # IAM access key
+    "secret_access_key", # IAM secret key
+    "session_token",     # Optional STS session token
 }
 
 # ---------------------------------------------------------------------------
 # Storage path
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "data"
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data"
 _CONNECTIONS_FILE = _DATA_DIR / "integrations" / "connections.json"
 
 

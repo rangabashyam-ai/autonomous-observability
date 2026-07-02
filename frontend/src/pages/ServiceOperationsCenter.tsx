@@ -38,7 +38,7 @@ export default function ServiceOperationsCenter() {
     Promise.all([
       getMonitoringDashboard(),
       getOverview(),
-      getDependencyGraph('microservice', 'latency'),
+      getDependencyGraph(['microservice'], 'latency'),
     ])
       .then(([m, o, g]) => {
         setMonitoring(m);
@@ -424,9 +424,9 @@ export default function ServiceOperationsCenter() {
               <Link to="/early-detection" className="text-xs text-primary hover:underline">View all →</Link>
             </CardHeader>
             <div className="space-y-2">
-              {overview.early_detections.slice(0, 3).map((d) => (
+              {overview.early_detections.slice(0, 3).map((d, i) => (
                 <Link
-                  key={d.pattern_id}
+                  key={`${d.pattern_id}-${i}`}
                   to="/early-detection"
                   className="block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:border-primary/30 hover:shadow-sm transition-all duration-200 group"
                 >
@@ -454,9 +454,9 @@ export default function ServiceOperationsCenter() {
             {overview.early_detections.length === 0 ? (
               <p className="text-xs text-text-secondary">No predicted incidents in next 4 hours</p>
             ) : (
-              overview.early_detections.map((d) => (
+              overview.early_detections.map((d, i) => (
                 <Link
-                  key={d.pattern_id}
+                  key={`${d.pattern_id}-${i}`}
                   to="/early-detection"
                   className="block mb-3 last:mb-0 p-3 -mx-1 rounded-lg hover:bg-card-hover transition-all duration-200 group"
                 >

@@ -23,7 +23,7 @@ export default function ServiceDetailPage() {
     Promise.all([
       getMonitoringDashboard(),
       getOverview(),
-      getDependencyGraph('microservice', 'latency'),
+      getDependencyGraph(['microservice'], 'latency'),
     ])
       .then(([monitoring, ovr, graph]) => {
         setOverview(ovr);

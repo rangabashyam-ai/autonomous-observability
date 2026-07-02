@@ -1,0 +1,83 @@
+# OpenTelemetry Collector Configuration - Regional Edge
+# This collector is deployed per-region to optimize network egress.
+# It receives local traces/metrics, filters them, and exports to the central hub.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+
+  resourcedetection:
+    detectors: [env, azure]
+    timeout: 2s
+    override: false
+
+  # Egress Optimization: Tail-based sampling.
+  # We drop 90% of successful traces at the edge, and keep 100% of errors.
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 10000
+    expected_new_traces_per_sec: 100
+    policies:
+      [
+        {
+          name: errors-policy,
+          type: status_code,
+          status_code: { status_codes: [ERROR] }
+        },
+        {
+          name: randomized-policy,
+          type: probabilistic,
+          probabilistic: { sampling_percentage: 10 }
+        }
+      ]
+
+  transform:
+    metric_statements:
+      - context: metric
+        statements:
+          # Enrich metrics with region and zone if provided by azure detector
+          - set(attributes["region"], resource.attributes["cloud.region"])
+          - set(attributes["zone"], resource.attributes["cloud.availability_zone"])
+
+exporters:
+  # Export to Azure Monitor Workspaces and App Insights (Central Hub)
+  azuremonitor:
+    instrumentation_key: "${env:APPINSIGHTS_INSTRUMENTATIONKEY}"
+    endpoint: "https://dc.services.visualstudio.com/v2/track"
+
+  # We can also export to regional Data Collection Endpoints using azure datacollection
+  azuredataexplorer:
+    cluster_uri: "https://ingest-${env:REGIONAL_CLUSTER_URI}.kusto.windows.net"
+    application_id: "${env:AZURE_CLIENT_ID}"
+    application_key: "${env:AZURE_CLIENT_SECRET}"
+    tenant_id: "${env:AZURE_TENANT_ID}"
+
+extensions:
+  health_check:
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection, tail_sampling, batch]
+      exporters: [azuremonitor]
+    metrics:
+      receivers: [otlp]
+      processors: [resourcedetection, transform, batch]
+      exporters: [azuremonitor]
+    logs:
+      receivers: [otlp]
+      processors: [resourcedetection, batch]
+      exporters: [azuremonitor]

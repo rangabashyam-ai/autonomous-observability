@@ -31,17 +31,27 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 // --- Dependencies ---
 export async function getDependencyGraph(
-  view: ViewType,
+  views: ViewType[],
   heatmap: HeatmapMetric,
   focusNode?: string | null
 ): Promise<DependencyGraph> {
-  const params = new URLSearchParams({ view, heatmap });
+  const params = new URLSearchParams({ view: views.join(','), heatmap });
   if (focusNode) params.set('focus_node', focusNode);
-  return fetchJson(`${BASE}/dependencies/graph?${params}`);
+
+  try {
+    const result = await fetchJson<DependencyGraph>(`${BASE}/dependencies/graph?${params}`);
+    return result;
+  } catch (err) {
+    return { view: views.join(','), heatmap, focus_node: focusNode ?? null, nodes: [], edges: [], node_count: 0, edge_count: 0 };
+  }
 }
 
 export async function getDependencyPaths(nodeId: string): Promise<DependencyPath> {
   return fetchJson(`${BASE}/dependencies/nodes/${nodeId}/paths`);
+}
+
+export async function getNodeLogs(nodeId: string, health = "healthy"): Promise<{ logs: any[] }> {
+  return fetchJson(`${BASE}/dependencies/nodes/${nodeId}/logs?health=${health}`);
 }
 
 export async function addDependency(source: string, target: string, relationship: string) {
@@ -160,6 +170,59 @@ export async function getIncidentChangeRequests(id: string): Promise<{
   return fetchJson(`${BASE}/incidents/${id}/change-requests`);
 }
 
+export async function getIncidentSloBurn(
+  id: string,
+  sloTarget = 99.9
+): Promise<import('../types/intelligence').IncidentSloBurn> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/slo-burn?slo_target=${sloTarget}`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('SLO burn query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getIncidentRunbook(id: string): Promise<import('../types/intelligence').IncidentRunbook> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/runbook`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Runbook query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function resolveIncident(
+  id: string,
+  notes?: string
+): Promise<import('../types/intelligence').Incident> {
+  return fetchJson(`${BASE}/incidents/${id}/resolve`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resolution_notes: notes ?? '' }),
+  });
+}
+
+export async function getIncidentTelemetry(id: string): Promise<import('../types/intelligence').IncidentTelemetry> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    return await fetchJson(`${BASE}/incidents/${id}/telemetry`, { signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Telemetry query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function analyzeRCA(body: {
   alerts: string[];
   symptoms: string[];
@@ -172,6 +235,47 @@ export async function analyzeRCA(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export type RCAWindowResult = {
+  timestamp: number;
+  component: string;
+  reason: string;
+  confidence: number;
+  evidence: string[];
+  datetime_utc8: string;
+  llm_analysis: string;
+};
+
+export type RCAWindowResponse = {
+  results: RCAWindowResult[];
+  window_start: number;
+  window_end: number;
+  analysis_time_ms: number;
+};
+
+export async function analyzeRCAWindow(body: {
+  t_start: number;
+  t_end: number;
+  num_failures?: number;
+  use_traces?: boolean;
+  use_llm?: boolean;
+}): Promise<RCAWindowResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    return await fetchJson<RCAWindowResponse>(`${BASE}/rca/window`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ num_failures: 1, use_traces: false, use_llm: false, ...body }),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('RCA analysis timed out — please try again');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function analyzeRCAWithAgent(body: {
@@ -297,6 +401,49 @@ export async function uploadDataFile(category: string, file: File) {
   form.append('file', file);
   const res = await fetch(`${BASE}/admin/upload/${category}`, { method: 'POST', body: form });
   if (!res.ok) throw new Error('Upload failed');
+  return res.json();
+}
+
+export async function uploadDatasetZip(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/admin/upload-dataset`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'ZIP Upload failed');
+  }
+  return res.json();
+}
+
+export async function uploadDatasetJson(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/admin/upload-dataset-json`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.detail) throw new Error(parsed.detail);
+    } catch {}
+    throw new Error(text || 'JSON Upload failed');
+  }
+  return res.json();
+}
+
+export async function addIncident(incident: any) {
+  const res = await fetch(`${BASE}/admin/add-incident`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(incident),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.detail) throw new Error(parsed.detail);
+    } catch {}
+    throw new Error(text || 'Failed to add incident');
+  }
   return res.json();
 }
 

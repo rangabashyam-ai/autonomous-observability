@@ -13,6 +13,7 @@ import InvestigationWorkflow from './pages/InvestigationWorkflow';
 import DataAdminPage from './pages/DataAdminPage';
 import ServiceDetailPage from './pages/ServiceDetailPage';
 import CloudIntegrationsPage from './pages/CloudIntegrationsPage';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="investigation" element={<InvestigationWorkflow />} />
           <Route path="admin" element={<DataAdminPage />} />
           <Route path="integrations" element={<CloudIntegrationsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

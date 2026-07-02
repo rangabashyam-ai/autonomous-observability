@@ -17,6 +17,7 @@ import {
   advanceInvestigation,
   approveInvestigation,
   executeInvestigation,
+  getDependencyGraph,
 } from '../api/client';
 import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
 import type { Investigation, InvestigationStep } from '../types/intelligence';
@@ -215,6 +216,25 @@ export default function InvestigationWorkflow() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [leftFixExpanded, setLeftFixExpanded] = useState(false);
+  const [services, setServices] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDependencyGraph(['microservice'], 'risk_score')
+      .then((g) => {
+        if (g.nodes) {
+          setServices(g.nodes.map((n) => n.id));
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const dynamicPresets = useMemo(() => {
+    if (services.length === 0) return PRESETS;
+    return PRESETS.map((p, idx) => {
+      const svc = services[idx % services.length];
+      return { ...p, service: svc };
+    });
+  }, [services]);
 
   const completedCount = inv ? inv.steps.filter((s) => s.status === 'completed').length : 0;
   const totalCount = inv ? inv.steps.length : 0;
@@ -375,7 +395,7 @@ export default function InvestigationWorkflow() {
 
       {/* ── Preset cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {PRESETS.map((p, i) => (
+        {dynamicPresets.map((p, i) => (
           <motion.button
             key={i}
             onClick={() => start(p, i)}
@@ -479,7 +499,7 @@ export default function InvestigationWorkflow() {
                     className="w-full px-3 py-2 text-sm rounded-xl border border-border bg-background/50 text-text-primary focus:outline-none focus:ring-1 focus:ring-violet-500"
                   >
                     <option value="">Select a service...</option>
-                    {SERVICES.map((s) => (
+                    {services.map((s) => (
                       <option key={s} value={s}>
                         {s.replace(/-/g, ' ')}
                       </option>

@@ -16,6 +16,7 @@ import {
   Shield,
   FileSearch,
   Cloud,
+  Upload,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
@@ -40,7 +41,8 @@ const secondaryNav = [
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
   { to: '/integrations', label: 'Integrations', icon: Cloud },
-  { to: '/admin', label: 'Settings', icon: Settings },
+  { to: '/admin', label: 'Custom', icon: Upload },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 /* ─── NavItem ────────────────────────────────────────────────────────────── */

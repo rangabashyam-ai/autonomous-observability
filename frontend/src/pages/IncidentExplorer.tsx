@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests } from '../api/client';
+import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests, resolveIncident, getIncidentTelemetry, getIncidentRunbook, getIncidentSloBurn } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import type { Incident, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
-import { PageHeader, TagList, severityClass, inputClass, btnPrimary } from '../components/ui';
+import type { Incident, IncidentClickAnalysis, ComponentMetrics, IncidentTelemetry, IncidentRunbook, IncidentSloBurn } from '../types/intelligence';
+import { PageHeader, TagList, severityClass, inputClass, btnPrimary, StatCard } from '../components/ui';
+import { analyzeRCAWindow } from '../api/client';
+import type { RCAWindowResult } from '../api/client';
 import { ReportChat } from '../components/ReportChat';
 
 // ---------------------------------------------------------------------------
@@ -748,18 +750,1486 @@ function ChangeRequestsModal({ incidentId, onClose }: { incidentId: string; onCl
 }
 
 // ---------------------------------------------------------------------------
+// Telemetry panel (logs, metrics, traces from parquet)
+// ---------------------------------------------------------------------------
+
+function TelemetryPanel({ incidentId }: { incidentId: string }) {
+  const [data, setData] = useState<IncidentTelemetry | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'metrics' | 'logs' | 'traces'>('metrics');
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    getIncidentTelemetry(incidentId)
+      .then(setData)
+      .catch((e) => setError(e?.message ?? 'Failed to load telemetry'))
+      .finally(() => setLoading(false));
+  }, [incidentId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-6 justify-center text-xs text-slate-500 dark:text-slate-400">
+        <span className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        Querying parquet telemetry…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+        Telemetry error: {error}
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const tabCls = (t: typeof tab) =>
+    `px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+      tab === t
+        ? 'bg-cyan-600 text-white'
+        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+    }`;
+
+  return (
+    <div className="space-y-3">
+      {/* Window info */}
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+        Window: {new Date(data.window.start).toLocaleString()} → {new Date(data.window.end).toLocaleString()}
+      </p>
+
+      {/* Tab bar */}
+      <div className="flex gap-1">
+        <button className={tabCls('metrics')} onClick={() => setTab('metrics')}>
+          Metrics ({data.metrics.length})
+        </button>
+        <button className={tabCls('logs')} onClick={() => setTab('logs')}>
+          Logs ({data.logs.length})
+        </button>
+        <button className={tabCls('traces')} onClick={() => setTab('traces')}>
+          Traces ({data.traces.length})
+        </button>
+      </div>
+
+      {/* Metrics tab */}
+      {tab === 'metrics' && (
+        <div>
+          {data.metric_error && (
+            <p className="text-[10px] text-red-500 mb-2">{data.metric_error}</p>
+          )}
+          {data.metrics.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No metrics in this window.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400">
+                    <th className="px-2 py-1.5 text-left">Time</th>
+                    <th className="px-2 py-1.5 text-right">SR%</th>
+                    <th className="px-2 py-1.5 text-right">MRT ms</th>
+                    <th className="px-2 py-1.5 text-right">RPS</th>
+                    <th className="px-2 py-1.5 text-right">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.metrics.map((m, i) => (
+                    <tr key={i} className="border-t border-slate-100 dark:border-slate-700/50">
+                      <td className="px-2 py-1 font-mono text-slate-500 dark:text-slate-400">
+                        {new Date(m.timestamp).toLocaleTimeString()}
+                      </td>
+                      <td className={`px-2 py-1 text-right font-mono font-semibold ${m.success_rate < 95 ? 'text-red-600 dark:text-red-400' : m.success_rate < 99 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {m.success_rate.toFixed(1)}
+                      </td>
+                      <td className={`px-2 py-1 text-right font-mono ${m.mean_response_time > 1000 ? 'text-red-600 dark:text-red-400' : m.mean_response_time > 500 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {m.mean_response_time.toFixed(0)}
+                      </td>
+                      <td className="px-2 py-1 text-right font-mono text-slate-600 dark:text-slate-300">{m.request_rate.toFixed(1)}</td>
+                      <td className="px-2 py-1 text-right font-mono text-slate-500 dark:text-slate-400">{m.request_count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* Host CPU */}
+          {data.host_metrics.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-1.5">Host CPU % during incident</p>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400">
+                      <th className="px-2 py-1.5 text-left">Time</th>
+                      <th className="px-2 py-1.5 text-left">Host</th>
+                      <th className="px-2 py-1.5 text-right">CPU%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.host_metrics.map((h, i) => (
+                      <tr key={i} className="border-t border-slate-100 dark:border-slate-700/50">
+                        <td className="px-2 py-1 font-mono text-slate-500 dark:text-slate-400">
+                          {new Date(h.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td className="px-2 py-1 font-mono text-slate-700 dark:text-slate-300">{h.host}</td>
+                        <td className={`px-2 py-1 text-right font-mono font-semibold ${h.cpu > 90 ? 'text-red-600 dark:text-red-400' : h.cpu > 75 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {h.cpu.toFixed(1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Logs tab */}
+      {tab === 'logs' && (
+        <div>
+          {data.log_error && (
+            <p className="text-[10px] text-red-500 mb-2">{data.log_error}</p>
+          )}
+          {data.logs.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No logs matched for these hosts in this window.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {data.logs.map((log, i) => (
+                <div
+                  key={i}
+                  className={`p-2 rounded-lg border text-[11px] ${
+                    log.severity === 'error'
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
+                      : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`font-semibold text-[10px] ${log.severity === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
+                      {log.severity.toUpperCase()}
+                    </span>
+                    <span className="font-mono text-slate-500 dark:text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <span className="font-mono text-cyan-700 dark:text-cyan-400">{log.host}</span>
+                    <span className="text-slate-400 dark:text-slate-500">{log.log_name}</span>
+                  </div>
+                  <p className="text-slate-700 dark:text-slate-300 leading-snug break-words">{log.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Traces tab */}
+      {tab === 'traces' && (
+        <div>
+          {data.trace_error && (
+            <p className="text-[10px] text-red-500 mb-2">{data.trace_error}</p>
+          )}
+          {data.traces.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No traces matched for this service in this window.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400">
+                    <th className="px-2 py-1.5 text-left">Trace ID</th>
+                    <th className="px-2 py-1.5 text-left">Host</th>
+                    <th className="px-2 py-1.5 text-left">Time</th>
+                    <th className="px-2 py-1.5 text-left">Span</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.traces.map((t, i) => (
+                    <tr key={i} className="border-t border-slate-100 dark:border-slate-700/50">
+                      <td className="px-2 py-1 font-mono text-blue-700 dark:text-blue-400 max-w-[140px] truncate">{t.trace_id}</td>
+                      <td className="px-2 py-1 font-mono text-slate-600 dark:text-slate-300">{t.host}</td>
+                      <td className="px-2 py-1 font-mono text-slate-500 dark:text-slate-400">{new Date(t.timestamp).toLocaleTimeString()}</td>
+                      <td className="px-2 py-1">
+                        <span className={`text-[10px] px-1 py-0.5 rounded ${t.has_parent ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' : 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400'}`}>
+                          {t.has_parent ? 'child' : 'root'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SLO Burn Rate panel (Google SRE Chapter 5 multi-window alerting)
+// ---------------------------------------------------------------------------
+
+const TIER_CFG: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
+  P0: { bg: 'bg-red-100 dark:bg-red-950/40',     text: 'text-red-700 dark:text-red-300',     border: 'border-red-300 dark:border-red-700',     dot: 'bg-red-500',     label: 'Critical' },
+  P1: { bg: 'bg-orange-100 dark:bg-orange-950/40', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', dot: 'bg-orange-500', label: 'High' },
+  P2: { bg: 'bg-amber-100 dark:bg-amber-950/40',   text: 'text-amber-700 dark:text-amber-300',   border: 'border-amber-300 dark:border-amber-700',   dot: 'bg-amber-400',   label: 'Medium' },
+  P3: { bg: 'bg-blue-100 dark:bg-blue-950/40',     text: 'text-blue-700 dark:text-blue-300',     border: 'border-blue-300 dark:border-blue-700',     dot: 'bg-blue-400',    label: 'Low' },
+};
+
+const WINDOWS_ORDERED = ['5m', '30m', '1h', '2h', '6h', '24h', '72h'];
+
+function BurnRateBar({ value, threshold }: { value: number; threshold: number }) {
+  const pct = Math.min((value / Math.max(threshold * 1.5, 1)) * 100, 100);
+  const color = value >= threshold ? 'bg-red-500' : value >= threshold * 0.7 ? 'bg-amber-400' : 'bg-emerald-500';
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`text-[10px] font-mono w-10 text-right ${value >= threshold ? 'text-red-600 dark:text-red-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+        {value.toFixed(1)}×
+      </span>
+    </div>
+  );
+}
+
+// Per-service expandable card
+function ServiceBurnCard({ svc }: { svc: import('../types/intelligence').ServiceSloBurn }) {
+  const [expanded, setExpanded] = useState(false);
+  const tier = svc.highest_firing_tier;
+  const cfg = tier ? TIER_CFG[tier] : null;
+
+  return (
+    <div className={`rounded-lg border ${tier && cfg ? `${cfg.bg} ${cfg.border}` : 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-700'}`}>
+      {/* ── Row: service name + key numbers + expand toggle ── */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-left"
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${tier && cfg ? `${cfg.dot} animate-pulse` : 'bg-slate-300 dark:bg-slate-600'}`} />
+        <span className="flex-1 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">
+          {svc.service}
+        </span>
+        {tier && cfg ? (
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
+            {tier}
+          </span>
+        ) : (
+          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">OK</span>
+        )}
+        {/* Key burn rates: 1h / 6h */}
+        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden sm:block">
+          1h&nbsp;
+          <span className={svc.burn_rates['1h'] >= 14.4 ? 'text-red-600 dark:text-red-400 font-bold' : svc.burn_rates['1h'] >= 6 ? 'text-orange-500 font-bold' : 'text-slate-600 dark:text-slate-300'}>
+            {(svc.burn_rates['1h'] ?? 0).toFixed(1)}×
+          </span>
+          &nbsp;·&nbsp;6h&nbsp;
+          <span className={svc.burn_rates['6h'] >= 6 ? 'text-orange-500 font-bold' : 'text-slate-600 dark:text-slate-300'}>
+            {(svc.burn_rates['6h'] ?? 0).toFixed(1)}×
+          </span>
+        </span>
+        {svc.time_to_exhaustion_hours != null && (
+          <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 hidden sm:block">
+            exhausted&nbsp;<span className="font-bold text-amber-600 dark:text-amber-400">{svc.time_to_exhaustion_hours.toFixed(1)}h</span>
+          </span>
+        )}
+        <svg className={`w-3 h-3 shrink-0 transition-transform text-slate-400 ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+
+      {/* ── Expanded: alert tier cards + burn rate table ── */}
+      {expanded && (
+        <div className="px-3 pb-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+          {/* Alert tiers 2×2 */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {svc.alerts.map((a) => {
+              const ac = TIER_CFG[a.tier];
+              return (
+                <div key={a.tier} className={`p-2 rounded-lg border ${a.firing ? `${ac.bg} ${ac.border}` : 'bg-white dark:bg-slate-900/30 border-slate-200 dark:border-slate-700'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.firing ? `${ac.dot} animate-pulse` : 'bg-slate-300 dark:bg-slate-600'}`} />
+                    <span className={`text-[10px] font-bold ${a.firing ? ac.text : 'text-slate-400'}`}>{a.tier} {a.firing ? 'FIRING' : 'OK'}</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-slate-400 w-7">{a.primary_window}</span>
+                      <BurnRateBar value={a.primary_burn_rate} threshold={a.threshold} />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-slate-400 w-7">{a.confirmation_window}</span>
+                      <BurnRateBar value={a.confirmation_burn_rate} threshold={a.threshold} />
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 mt-1">{a.threshold}× threshold · {a.budget_consumed_pct}% budget</p>
+                </div>
+              );
+            })}
+          </div>
+          {/* Window table */}
+          <div className="overflow-x-auto rounded border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-400">
+                  <th className="px-2 py-1 text-left">Window</th>
+                  <th className="px-2 py-1 text-right">Error Rate</th>
+                  <th className="px-2 py-1 text-right">Burn Rate</th>
+                  <th className="px-2 py-1 text-right">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {WINDOWS_ORDERED.filter((w) => svc.window_details[w] != null).map((w) => {
+                  const d = svc.window_details[w];
+                  const br = d.burn_rate;
+                  const brCls = br >= 14.4 ? 'text-red-600 dark:text-red-400 font-bold' : br >= 6 ? 'text-orange-500 font-bold' : br >= 3 ? 'text-amber-500' : br >= 1 ? 'text-blue-500' : 'text-slate-400';
+                  return (
+                    <tr key={w} className="border-t border-slate-100 dark:border-slate-700/50">
+                      <td className="px-2 py-1 font-mono text-slate-600 dark:text-slate-300">{w}</td>
+                      <td className="px-2 py-1 text-right font-mono text-slate-500">{d.error_rate_pct.toFixed(2)}%</td>
+                      <td className={`px-2 py-1 text-right font-mono ${brCls}`}>{br.toFixed(1)}×</td>
+                      <td className="px-2 py-1 text-right font-mono text-slate-400">{d.data_points}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SloBurnPanel({ incidentId }: { incidentId: string }) {
+  const [data, setData] = useState<IncidentSloBurn | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    getIncidentSloBurn(incidentId)
+      .then(setData)
+      .catch((e) => setError(e?.message ?? 'Failed to load SLO burn data'))
+      .finally(() => setLoading(false));
+  }, [incidentId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-6 justify-center text-xs text-slate-500 dark:text-slate-400">
+        <span className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+        Scanning all services for SLO budget impact…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+        SLO burn error: {error}
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const topTier = data.overall_highest_tier;
+  const topCfg = topTier ? TIER_CFG[topTier] : null;
+
+  return (
+    <div className="space-y-4 text-xs">
+
+      {/* ── Global header ── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono">
+          SLO&nbsp;<span className="font-bold text-slate-900 dark:text-white">{(data.slo_target * 100).toFixed(2)}%</span>
+        </div>
+        <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono">
+          Budget&nbsp;<span className="font-bold text-slate-900 dark:text-white">{data.error_budget_pct.toFixed(3)}%</span>
+          &nbsp;<span className="text-slate-400">({data.error_budget_minutes.toFixed(0)} min/30d)</span>
+        </div>
+        {topCfg ? (
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${topCfg.bg} ${topCfg.border}`}>
+            <span className={`w-2 h-2 rounded-full ${topCfg.dot} animate-pulse`} />
+            <span className={`text-[11px] font-bold ${topCfg.text}`}>{topTier} FIRING</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-emerald-100 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">All services within SLO</span>
+          </div>
+        )}
+        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+          {data.services.length} service{data.services.length !== 1 ? 's' : ''} with elevated burn
+        </span>
+      </div>
+
+      {/* ── Recommended action ── */}
+      {topTier && topCfg && (
+        <div className={`p-3 rounded-lg border ${topCfg.bg} ${topCfg.border}`}>
+          <p className={`text-[10px] font-semibold tracking-widest uppercase mb-1 ${topCfg.text}`}>
+            Recommended Action ({topTier} — worst across all services)
+          </p>
+          <p className={`text-[11px] font-medium ${topCfg.text}`}>{data.recommended_action}</p>
+        </div>
+      )}
+
+      {/* ── Per-service cards ── */}
+      {data.services.length > 0 ? (
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">
+            Affected Services — click to expand
+          </p>
+          <div className="space-y-1.5">
+            {data.services.map((svc) => (
+              <ServiceBurnCard key={svc.service} svc={svc} />
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 italic">
+            Only services with burn rate &gt; 1× (consuming budget above normal rate) are shown.
+            1h burn rate is used for time-to-exhaustion estimates.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+          No services with elevated burn rate detected in this incident's time window.
+        </p>
+      )}
+
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SRE Runbook panel (golden signals + host saturation + interactive checklist)
+// ---------------------------------------------------------------------------
+
+const CAT_CFG = {
+  diagnose: { label: 'Diagnose', bg: 'bg-blue-100 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800' },
+  mitigate: { label: 'Mitigate', bg: 'bg-amber-100 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800' },
+  verify:   { label: 'Verify',   bg: 'bg-green-100 dark:bg-green-950/40', text: 'text-green-700 dark:text-green-400', border: 'border-green-200 dark:border-green-800' },
+  resolve:  { label: 'Resolve',  bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+} as const;
+
+const CONF_CLS = {
+  high: 'text-emerald-600 dark:text-emerald-400',
+  medium: 'text-amber-600 dark:text-amber-400',
+  low: 'text-slate-400 dark:text-slate-500',
+} as const;
+
+function RunbookPanel({ incidentId }: { incidentId: string }) {
+  const [data, setData] = useState<IncidentRunbook | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    getIncidentRunbook(incidentId)
+      .then(setData)
+      .catch((e) => setError(e?.message ?? 'Failed to load runbook'))
+      .finally(() => setLoading(false));
+  }, [incidentId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-6 justify-center text-xs text-slate-500 dark:text-slate-400">
+        <span className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        Building SRE runbook from telemetry…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+        Runbook error: {error}
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const toggle = (id: string) => setChecked((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const gs = data.golden_signals;
+  const doneCount = checked.size;
+  const totalSteps = data.runbook.length;
+
+  return (
+    <div className="space-y-5 text-xs">
+
+      {/* ── Golden Signals comparison table ── */}
+      {(gs.baseline || gs.incident) && (
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">Golden Signals</p>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-1.5 text-left">Window</th>
+                  <th className="px-3 py-1.5 text-right">SR% avg</th>
+                  <th className="px-3 py-1.5 text-right">SR% min</th>
+                  <th className="px-3 py-1.5 text-right">MRT avg</th>
+                  <th className="px-3 py-1.5 text-right">MRT peak</th>
+                  <th className="px-3 py-1.5 text-right">RPS avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gs.baseline && (
+                  <tr className="border-t border-slate-100 dark:border-slate-700/50">
+                    <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400 font-medium">Baseline (−1h)</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-emerald-600 dark:text-emerald-400">{gs.baseline.sr_avg.toFixed(1)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-600 dark:text-slate-300">{gs.baseline.sr_min.toFixed(1)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-600 dark:text-slate-300">{gs.baseline.mrt_avg.toFixed(0)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-600 dark:text-slate-300">{gs.baseline.mrt_max.toFixed(0)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-600 dark:text-slate-300">{gs.baseline.rr_avg.toFixed(1)}</td>
+                  </tr>
+                )}
+                {gs.incident && (
+                  <tr className="border-t border-slate-100 dark:border-slate-700/50">
+                    <td className="px-3 py-1.5 text-red-600 dark:text-red-400 font-semibold">Incident</td>
+                    <td className={`px-3 py-1.5 text-right font-mono font-semibold ${gs.incident.sr_avg < 95 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>{gs.incident.sr_avg.toFixed(1)}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono ${gs.incident.sr_min < 90 ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>{gs.incident.sr_min.toFixed(1)}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono ${gs.incident.mrt_avg > 1000 ? 'text-red-600 dark:text-red-400' : gs.incident.mrt_avg > 500 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>{gs.incident.mrt_avg.toFixed(0)}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono ${gs.incident.mrt_max > 2000 ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>{gs.incident.mrt_max.toFixed(0)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-700 dark:text-slate-300">{gs.incident.rr_avg.toFixed(1)}</td>
+                  </tr>
+                )}
+                {gs.baseline && gs.incident && (
+                  <tr className="border-t border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30">
+                    <td className="px-3 py-1 text-slate-400 dark:text-slate-500 text-[10px] italic">delta</td>
+                    <td className={`px-3 py-1 text-right font-mono text-[10px] ${gs.deltas.sr_pp < -5 ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+                      {gs.deltas.sr_pp > 0 ? '+' : ''}{gs.deltas.sr_pp.toFixed(1)}pp
+                    </td>
+                    <td className="px-3 py-1" />
+                    <td className={`px-3 py-1 text-right font-mono text-[10px] ${gs.deltas.mrt_ms > 500 ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+                      {gs.deltas.mrt_ms > 0 ? '+' : ''}{gs.deltas.mrt_ms.toFixed(0)} ms
+                    </td>
+                    <td className="px-3 py-1" />
+                    <td className={`px-3 py-1 text-right font-mono text-[10px] ${Math.abs(gs.deltas.rr_pct) > 20 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
+                      {gs.deltas.rr_pct > 0 ? '+' : ''}{gs.deltas.rr_pct.toFixed(0)}%
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Host saturation bars ── */}
+      {data.host_saturation.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">Host Saturation</p>
+          <div className="space-y-2">
+            {data.host_saturation.map((h) => {
+              const pct = Math.min(h.cpu_peak, 100);
+              const barCls = h.status === 'critical' ? 'bg-red-500' : h.status === 'degraded' ? 'bg-amber-500' : 'bg-emerald-500';
+              const statusBadgeCls = h.status === 'critical'
+                ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+                : h.status === 'degraded'
+                  ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+                  : 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800';
+              const peakCls = h.status === 'critical' ? 'text-red-600 dark:text-red-400' : h.status === 'degraded' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+              return (
+                <div key={h.host} className="flex items-center gap-3">
+                  <span className="font-mono text-slate-700 dark:text-slate-300 w-24 shrink-0 text-[11px]">{h.host}</span>
+                  <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className={`h-full ${barCls} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={`font-mono font-semibold w-16 text-right text-[11px] ${peakCls}`}>peak {h.cpu_peak.toFixed(0)}%</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${statusBadgeCls}`}>{h.status}</span>
+                </div>
+              );
+            })}
+          </div>
+          {data.gc_pressure && (
+            <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+              <span className="shrink-0">⚠</span>
+              GC pressure detected on Tomcat hosts — consider JVM heap tuning or restart
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Interactive runbook checklist ── */}
+      {data.runbook.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">SRE Runbook</p>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{doneCount}/{totalSteps} complete</span>
+          </div>
+          <div className="h-1 bg-slate-200 dark:bg-slate-700 rounded-full mb-3 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+              style={{ width: `${totalSteps > 0 ? (doneCount / totalSteps) * 100 : 0}%` }}
+            />
+          </div>
+          <div className="space-y-2">
+            {data.runbook.map((step) => {
+              const cfg = CAT_CFG[step.category];
+              const done = checked.has(step.id);
+              return (
+                <div
+                  key={step.id}
+                  onClick={() => toggle(step.id)}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all select-none ${
+                    done
+                      ? 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-700 opacity-50'
+                      : `${cfg.bg} ${cfg.border}`
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className={`shrink-0 mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                      done ? 'bg-emerald-500 border-emerald-500' : `${cfg.border} ${cfg.text}`
+                    }`}>
+                      {done && (
+                        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">#{step.step}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
+                        {step.lever && (
+                          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                            {step.lever}
+                          </span>
+                        )}
+                        <span className={`text-[10px] ml-auto ${CONF_CLS[step.confidence]}`}>{step.confidence} conf.</span>
+                      </div>
+                      <p className={`text-[11px] font-semibold leading-snug ${done ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-800 dark:text-white'}`}>
+                        {step.action}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{step.evidence}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Similar resolved incidents ── */}
+      {data.similar_incidents.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">Similar Resolved Incidents</p>
+          <div className="space-y-2">
+            {data.similar_incidents.map((si) => (
+              <div key={si.incident_id} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-mono text-blue-700 dark:text-blue-400 shrink-0">{si.incident_id}</span>
+                  <span className="text-slate-400 dark:text-slate-500 text-[10px]">{si.service}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">Cause: <span className="text-slate-700 dark:text-slate-300">{si.root_cause}</span></p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Fix: <span className="text-emerald-700 dark:text-emerald-400 font-medium">{si.fix}</span></p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bank Incidents — Sentinel-style view
+// ---------------------------------------------------------------------------
+
+export type BankAlertItem = {
+  alertId: string;
+  alertRule: string;
+  severity: string;
+  signalType: string;
+  firedAt: string;
+  description: string;
+};
+
+export type BankIncident = {
+  incidentId: string;
+  title: string;
+  description: string;
+  severity: 'High' | 'Medium' | 'Low' | 'Informational';
+  status: string;
+  productName: string;
+  owner: { assignedTo: string | null; email: string | null };
+  createdTime: string;
+  lastUpdateTime: string;
+  timeWindow: { start: string; end: string };
+  alerts: { count: number; items: BankAlertItem[] };
+  evidence: { alertCount: number; eventCount: number; bookmarkCount: number };
+  entities: string[];
+  tactics: string[];
+  queryIndex: string;
+  taskType: string;
+  rcaStatus: string;
+};
+
+const BANK_SEV_DOT: Record<string, string> = {
+  High: 'bg-red-500',
+  Medium: 'bg-orange-400',
+  Low: 'bg-yellow-400',
+  Informational: 'bg-blue-400',
+};
+
+// ---------------------------------------------------------------------------
+// Alert details modal (opened from "View full details" in the detail panel)
+// ---------------------------------------------------------------------------
+
+const ALERT_CATEGORY_LABEL: Record<string, string> = {
+  CPU:        'High CPU usage',
+  MEM:        'High memory usage',
+  DISK_IO:    'High disk I/O read usage',
+  DISK_SP:    'High disk space usage',
+  NET_LAT:    'Network latency',
+  NET_PKT:    'Network packet loss',
+  JVM_OOM:    'JVM Out of Memory (OOM) Heap',
+  JVM_CPU:    'High JVM CPU load',
+  APP_ERR:    'Low application success rate',
+  APP_LAT:    'High application response latency',
+  TRACE_SLOW: 'Slow distributed trace span',
+};
+
+function parseAlertRule(rule: string): { component: string; catKey: string; label: string } {
+  const parts = rule.split('-');
+  const catKey   = (parts[parts.length - 1] ?? '').toUpperCase();
+  const component = parts.slice(1, -1).join('-');
+  return { component, catKey, label: ALERT_CATEGORY_LABEL[catKey] ?? catKey };
+}
+
+const ALERT_SEV_DOT: Record<string, string> = {
+  Sev1: 'bg-red-500',
+  Sev2: 'bg-orange-400',
+  Sev3: 'bg-yellow-400',
+};
+const ALERT_SEV_BADGE: Record<string, string> = {
+  Sev1: 'text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/40 dark:border-red-800',
+  Sev2: 'text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950/40 dark:border-orange-800',
+  Sev3: 'text-yellow-700 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/40 dark:border-yellow-800',
+};
+const SIGNAL_TYPE_BADGE: Record<string, string> = {
+  Metric: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-950/40 dark:border-blue-800',
+  Log:    'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
+  Trace:  'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
+};
+
+function BankAlertsModal({ incident, onClose }: { incident: BankIncident; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const alerts = incident.alerts.items;
+
+  // Category summary: how many alerts per category
+  const byCat = alerts.reduce<Record<string, number>>((acc, a) => {
+    const { catKey } = parseAlertRule(a.alertRule);
+    acc[catKey] = (acc[catKey] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-5xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
+
+        {/* Modal header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-xs font-semibold ${BANK_SEV_TEXT[incident.severity] ?? 'text-slate-600'}`}>
+                {incident.severity}
+              </span>
+              <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{incident.incidentId}</span>
+            </div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{alerts.length} linked alerts</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Category breakdown chips */}
+        <div className="px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-1.5 shrink-0">
+          {Object.entries(byCat)
+            .sort((a, b) => b[1] - a[1])
+            .map(([cat, cnt]) => (
+              <span
+                key={cat}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium"
+              >
+                {ALERT_CATEGORY_LABEL[cat] ?? cat} &times; {cnt}
+              </span>
+            ))}
+        </div>
+
+        {/* Alert table */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/90 z-10 border-b border-slate-200 dark:border-slate-700">
+              <tr className="text-left">
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-24">Severity</th>
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-32">Component</th>
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400">Alert description</th>
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-20">Signal</th>
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-40">Fired at</th>
+                <th className="px-4 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-56">Alert rule</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alerts.map((a, idx) => {
+                const { component } = parseAlertRule(a.alertRule);
+                return (
+                  <tr
+                    key={idx}
+                    className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${ALERT_SEV_DOT[a.severity] ?? 'bg-slate-400'}`} />
+                        <span className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${ALERT_SEV_BADGE[a.severity] ?? ''}`}>
+                          {a.severity}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">{component}</td>
+                    <td className="px-4 py-2 text-slate-700 dark:text-slate-200 max-w-sm" title={a.description}>{a.description}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${SIGNAL_TYPE_BADGE[a.signalType] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                        {a.signalType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      {a.firedAt.replace('T', ' ')}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[220px]" title={a.alertRule}>
+                      {a.alertRule}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+const BANK_SEV_TEXT: Record<string, string> = {
+  High: 'text-red-600 dark:text-red-400',
+  Medium: 'text-orange-600 dark:text-orange-400',
+  Low: 'text-yellow-600 dark:text-yellow-500',
+  Informational: 'text-blue-600 dark:text-blue-400',
+};
+const BANK_SEV_BARS = [
+  { key: 'High',          dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400'       },
+  { key: 'Medium',        dot: 'bg-orange-400', text: 'text-orange-700 dark:text-orange-400'  },
+  { key: 'Low',           dot: 'bg-yellow-400', text: 'text-yellow-700 dark:text-yellow-500'  },
+  { key: 'Informational', dot: 'bg-blue-400',   text: 'text-blue-700 dark:text-blue-400'      },
+] as const;
+
+// ---------------------------------------------------------------------------
+// RCA reason → colour
+// ---------------------------------------------------------------------------
+
+const REASON_COLOR: Record<string, { bg: string; text: string; border: string; badge: string }> = {
+  'high CPU usage':               { bg: 'bg-red-50 dark:bg-red-950/20',     text: 'text-red-700 dark:text-red-400',     border: 'border-red-200 dark:border-red-800',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'     },
+  'high memory usage':            { bg: 'bg-orange-50 dark:bg-orange-950/20', text: 'text-orange-700 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+  'high disk I/O read usage':     { bg: 'bg-amber-50 dark:bg-amber-950/20',  text: 'text-amber-700 dark:text-amber-400',  border: 'border-amber-200 dark:border-amber-800',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'  },
+  'high disk space usage':        { bg: 'bg-amber-50 dark:bg-amber-950/20',  text: 'text-amber-700 dark:text-amber-400',  border: 'border-amber-200 dark:border-amber-800',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'  },
+  'network packet loss':          { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
+  'network latency':              { bg: 'bg-violet-50 dark:bg-violet-950/20', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
+  'high JVM CPU load':            { bg: 'bg-blue-50 dark:bg-blue-950/20',    text: 'text-blue-700 dark:text-blue-400',    border: 'border-blue-200 dark:border-blue-800',    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'    },
+  'JVM Out of Memory (OOM) Heap': { bg: 'bg-red-50 dark:bg-red-950/20',     text: 'text-red-700 dark:text-red-400',     border: 'border-red-200 dark:border-red-800',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'     },
+};
+const DEFAULT_REASON_COLOR = { bg: 'bg-slate-50 dark:bg-slate-800/50', text: 'text-slate-700 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-700', badge: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' };
+
+// Derive human-readable reason from raw KPI strings (e.g. "OSLinux-CPU_CPU_CPULoad | z=5.7 | ...")
+function cleanReason(raw: string): string {
+  if (!raw.includes('|')) return raw;
+  const kpiName = raw.split('|')[0].trim();
+  if (/cpu/i.test(kpiName)) return 'high CPU usage';
+  if (/mem|swap/i.test(kpiName)) return 'high memory usage';
+  if (/retrans|packet|NETPackets/i.test(kpiName)) return 'network packet loss';
+  if (/rtt|latency|delay/i.test(kpiName)) return 'network latency';
+  if (/diskread|diskwrite|DISKRead|DISKWrite|IOUtil/i.test(kpiName)) return 'high disk I/O read usage';
+  if (/diskspace|diskutil|DISKDisk/i.test(kpiName)) return 'high disk space usage';
+  if (/jvm.*cpu|gc.*cpu/i.test(kpiName)) return 'high JVM CPU load';
+  if (/oom|outofmemory/i.test(kpiName)) return 'JVM Out of Memory (OOM) Heap';
+  return 'Anomalous signal detected';
+}
+
+// Parse "OSLinux-CPU_CPU_CPULoad → high CPU usage (z=5.7)"
+function parseEvidenceSignal(ev: string): { kpi: string; reason: string; zscore: string } | null {
+  const sep = ev.indexOf(' → ');
+  if (sep === -1) return null;
+  const kpiRaw = ev.slice(0, sep);
+  const rest = ev.slice(sep + 3);
+  const zMatch = rest.match(/\(z=([-\d.]+)\)/);
+  const zscore = zMatch ? zMatch[1] : '';
+  const reason = rest.replace(/\s*\(z=[-\d.]+\)/, '').trim();
+  // Keep only last meaningful part of KPI name: "OSLinux-CPU_CPU_CPULoad" → "CPULoad"
+  const segments = kpiRaw.split(/[_\-]/).filter(Boolean);
+  const kpi = segments[segments.length - 1] || kpiRaw;
+  return { kpi, reason, zscore };
+}
+
+// llm_analysis now contains a clean EXPLANATION sentence from the LLM (not a raw dump)
+function isRawDump(text: string): boolean {
+  return text.includes('COMPONENT:') && text.includes('TIMESTAMP:') && text.includes('REASON:');
+}
+
+function ZBadge({ z }: { z: string }) {
+  const v = parseFloat(z);
+  const cls = Math.abs(v) >= 10 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+            : Math.abs(v) >= 5  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+            : Math.abs(v) >= 3  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+            : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+  return (
+    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold ${cls}`}>
+      z={z}
+    </span>
+  );
+}
+
+function ConfBar({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  const color = pct >= 75 ? 'bg-red-500' : pct >= 50 ? 'bg-amber-400' : pct >= 25 ? 'bg-blue-500' : 'bg-slate-400';
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] font-mono font-bold w-8 text-right text-slate-700 dark:text-slate-200">{pct}%</span>
+    </div>
+  );
+}
+
+export function BankRCAPanel({ timeWindow }: { timeWindow: { start: string; end: string } }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [results, setResults] = useState<RCAWindowResult[]>([]);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const runRCA = () => {
+    const t_start = Math.floor(new Date(timeWindow.start).getTime() / 1000);
+    const t_end   = Math.floor(new Date(timeWindow.end).getTime()   / 1000);
+    setStatus('loading');
+    setResults([]);
+    setErrorMsg('');
+    analyzeRCAWindow({ t_start, t_end, num_failures: 1, use_llm: true })
+      .then((res) => { setResults(res.results); setElapsedMs(res.analysis_time_ms); setStatus('done'); })
+      .catch((e: Error) => { setErrorMsg(e.message ?? 'Analysis failed'); setStatus('error'); });
+  };
+
+  return (
+    <div className="border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          RCA Analysis
+        </p>
+        {status === 'done' && results.length > 0 && (
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{elapsedMs.toFixed(0)} ms</span>
+        )}
+      </div>
+
+      {/* Run button */}
+      <button
+        onClick={runRCA}
+        disabled={status === 'loading'}
+        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60 transition-colors"
+      >
+        {status === 'loading' ? (
+          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Analyzing…</>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            {status === 'done' ? 'Re-run RCA' : 'Run RCA Analysis'}
+          </>
+        )}
+      </button>
+
+      {/* Error */}
+      {status === 'error' && (
+        <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* No results */}
+      {status === 'done' && results.length === 0 && (
+        <p className="text-[11px] text-slate-400 italic">No anomalies detected in this time window.</p>
+      )}
+
+      {/* Results */}
+      {status === 'done' && results.length > 0 && (
+        <div className="space-y-3">
+          {results.map((r, idx) => {
+            const displayReason = cleanReason(r.reason);
+            const color = REASON_COLOR[displayReason] ?? DEFAULT_REASON_COLOR;
+            const parsedEvidence = r.evidence.map(parseEvidenceSignal);
+            const explanation = r.llm_analysis && !isRawDump(r.llm_analysis) ? r.llm_analysis : null;
+
+            return (
+              <div key={idx} className={`rounded-xl border ${color.border} ${color.bg} overflow-hidden`}>
+
+                {/* Card header */}
+                <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-white dark:bg-black/30 border border-current/30 flex items-center justify-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-bold font-mono ${color.text}`}>{r.component}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${color.badge}`}>
+                        {displayReason}
+                      </span>
+                    </div>
+                    {r.datetime_utc8 && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                        Peak anomaly at {r.datetime_utc8}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Confidence */}
+                <div className="px-3 pb-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Confidence</span>
+                  </div>
+                  <ConfBar value={r.confidence} />
+                </div>
+
+                {/* Evidence signals */}
+                {parsedEvidence.some(Boolean) && (
+                  <div className="border-t border-current/10 px-3 py-2">
+                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                      Evidence Signals ({r.evidence.length})
+                    </p>
+                    <div className="space-y-1">
+                      {parsedEvidence.map((parsed, ei) => {
+                        if (!parsed) {
+                          return (
+                            <div key={ei} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                              {r.evidence[ei]}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={ei} className="flex items-center gap-2 bg-white/60 dark:bg-black/20 rounded-lg px-2 py-1">
+                            <span className="text-[10px] font-mono font-semibold text-slate-700 dark:text-slate-200 shrink-0 min-w-[80px]">
+                              {parsed.kpi}
+                            </span>
+                            <span className="flex-1 text-[10px] text-slate-600 dark:text-slate-300 truncate">
+                              {parsed.reason}
+                            </span>
+                            {parsed.zscore && <ZBadge z={parsed.zscore} />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Explanation */}
+                {explanation && (
+                  <div className="border-t border-current/10 px-3 py-2.5">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed italic">
+                        {explanation}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildBankIncidentContext(inc: BankIncident): string {
+  const lines = [
+    `INCIDENT: ${inc.incidentId}`,
+    `TITLE: ${inc.title}`,
+    `SEVERITY: ${inc.severity}`,
+    `STATUS: ${inc.status}`,
+    `INVESTIGATION_WINDOW: ${inc.timeWindow.start.replace('T', ' ')} — ${inc.timeWindow.end.replace('T', ' ')}`,
+    `DESCRIPTION: ${inc.description}`,
+    `ENTITIES: ${inc.entities.join(', ') || 'none'}`,
+    `TACTICS: ${inc.tactics.join(', ') || 'none'}`,
+    `ALERT_COUNT: ${inc.alerts.count}`,
+  ];
+  if (inc.alerts.items.length > 0) {
+    lines.push('TOP_ALERTS:');
+    const top = inc.alerts.items
+      .slice()
+      .sort((a, b) => (a.severity < b.severity ? -1 : 1))
+      .slice(0, 10);
+    top.forEach((a) => {
+      const comp = a.alertRule.split('-').slice(1, -1).join('-');
+      lines.push(`  [${a.severity}] ${comp}: ${a.description}`);
+    });
+  }
+  return lines.join('\n');
+}
+
+function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClose: () => void }) {
+  const [showFullDetails, setShowFullDetails] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <>
+      {showFullDetails && <BankAlertsModal incident={incident} onClose={() => setShowFullDetails(false)} />}
+
+      {/* Modal overlay */}
+      <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+
+        <div className="relative z-10 w-full max-w-2xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
+
+          {/* Header */}
+          <div className="flex items-start justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+            <div className="flex-1 min-w-0 pr-4">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className={`text-[11px] font-semibold ${BANK_SEV_TEXT[incident.severity] ?? 'text-slate-600'}`}>
+                  {incident.severity}
+                </span>
+                <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">{incident.incidentId}</span>
+                <span className="px-1.5 py-0.5 rounded border text-[10px] font-medium bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600">
+                  {incident.status}
+                </span>
+              </div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs">
+
+            {/* Metadata grid */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Owner</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">{incident.owner.assignedTo ?? 'Unassigned'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Alerts</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{incident.evidence.alertCount}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Created</p>
+                <p className="font-mono text-slate-700 dark:text-slate-300">{incident.createdTime.replace('T', ' ')}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Last update</p>
+                <p className="font-mono text-slate-700 dark:text-slate-300">{incident.lastUpdateTime.replace('T', ' ')}</p>
+              </div>
+            </div>
+
+            {/* Investigation window */}
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Investigation window</p>
+              <p className="font-mono text-slate-700 dark:text-slate-300">
+                {incident.timeWindow.start.replace('T', ' ')} — {incident.timeWindow.end.replace('T', ' ')}
+              </p>
+            </div>
+
+            {/* Description */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">Description</p>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{incident.description}</p>
+            </div>
+
+            {/* Entities + Tactics */}
+            {(incident.entities.length > 0 || incident.tactics.length > 0) && (
+              <div className="grid grid-cols-2 gap-4">
+                {incident.entities.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">Entities</p>
+                    <div className="flex flex-wrap gap-1">
+                      {incident.entities.map((e) => (
+                        <span key={e} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                          {e}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {incident.tactics.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">Tactics</p>
+                    <div className="flex flex-wrap gap-1">
+                      {incident.tactics.map((t) => (
+                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* View all alerts */}
+            <button
+              onClick={() => setShowFullDetails(true)}
+              className="w-full py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+            >
+              View all {incident.alerts.count} alerts
+            </button>
+
+            {/* AI Assistant */}
+            <ReportChat
+              reportContext={buildBankIncidentContext(incident)}
+              reportType="bank_incident"
+              subtitle="Scoped to Incidents"
+              entityName={`Incident ${incident.incidentId}`}
+              suggestedQuestions={[
+                'Summarize this incident',
+                'What is the root cause?',
+                'Which components are most affected?',
+                'How can I resolve this?',
+              ]}
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function BankSentinelView() {
+  const [bankIncidents, setBankIncidents] = useState<BankIncident[]>([]);
+  const [bankLoading, setBankLoading] = useState(true);
+  const [selectedInc, setSelectedInc] = useState<BankIncident | null>(null);
+  const [filterSev, setFilterSev] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [bankSearch, setBankSearch] = useState('');
+
+  useEffect(() => {
+    fetch('/api/vm/incidents')
+      .then((r) => r.json())
+      .then((data: any) => {
+        const payload = Array.isArray(data) ? data : data.incidents || [];
+        setBankIncidents(payload);
+        setBankLoading(false);
+      })
+      .catch(() => setBankLoading(false));
+  }, []);
+
+  const sevCounts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const i of bankIncidents) acc[i.severity] = (acc[i.severity] ?? 0) + 1;
+    return acc;
+  }, [bankIncidents]);
+
+  const filtered = useMemo(() => {
+    const q = bankSearch.toLowerCase();
+    return bankIncidents.filter((i) => {
+      if (filterSev !== 'All' && i.severity !== filterSev) return false;
+      if (filterStatus !== 'All' && i.status !== filterStatus) return false;
+      if (q && !i.title.toLowerCase().includes(q) && !i.incidentId.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [bankIncidents, filterSev, filterStatus, bankSearch]);
+
+  const newCount    = bankIncidents.filter((i) => i.status === 'New').length;
+  const activeCount = bankIncidents.filter((i) => i.status === 'Active').length;
+
+  if (bankLoading) {
+    return <p className="py-12 text-center text-slate-500 dark:text-slate-400">Loading Bank RCA incidents…</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header stats — matches StatCard style used across the app */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Open incidents" value={bankIncidents.length} />
+        <StatCard label="New"            value={newCount} />
+        <StatCard label="Active"         value={activeCount} alert={activeCount > 0} />
+      </div>
+
+      {/* Severity filter pills */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {BANK_SEV_BARS.map(({ key, dot, text }) => (
+          <button
+            key={key}
+            onClick={() => setFilterSev(filterSev === key ? 'All' : key)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+              filterSev === key
+                ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 shadow-sm'
+                : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+            <span className={text}>{key}</span>
+            <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{sevCounts[key] ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Filter bar — uses shared inputClass */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select value={filterSev}    onChange={(e) => setFilterSev(e.target.value)}    className={inputClass}>
+          <option value="All">Severity: All</option>
+          {BANK_SEV_BARS.map(({ key }) => <option key={key} value={key}>{key}</option>)}
+        </select>
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={inputClass}>
+          <option value="All">Status: All</option>
+          <option value="New">New</option>
+          <option value="Active">Active</option>
+        </select>
+        <select className={inputClass}>
+          <option>Owner: All</option>
+          <option>Unassigned</option>
+        </select>
+        <input
+          placeholder="Search by title or ID…"
+          value={bankSearch}
+          onChange={(e) => setBankSearch(e.target.value)}
+          className={`flex-1 min-w-[180px] ${inputClass}`}
+        />
+        <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">{filtered.length} / {bankIncidents.length}</span>
+      </div>
+
+      {/* Incident table */}
+      <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+        <div className="overflow-auto max-h-[620px]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/90 z-10 border-b border-slate-200 dark:border-slate-700">
+              <tr className="text-left">
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-8" />
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-20">Status</th>
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-28">Incident ID</th>
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400">Title</th>
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-16 text-center">Alerts</th>
+                <th className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400 w-40">Created time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">No incidents match the current filters</td>
+                </tr>
+              )}
+              {filtered.map((inc) => (
+                <tr
+                  key={inc.incidentId}
+                  onClick={() => setSelectedInc(selectedInc?.incidentId === inc.incidentId ? null : inc)}
+                  className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer transition-colors ${
+                    selectedInc?.incidentId === inc.incidentId
+                      ? 'bg-blue-50 dark:bg-blue-950/30'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                  }`}
+                >
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${BANK_SEV_DOT[inc.severity] ?? 'bg-slate-400'}`} title={inc.severity} />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="px-1.5 py-0.5 rounded border text-[10px] font-medium bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600">
+                      {inc.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-blue-700 dark:text-blue-400 whitespace-nowrap">{inc.incidentId}</td>
+                  <td className="px-3 py-2.5 text-slate-800 dark:text-slate-200 max-w-xs xl:max-w-md">
+                    <span className="line-clamp-1" title={inc.title}>{inc.title}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{inc.alerts.count}</td>
+                  <td className="px-3 py-2.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {inc.createdTime.replace('T', ' ')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Detail popup — rendered outside the table so it overlays the full page */}
+      {selectedInc && (
+        <BankDetailPanel
+          incident={selectedInc}
+          onClose={() => setSelectedInc(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Incident popup modal
 // ---------------------------------------------------------------------------
 
-function IncidentPopup({ incident, analysis, analysisLoading, analysisError, changeRequests, onClose }: {
+function IncidentPopup({ incident, analysis, analysisLoading, analysisError, changeRequests, onClose, onResolved }: {
   incident: Incident;
   analysis: IncidentClickAnalysis | null;
   analysisLoading: boolean;
   analysisError: string | null;
   changeRequests: { tickets: TicketFlow[] } | null;
   onClose: () => void;
+  onResolved: (updated: Incident) => void;
 }) {
   const [crOpen, setCrOpen] = useState(false);
+  const [showTelemetry, setShowTelemetry] = useState(false);
+  const [showRunbook, setShowRunbook] = useState(false);
+  const [showSloBurn, setShowSloBurn] = useState(false);
+  const [resolveConfirm, setResolveConfirm] = useState(false);
+  const [resolveNotes, setResolveNotes] = useState('');
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
+  const alreadyResolved = isResolved(incident.state);
+
+  const handleResolve = () => {
+    setResolving(true);
+    setResolveError(null);
+    resolveIncident(incident.incident_id, resolveNotes)
+      .then((updated) => {
+        setResolveConfirm(false);
+        onResolved(updated);
+      })
+      .catch((e) => setResolveError(e?.message ?? 'Failed to resolve'))
+      .finally(() => setResolving(false));
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (crOpen) setCrOpen(false); else onClose(); } };
@@ -792,8 +2262,10 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
               <StateBadge state={incident.state} />
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{incident.incident_id}</span>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{incident.title}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">
+                {incident.title}
+              </h2>
               <button
                 id="btn-change-requests"
                 onClick={(e) => { e.stopPropagation(); setCrOpen(true); }}
@@ -805,7 +2277,55 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
                 </svg>
                 Change Requests
               </button>
+
+              {/* ── Resolve button ── */}
+              {!alreadyResolved && !resolveConfirm && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setResolveConfirm(true); }}
+                  className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all hover:shadow-sm active:scale-95"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Resolve Incident
+                </button>
+              )}
+
+              {!alreadyResolved && resolveConfirm && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <input
+                    autoFocus
+                    placeholder="Resolution notes (optional)"
+                    value={resolveNotes}
+                    onChange={(e) => setResolveNotes(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleResolve()}
+                    className="text-[11px] px-2 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-48 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <button
+                    onClick={handleResolve}
+                    disabled={resolving}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white transition-colors"
+                  >
+                    {resolving ? 'Resolving…' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => { setResolveConfirm(false); setResolveError(null); }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {resolveError && (
+                <p className="text-[10px] text-red-600 dark:text-red-400">{resolveError}</p>
+              )}
             </div>
+            {incident.details && (
+              <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-700/50 pt-2">
+                {incident.details}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -863,6 +2383,63 @@ function IncidentPopup({ incident, analysis, analysisLoading, analysisError, cha
 
           <AnalysisSection analysis={analysis} loading={analysisLoading} />
 
+          {/* Telemetry section — logs, metrics, traces from parquet */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          <div>
+            <button
+              onClick={() => setShowTelemetry((v) => !v)}
+              className="flex items-center gap-2 text-xs font-semibold text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-200 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showTelemetry ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showTelemetry ? 'Hide' : 'View'} Telemetry — Logs, Metrics &amp; Traces
+            </button>
+            {showTelemetry && (
+              <div className="mt-3">
+                <TelemetryPanel incidentId={incident.incident_id} />
+              </div>
+            )}
+          </div>
+
+          {/* SRE Runbook section — golden signals + host saturation + checklist */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          <div>
+            <button
+              onClick={() => setShowRunbook((v) => !v)}
+              className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showRunbook ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showRunbook ? 'Hide' : 'View'} SRE Runbook — Diagnose, Mitigate &amp; Verify
+            </button>
+            {showRunbook && (
+              <div className="mt-3">
+                <RunbookPanel incidentId={incident.incident_id} />
+              </div>
+            )}
+          </div>
+
+          {/* SLO Burn Rate section — Google SRE Ch. 5 multi-window alerting */}
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+          <div>
+            <button
+              onClick={() => setShowSloBurn((v) => !v)}
+              className="flex items-center gap-2 text-xs font-semibold text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-200 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showSloBurn ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showSloBurn ? 'Hide' : 'View'} SLO Burn Rate — P0–P3 Alert Tiers &amp; Budget
+            </button>
+            {showSloBurn && (
+              <div className="mt-3">
+                <SloBurnPanel incidentId={incident.incident_id} />
+              </div>
+            )}
+          </div>
+
           {/* Chat — only once analysis has loaded */}
           {!analysisLoading && analysis && (
             <ReportChat
@@ -914,7 +2491,8 @@ export default function IncidentExplorer() {
 
   const handleSearchClick = () => {
     if (search.trim()) {
-      if (search.trim().toUpperCase().startsWith('INC-')) {
+      const upper = search.trim().toUpperCase();
+      if (upper.startsWith('INC-') || upper.startsWith('IN-')) {
         navigate(`/incidents?id=${encodeURIComponent(search.trim().toUpperCase())}`);
       } else {
         navigate(`/incidents?search=${encodeURIComponent(search.trim())}`);
@@ -979,6 +2557,7 @@ export default function IncidentExplorer() {
       setSelected(null);
     }
   }, [searchParams]);
+
   const handleRowClick = (inc: Incident) => {
     setSelected(inc);
     setAnalysis(null);
@@ -1004,6 +2583,7 @@ export default function IncidentExplorer() {
   const hasMore = incidents.length < total;
   const currentPage = Math.ceil(incidents.length / PAGE_SIZE);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+
   const copilotContext = useMemo(() => {
     if (!selected) return null;
     return {
@@ -1035,6 +2615,10 @@ export default function IncidentExplorer() {
         title="Incident Explorer"
         description="Browse incidents across all stages — open, in-progress, and resolved"
       />
+
+      <BankSentinelView />
+
+      {false && <>
 
       {/* Search / filter bar */}
       <div className="flex gap-4 mb-4">
@@ -1076,6 +2660,7 @@ export default function IncidentExplorer() {
             </div>
           )}
         </div>
+
         {hasMore && !loading && (
           <button
             onClick={() => load(false)}
@@ -1092,43 +2677,38 @@ export default function IncidentExplorer() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-              <th className="pb-2 pr-3">ID</th>
+              <th className="pb-2 pr-3 w-28">ID</th>
               <th className="pb-2 pr-3">Title</th>
-              <th className="pb-2 pr-3">Service</th>
-              <th className="pb-2 pr-3">Severity</th>
-              <th className="pb-2 pr-3">Status</th>
-              <th className="pb-2 pr-3">Root Cause</th>
-              <th className="pb-2">Fix</th>
+              <th className="pb-2 pr-3 w-20">Severity</th>
+              <th className="pb-2 pr-3 w-28">Status</th>
+              <th className="pb-2 w-20">Fix</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-500">Loading…</td></tr>
+              <tr><td colSpan={5} className="py-8 text-center text-slate-500">Loading…</td></tr>
             ) : incidents.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-500">No incidents found</td></tr>
+              <tr><td colSpan={5} className="py-8 text-center text-slate-500">No incidents found</td></tr>
             ) : incidents.map((inc) => (
               <tr
                 key={inc.incident_id}
                 onClick={() => handleRowClick(inc)}
-                className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                  }`}
+                className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selected?.incident_id === inc.incident_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
               >
-                <td className="py-2.5 pr-3 font-mono text-xs text-blue-700 dark:text-blue-400">{inc.incident_id}</td>
-                <td className="py-2.5 pr-3 text-slate-900 dark:text-white max-w-[200px] truncate">{inc.title}</td>
-                <td className="py-2.5 pr-3 text-slate-500 dark:text-slate-400 text-xs">{inc.service}</td>
+                <td className="py-2.5 pr-3 font-mono text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">{inc.incident_id}</td>
+                <td className="py-2.5 pr-3 max-w-[480px]">
+                  <div className="text-xs text-slate-900 dark:text-white leading-snug line-clamp-2" title={inc.details || inc.title}>
+                    {inc.details || inc.title}
+                  </div>
+                </td>
                 <td className="py-2.5 pr-3">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded border ${severityClass(inc.severity)}`}>{inc.severity}</span>
                 </td>
                 <td className="py-2.5 pr-3"><StateBadge state={inc.state} /></td>
-                <td className="py-2.5 pr-3 text-xs">
-                  {isResolved(inc.state)
-                    ? <span className="text-slate-700 dark:text-slate-300">{inc.root_cause}</span>
-                    : <span className="text-slate-400 dark:text-slate-500 italic">Investigating…</span>}
-                </td>
                 <td className="py-2.5 text-xs">
                   {isResolved(inc.state)
-                    ? <span className="text-slate-500 dark:text-slate-400">{inc.fix}</span>
-                    : <span className="text-slate-400 dark:text-slate-500 italic">Pending</span>}
+                    ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">Resolved</span>
+                    : <span className="text-slate-400 dark:text-slate-500 italic">{inc.fix || 'Pending'}</span>}
                 </td>
               </tr>
             ))}
@@ -1166,14 +2746,21 @@ export default function IncidentExplorer() {
       {/* Incident detail popup */}
       {selected && (
         <IncidentPopup
-          incident={selected}
+          incident={selected!}
           analysis={analysis}
           analysisLoading={analysisLoading}
           analysisError={analysisError}
           changeRequests={changeRequests}
           onClose={handleClose}
+          onResolved={(updated) => {
+            setSelected(updated);
+            setIncidents((prev) =>
+              prev.map((inc) => (inc.incident_id === updated.incident_id ? updated : inc))
+            );
+          }}
         />
       )}
+      </>}
     </div>
   );
 }
