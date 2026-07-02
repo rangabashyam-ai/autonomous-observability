@@ -224,7 +224,7 @@ export default function ExecutiveCommandCenter() {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-text-primary group-hover:text-primary transition-colors truncate">{svc.name}</p>
-                        <UtilizationBar label="" value={svc.availability} max={100} />
+                        <UtilizationBar label="" value={svc.availability} max={100} variant="availability" />
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <HealthBadge health={svc.health} />

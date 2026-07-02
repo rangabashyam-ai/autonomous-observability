@@ -132,3 +132,5 @@ _platform_drawer.txt
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
+
+.gemini/

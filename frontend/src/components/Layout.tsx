@@ -132,8 +132,10 @@ export default function Layout() {
           'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0',
           'border-r border-border bg-card',
           'transition-[width] duration-200 ease-in-out',
-          sidebarExpanded ? 'w-[220px]' : 'w-[60px]'
+          sidebarExpanded ? 'w-[220px]' : 'w-[60px]',
+          !sidebarExpanded && 'cursor-pointer'
         )}
+        onClick={!sidebarExpanded ? () => setSidebarExpanded(true) : undefined}
       >
         {/* Logo row + collapse control */}
         <div
@@ -155,23 +157,16 @@ export default function Layout() {
               </p>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setSidebarExpanded((prev) => !prev)}
-            className={cn(
-              'shrink-0 h-7 w-7 flex items-center justify-center rounded-md',
-              'text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors',
-              sidebarExpanded && 'ml-auto'
-            )}
-            aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-expanded={sidebarExpanded}
-          >
-            {sidebarExpanded ? (
+          {sidebarExpanded && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSidebarExpanded(false); }}
+              className="ml-auto shrink-0 h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
+              aria-label="Collapse sidebar"
+            >
               <ChevronLeft className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Nav — fills remaining height, scrolls independently */}
