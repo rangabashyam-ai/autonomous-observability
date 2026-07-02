@@ -4,7 +4,7 @@ import { analyzeEarlyDetection, copilotChat, getIncidents } from '../api/client'
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
 import type { EarlyDetection, Incident } from '../types/intelligence';
-import { Sparkles, Bot, MessageSquare, ShieldAlert, Send, RefreshCw, AlertTriangle, Target, Zap, Clock, TrendingUp, ArrowRight } from 'lucide-react';
+import { Sparkles, Bot, MessageSquare, ShieldAlert, Send, RefreshCw, AlertTriangle, Target, Zap, Clock, TrendingUp, ArrowRight, ExternalLink, Activity } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -248,6 +248,39 @@ function formatAge(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
+}
+
+function isServiceId(id: string, serviceRisksList?: ServiceRisk[]): boolean {
+  if (!id) return false;
+  const clean = id.toLowerCase().replace(/[\s-_]+/g, '');
+  if (serviceRisksList) {
+    if (serviceRisksList.some(s => s.service_id.toLowerCase().replace(/[\s-_]+/g, '') === clean || s.service_name.toLowerCase().replace(/[\s-_]+/g, '') === clean)) {
+      return true;
+    }
+  }
+  if (clean.includes('service') || clean.includes('frontend') || /^servicetest\d+$/i.test(clean)) {
+    return true;
+  }
+  const known = [
+    'frontend', 'payment-service', 'ad-service', 'email-service', 'cart-service', 
+    'shipping-service', 'recommendation-service', 'product-catalog-service', 
+    'currency-service', 'checkout-service', 'payment-authorization', 'settlement-processing',
+    'api-gateway-services', 'account-service', 'user-service', 'auth-service'
+  ].map(s => s.toLowerCase().replace(/[\s-_]+/g, ''));
+  return known.includes(clean);
+}
+
+function getServiceUrlId(id: string, serviceRisksList?: ServiceRisk[]): string {
+  if (!id) return '';
+  const clean = id.toLowerCase().replace(/[\s-_]+/g, '');
+  if (serviceRisksList) {
+    const found = serviceRisksList.find(s => s.service_id.toLowerCase().replace(/[\s-_]+/g, '') === clean || s.service_name.toLowerCase().replace(/[\s-_]+/g, '') === clean);
+    if (found) return found.service_id;
+  }
+  if (id.includes(' ')) {
+    return id.toLowerCase().replace(/\s+/g, '-');
+  }
+  return id;
 }
 
 function alertsForService(
@@ -563,16 +596,27 @@ function AiSuggestionsBlock({
 function AlertFeedRow({
   alert,
   onSelectDetection,
+  serviceRisks,
 }: {
   alert: AlertFeedItem;
   onSelectDetection?: (patternId: string) => void;
+  serviceRisks?: ServiceRisk[];
 }) {
   return (
     <div className="p-3 rounded-lg border border-border bg-card-hover">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <p className="font-medium text-text-primary text-sm">{alert.title}</p>
-          <p className="text-xs text-text-secondary font-mono mt-0.5">{alert.entity_id}</p>
+          {isServiceId(alert.entity_id, serviceRisks) ? (
+            <Link
+              to={`/services/${getServiceUrlId(alert.entity_id, serviceRisks)}`}
+              className="text-xs text-primary hover:underline font-mono mt-0.5 block"
+            >
+              {alert.entity_id}
+            </Link>
+          ) : (
+            <p className="text-xs text-text-secondary font-mono mt-0.5">{alert.entity_id}</p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           {severityBadge(alert.severity)}
@@ -1188,9 +1232,18 @@ export default function EarlyDetectionDashboard() {
                           </Badge>
                         )}
                       </div>
-                      <h2 className="text-xl font-bold text-text-primary">
-                        {selected.expected_impacted_service}
-                      </h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-text-primary">
+                          {selected.expected_impacted_service}
+                        </h2>
+                        <Link
+                          to={`/services/${selected.expected_impacted_service_id || getServiceUrlId(selected.expected_impacted_service, serviceRisks)}`}
+                          className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-primary"
+                          title="View Service Details"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </div>
                       <p className="text-sm text-text-secondary mt-1">
                         {selected.pattern_label ?? selected.pattern_id}
                       </p>
@@ -1262,8 +1315,17 @@ export default function EarlyDetectionDashboard() {
                                     </p>
                                   )}
                                 </td>
-                                <td className="px-4 py-2.5 text-text-secondary hidden sm:table-cell font-mono text-xs">
-                                  {a.entity_id}
+                                <td className="px-4 py-2.5 hidden sm:table-cell font-mono text-xs">
+                                  {isServiceId(a.entity_id, serviceRisks) ? (
+                                    <Link
+                                      to={`/services/${getServiceUrlId(a.entity_id, serviceRisks)}`}
+                                      className="text-primary hover:underline"
+                                    >
+                                      {a.entity_id}
+                                    </Link>
+                                  ) : (
+                                    <span className="text-text-secondary">{a.entity_id}</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-2.5">{severityBadge(a.severity)}</td>
                                 <td className="px-4 py-2.5 text-text-secondary hidden md:table-cell text-xs">
@@ -1293,11 +1355,29 @@ export default function EarlyDetectionDashboard() {
                               key={entity}
                               className="flex flex-wrap items-center gap-1.5 text-xs p-3 rounded-lg bg-card-hover border border-border"
                             >
-                              <span className="font-mono text-text-primary">{entity}</span>
+                              {isServiceId(entity, serviceRisks) ? (
+                                <Link
+                                  to={`/services/${getServiceUrlId(entity, serviceRisks)}`}
+                                  className="font-mono text-primary hover:underline font-semibold"
+                                >
+                                  {entity}
+                                </Link>
+                              ) : (
+                                <span className="font-mono text-text-primary">{entity}</span>
+                              )}
                               {path.map((node, i) => (
                                 <span key={`${entity}-${i}`} className="flex items-center gap-1.5">
                                   <ArrowRight className="h-3 w-3 text-text-secondary" />
-                                  <span className="font-mono text-text-secondary">{node}</span>
+                                  {isServiceId(node, serviceRisks) ? (
+                                    <Link
+                                      to={`/services/${getServiceUrlId(node, serviceRisks)}`}
+                                      className="font-mono text-primary hover:underline font-semibold"
+                                    >
+                                      {node}
+                                    </Link>
+                                  ) : (
+                                    <span className="font-mono text-text-secondary">{node}</span>
+                                  )}
                                 </span>
                               ))}
                             </div>
@@ -1383,6 +1463,36 @@ export default function EarlyDetectionDashboard() {
                         ))}
                       </ul>
                     </section>
+                  </div>
+
+                  {/* Deep Analysis & Investigation Tools */}
+                  <div className="pt-4 border-t border-border space-y-3">
+                    <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                      Deep Diagnostic & Remediation Tools
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/rca?service=${selected.expected_impacted_service_id || getServiceUrlId(selected.expected_impacted_service, serviceRisks)}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-card-hover text-text-primary hover:border-primary/45 transition-colors"
+                      >
+                        <Activity className="h-3.5 w-3.5 text-primary" />
+                        Run RCA Analysis
+                      </Link>
+                      <Link
+                        to={`/blast-radius?service=${selected.expected_impacted_service_id || getServiceUrlId(selected.expected_impacted_service, serviceRisks)}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-card-hover text-text-primary hover:border-primary/45 transition-colors"
+                      >
+                        <Target className="h-3.5 w-3.5 text-warning" />
+                        Simulate Blast Radius
+                      </Link>
+                      <Link
+                        to={`/investigation?service=${selected.expected_impacted_service_id || getServiceUrlId(selected.expected_impacted_service, serviceRisks)}&alerts=${encodeURIComponent(JSON.stringify(selected.matched_alerts))}&symptoms=${encodeURIComponent(JSON.stringify(selected.expected_symptoms))}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-slate-100 dark:hover:bg-slate-800 text-text-primary hover:border-violet-500/45 transition-colors bg-gradient-to-r from-violet-500/5 to-indigo-500/5"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                        Launch AI Investigation
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -1677,7 +1787,7 @@ export default function EarlyDetectionDashboard() {
               ) : (
                 <div className="space-y-3">
                   {criticalFeed.map((alert) => (
-                    <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} />
+                    <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} serviceRisks={serviceRisks} />
                   ))}
                 </div>
               )}
@@ -1689,7 +1799,7 @@ export default function EarlyDetectionDashboard() {
                     .filter((a) => a.severity !== 'critical')
                     .slice(0, 12)
                     .map((alert) => (
-                      <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} />
+                      <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} serviceRisks={serviceRisks} />
                     ))}
                 </div>
               </DrilldownSection>
@@ -1756,7 +1866,16 @@ export default function EarlyDetectionDashboard() {
                               <div key={alert.id} className="flex items-center justify-between p-2 rounded-lg bg-success/5 border border-success/20 text-xs">
                                 <div className="min-w-0">
                                   <p className="font-semibold text-text-primary truncate">{alert.title}</p>
-                                  <p className="text-[10px] text-text-secondary font-mono truncate">{alert.entity_id}</p>
+                                  {isServiceId(alert.entity_id, serviceRisks) ? (
+                                    <Link
+                                      to={`/services/${getServiceUrlId(alert.entity_id, serviceRisks)}`}
+                                      className="text-[10px] text-primary hover:underline font-mono truncate block"
+                                    >
+                                      {alert.entity_id}
+                                    </Link>
+                                  ) : (
+                                    <p className="text-[10px] text-text-secondary font-mono truncate">{alert.entity_id}</p>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   {severityBadge(alert.severity)}
@@ -1943,11 +2062,29 @@ export default function EarlyDetectionDashboard() {
                         <div className="space-y-2">
                           {Object.entries(cachedDetection.propagation_paths).map(([entity, path]) => (
                             <div key={entity} className="flex flex-wrap items-center gap-1.5 text-xs p-3 rounded-lg bg-card-hover border border-border">
-                              <span className="font-mono text-text-primary">{entity}</span>
+                              {isServiceId(entity, serviceRisks) ? (
+                                <Link
+                                  to={`/services/${getServiceUrlId(entity, serviceRisks)}`}
+                                  className="font-mono text-primary hover:underline font-semibold"
+                                >
+                                  {entity}
+                                </Link>
+                              ) : (
+                                <span className="font-mono text-text-primary">{entity}</span>
+                              )}
                               {path.map((node, i) => (
                                 <span key={`${entity}-${i}`} className="flex items-center gap-1.5">
                                   <ArrowRight className="h-3 w-3 text-text-secondary" />
-                                  <span className="font-mono text-text-secondary">{node}</span>
+                                  {isServiceId(node, serviceRisks) ? (
+                                    <Link
+                                      to={`/services/${getServiceUrlId(node, serviceRisks)}`}
+                                      className="font-mono text-primary hover:underline font-semibold"
+                                    >
+                                      {node}
+                                    </Link>
+                                  ) : (
+                                    <span className="font-mono text-text-secondary">{node}</span>
+                                  )}
                                 </span>
                               ))}
                             </div>
@@ -2011,7 +2148,18 @@ export default function EarlyDetectionDashboard() {
           <>
             <DrilldownSection title="Highest urgency threat">
               <div className="p-4 rounded-lg border border-critical/30 bg-critical/5">
-                <p className="text-lg font-bold text-text-primary">{soonestDetection.expected_impacted_service}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-lg font-bold text-text-primary">
+                    {soonestDetection.expected_impacted_service}
+                  </p>
+                  <Link
+                    to={`/services/${soonestDetection.expected_impacted_service_id || getServiceUrlId(soonestDetection.expected_impacted_service, serviceRisks)}`}
+                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-primary animate-in fade-in"
+                    title="View Service Details"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </div>
                 <p className="text-sm text-text-secondary mt-1">{soonestDetection.pattern_label}</p>
                 <div className="flex gap-4 mt-3 text-sm">
                   <span className="text-critical font-semibold">
@@ -2089,10 +2237,34 @@ export default function EarlyDetectionDashboard() {
               <div className={cn('p-4 rounded-lg border', STAGE_META[drillService.progression_stage]?.bg ?? 'border-border')}>
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <p className="text-lg font-bold text-text-primary">{drillService.service_name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-text-primary">{drillService.service_name}</p>
+                      <Link
+                        to={`/services/${drillService.service_id}`}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-primary animate-in fade-in"
+                        title="View Service Details Page"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </div>
                     <p className="text-xs text-text-secondary mt-1 capitalize">{drillService.progression_stage} stage</p>
                   </div>
                   <Badge variant={RISK_VARIANT[drillService.risk_level] ?? 'secondary'}>{drillService.risk_level}</Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4 pt-1">
+                  <Link
+                    to={`/rca?service=${drillService.service_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-white dark:bg-slate-800 text-xs text-text-primary hover:bg-slate-100 dark:hover:bg-slate-700 border border-border"
+                  >
+                    <Activity className="h-3 w-3 text-primary" /> RCA Analysis
+                  </Link>
+                  <Link
+                    to={`/blast-radius?service=${drillService.service_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-white dark:bg-slate-800 text-xs text-text-primary hover:bg-slate-100 dark:hover:bg-slate-700 border border-border"
+                  >
+                    <Target className="h-3 w-3 text-warning" /> Blast Radius
+                  </Link>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-center text-xs">
                   <div className="p-2 rounded-lg bg-card/80">
@@ -2135,7 +2307,7 @@ export default function EarlyDetectionDashboard() {
               ) : (
                 <div className="space-y-3 max-h-72 overflow-y-auto">
                   {serviceAlerts(drill.serviceId).slice(0, 10).map((alert) => (
-                    <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} />
+                    <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} serviceRisks={serviceRisks} />
                   ))}
                 </div>
               )}
@@ -2169,7 +2341,7 @@ export default function EarlyDetectionDashboard() {
             </p>
             <div className="space-y-3 max-h-80 overflow-y-auto">
               {conditionAlerts(drill.conditionTitle).map((alert) => (
-                <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} />
+                <AlertFeedRow key={alert.id} alert={alert} onSelectDetection={jumpToDetection} serviceRisks={serviceRisks} />
               ))}
             </div>
           </DrilldownSection>
@@ -2228,7 +2400,16 @@ export default function EarlyDetectionDashboard() {
                     <div key={a.id} className="flex justify-between items-center p-2 rounded-lg bg-card-hover text-sm">
                       <div>
                         <p className="font-medium text-text-primary">{a.title}</p>
-                        <p className="text-xs text-text-secondary font-mono">{a.entity_id}</p>
+                        {isServiceId(a.entity_id, serviceRisks) ? (
+                          <Link
+                            to={`/services/${getServiceUrlId(a.entity_id, serviceRisks)}`}
+                            className="text-xs text-primary hover:underline font-mono"
+                          >
+                            {a.entity_id}
+                          </Link>
+                        ) : (
+                          <p className="text-xs text-text-secondary font-mono">{a.entity_id}</p>
+                        )}
                       </div>
                       {severityBadge(a.severity)}
                     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader, inputClass } from '../components/ui';
 import type { BankIncident, BankAlertItem } from './IncidentExplorer';
 import { BankRCAPanel } from './IncidentExplorer';
@@ -89,11 +90,12 @@ function IncidentListItem({
 // Inline alerts table (shown inside the detail view)
 // ---------------------------------------------------------------------------
 
-function InlineAlertsTable({ alerts }: { alerts: BankAlertItem[] }) {
+function InlineAlertsTable({ alerts }: { alerts?: BankAlertItem[] }) {
   const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? alerts : alerts.slice(0, 10);
+  const alertList = alerts ?? [];
+  const visible = showAll ? alertList : alertList.slice(0, 10);
 
-  const byCat = alerts.reduce<Record<string, number>>((acc, a) => {
+  const byCat = alertList.reduce<Record<string, number>>((acc, a) => {
     const cat = parseAlertCategory(a.alertRule);
     acc[cat] = (acc[cat] ?? 0) + 1;
     return acc;
@@ -155,12 +157,12 @@ function InlineAlertsTable({ alerts }: { alerts: BankAlertItem[] }) {
         </table>
       </div>
 
-      {alerts.length > 10 && (
+      {alertList.length > 10 && (
         <button
           onClick={() => setShowAll((v) => !v)}
           className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
         >
-          {showAll ? `Show less` : `Show all ${alerts.length} alerts`}
+          {showAll ? `Show less` : `Show all ${alertList.length} alerts`}
         </button>
       )}
     </div>
@@ -196,7 +198,7 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
             <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            {incident.evidence.alertCount} alerts
+            {incident.alerts?.count ?? 0} alerts
           </span>
         </div>
       </div>
@@ -205,19 +207,19 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Created</p>
-          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.createdTime.replace('T', ' ')}</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.createdTime ? incident.createdTime.replace('T', ' ') : 'N/A'}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Last Update</p>
-          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.lastUpdateTime.replace('T', ' ')}</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.lastUpdateTime ? incident.lastUpdateTime.replace('T', ' ') : 'N/A'}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Owner</p>
-          <p className="text-slate-700 dark:text-slate-300">{incident.owner.assignedTo ?? 'Unassigned'}</p>
+          <p className="text-slate-700 dark:text-slate-300">{incident.owner?.assignedTo ?? 'Unassigned'}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Query index</p>
-          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.queryIndex}</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.queryIndex ?? 'N/A'}</p>
         </div>
       </div>
 
@@ -225,16 +227,16 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
       <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">Investigation Window</p>
         <p className="font-mono text-slate-700 dark:text-slate-300">
-          {incident.timeWindow.start.replace('T', ' ')} &mdash; {incident.timeWindow.end.replace('T', ' ')}
+          {incident.timeWindow?.start ? incident.timeWindow.start.replace('T', ' ') : 'N/A'} &mdash; {incident.timeWindow?.end ? incident.timeWindow.end.replace('T', ' ') : 'N/A'}
         </p>
       </div>
 
       {/* RCA Analysis */}
-      <BankRCAPanel timeWindow={incident.timeWindow} />
+      {incident.timeWindow && <BankRCAPanel timeWindow={incident.timeWindow} />}
 
       {/* Entities + Tactics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {incident.entities.length > 0 && (
+        {incident.entities && incident.entities.length > 0 && (
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Entities</p>
             <div className="flex flex-wrap gap-1">
@@ -246,7 +248,7 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
             </div>
           </div>
         )}
-        {incident.tactics.length > 0 && (
+        {incident.tactics && incident.tactics.length > 0 && (
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Tactics</p>
             <div className="flex flex-wrap gap-1">
@@ -271,9 +273,9 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
       {/* Linked alerts */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-          Linked Alerts <span className="ml-1 text-slate-500">({incident.alerts.count})</span>
+          Linked Alerts <span className="ml-1 text-slate-500">({incident.alerts?.count ?? 0})</span>
         </p>
-        <InlineAlertsTable alerts={incident.alerts.items} />
+        <InlineAlertsTable alerts={incident.alerts?.items} />
       </div>
     </div>
   );
@@ -284,6 +286,7 @@ function IncidentDetailView({ incident }: { incident: BankIncident }) {
 // ---------------------------------------------------------------------------
 
 export default function RCADashboard() {
+  const [searchParams] = useSearchParams();
   const [incidents, setIncidents] = useState<BankIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<BankIncident | null>(null);
@@ -297,11 +300,22 @@ export default function RCADashboard() {
       .then((data: any) => {
         const payload = Array.isArray(data) ? data : data.incidents || [];
         setIncidents(payload);
-        setSelected(payload[0] ?? null);
+        
+        const serviceParam = searchParams.get('service');
+        if (serviceParam) {
+          setSearch(serviceParam);
+          const found = payload.find(
+            (i: BankIncident) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) || 
+                   i.description?.toLowerCase().includes(serviceParam.toLowerCase())
+          );
+          setSelected(found ?? payload[0] ?? null);
+        } else {
+          setSelected(payload[0] ?? null);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();

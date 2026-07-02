@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import { ArrowLeft, Activity, TrendingUp, AlertTriangle, Clock, Users, Zap } from 'lucide-react';
+import { ArrowLeft, Activity, TrendingUp, AlertTriangle, Clock, Users } from 'lucide-react';
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
-import RelatedResourcesPanel, { IncidentContextPanel } from '../components/drilldown/RelatedResourcesPanel';
+import { IncidentContextPanel } from '../components/drilldown/RelatedResourcesPanel';
 import { DrilldownMetricCard } from '../components/drilldown/DrilldownDrawer';
 import { getMonitoringDashboard, getOverview, getDependencyGraph } from '../api/client';
 import type { ServiceMetric } from '../types/api';
@@ -46,13 +46,14 @@ export default function ServiceDetailPage() {
           });
         }
 
-        // Find related services from the dependency graph edges
+        // Find related services from the dependency graph edges (case-insensitively)
         const relatedIds = new Set<string>();
+        const targetId = serviceId?.toLowerCase() ?? '';
         graph.edges.forEach((edge) => {
-          if (edge.source === serviceId) relatedIds.add(edge.target);
-          if (edge.target === serviceId) relatedIds.add(edge.source);
+          if (edge.source.toLowerCase() === targetId) relatedIds.add(edge.target.toLowerCase());
+          if (edge.target.toLowerCase() === targetId) relatedIds.add(edge.source.toLowerCase());
         });
-        const related = monitoring.service.services.filter((s) => relatedIds.has(s.id));
+        const related = monitoring.service.services.filter((s) => relatedIds.has(s.id.toLowerCase()));
         setRelatedServices(related.slice(0, 5));
       })
       .catch(console.error)
@@ -134,6 +135,7 @@ export default function ServiceDetailPage() {
   }));
 
   // Build related resources from real dependency data
+  /*
   const relatedResources = relatedServices.map((rs, i) => ({
     id: rs.id,
     name: rs.name,
@@ -145,6 +147,7 @@ export default function ServiceDetailPage() {
       { label: 'Error Rate', value: `${rs.error_rate.toFixed(2)}%` },
     ],
   }));
+  */
 
   // Build incidents from real overview data
   const serviceIncidents = overview?.recent_incidents
@@ -359,7 +362,7 @@ export default function ServiceDetailPage() {
               </ResponsiveContainer>
             </section>
 
-            {/* Recent Deployments */}
+            {/* Recent Deployments
             <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Zap className="w-5 h-5 text-slate-600 dark:text-slate-400" />
@@ -386,6 +389,7 @@ export default function ServiceDetailPage() {
                 </div>
               </div>
             </section>
+            */}
           </div>
 
           {/* Sidebar - 1 column */}
@@ -403,10 +407,11 @@ export default function ServiceDetailPage() {
               <IncidentContextPanel incidents={incidents} alerts={alerts} />
             </div>
 
-            {/* Related Resources */}
+            {/* Related Resources
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">
               <RelatedResourcesPanel resources={relatedResources} title="Dependencies" />
             </div>
+            */}
 
             {/* SLA Impact */}
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">

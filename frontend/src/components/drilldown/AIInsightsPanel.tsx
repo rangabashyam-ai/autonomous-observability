@@ -1,4 +1,5 @@
 import { Brain, Lightbulb, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 
 interface AIInsight {
@@ -37,8 +38,31 @@ function getConfidenceColor(confidence: number) {
 }
 
 export default function AIInsightsPanel({ insights, entityType, entityName, health }: AIInsightsPanelProps) {
+  const navigate = useNavigate();
   // Generate contextual AI insights based on health
   const contextualInsights: AIInsight[] = insights.length > 0 ? insights : generateDefaultInsights(health, entityName, entityType);
+
+  const handleStartInvestigation = () => {
+    const alertsList = contextualInsights
+      .filter((i) => i.type === 'diagnosis')
+      .map((i) => i.message)
+      .concat(contextualInsights.filter((i) => i.type === 'correlation').map((i) => i.message));
+    
+    const symptomsList = contextualInsights
+      .filter((i) => i.type === 'prediction')
+      .map((i) => i.message);
+
+    const fallbackAlerts = alertsList.length > 0 ? alertsList : [`Active anomaly on ${entityName}`];
+    const fallbackSymptoms = symptomsList.length > 0 ? symptomsList : ['Degraded performance indicators'];
+
+    const params = new URLSearchParams({
+      service: entityName,
+      alerts: JSON.stringify(fallbackAlerts.slice(0, 3)),
+      symptoms: JSON.stringify(fallbackSymptoms.slice(0, 3)),
+    });
+    
+    navigate(`/investigation?${params.toString()}`);
+  };
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -87,7 +111,10 @@ export default function AIInsightsPanel({ insights, entityType, entityName, heal
       </div>
 
       <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-800">
-        <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <button
+          onClick={handleStartInvestigation}
+          className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+        >
           Start AI-Guided Investigation
         </button>
       </div>

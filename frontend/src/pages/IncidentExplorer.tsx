@@ -2183,12 +2183,27 @@ function BankDetailPanel({ incident, onClose }: { incident: BankIncident; onClos
 }
 
 export function BankSentinelView() {
+  const [searchParams] = useSearchParams();
   const [bankIncidents, setBankIncidents] = useState<BankIncident[]>([]);
   const [bankLoading, setBankLoading] = useState(true);
   const [selectedInc, setSelectedInc] = useState<BankIncident | null>(null);
   const [filterSev, setFilterSev] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [bankSearch, setBankSearch] = useState('');
+
+  // Handle deep-linked incident parameter
+  useEffect(() => {
+    if (bankLoading || bankIncidents.length === 0) return;
+    const id = searchParams.get('id');
+    if (id) {
+      const found = bankIncidents.find(
+        (i) => i?.incidentId?.toLowerCase().trim() === id.toLowerCase().trim()
+      );
+      if (found) {
+        setSelectedInc(found);
+      }
+    }
+  }, [searchParams, bankIncidents, bankLoading]);
 
   useEffect(() => {
     fetch('/api/vm/incidents')
