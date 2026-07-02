@@ -380,12 +380,12 @@ function NodeChatPopup({ node, paths, pathsLoading, heatmapMetric, onClose }: No
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex justify-end"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
-      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div className="relative z-10 w-full sm:w-[min(90vw,600px)] md:w-[min(80vw,720px)] lg:w-[min(65vw,840px)] h-full flex flex-col bg-card border-l border-border shadow-2xl animate-in slide-in-from-right duration-300 text-left">
 
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">

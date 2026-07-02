@@ -10,7 +10,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import { SERVICES } from '../constants/services';
 import {
   copilotChat,
   startInvestigation,

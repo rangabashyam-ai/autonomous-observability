@@ -33,6 +33,8 @@ interface Props {
   graph?: DependencyGraph | null;
   isExpanded?: boolean;
   onToggle?: () => void;
+  onOpenDrawer?: () => void;
+  contentOnly?: boolean;
 }
 
 const ROLE_BADGE: Record<BlastImpactRole, string> = {
@@ -99,6 +101,8 @@ export function IncidentPropagationSummary({
   symptoms: _symptoms = ['Latency Increase', 'Retry Storm'],
   isExpanded: controlledExpanded,
   onToggle,
+  onOpenDrawer,
+  contentOnly = false,
 }: {
   result: BlastRadiusResult;
   rootLabel: string;
@@ -107,11 +111,17 @@ export function IncidentPropagationSummary({
   symptoms?: string[];
   isExpanded?: boolean;
   onToggle?: () => void;
+  onOpenDrawer?: () => void;
+  contentOnly?: boolean;
 }) {
   const [elapsed, setElapsed] = useState(14 * 60 + 32);
   const [internalExpanded, setInternalExpanded] = useState(false);
-  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const isExpanded = contentOnly ? true : controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
+  const handleSummaryClick = () => {
+    if (onOpenDrawer) onOpenDrawer();
+    else toggleExpanded();
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -146,10 +156,10 @@ export function IncidentPropagationSummary({
     newServicesCount = 0;
   }
   return (
-    <div className="bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out">
-      {/* COLLAPSED STATE DESIGN / SUMMARY BAR */}
+    <div className={contentOnly ? 'text-sm' : 'bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out'}>
+      {!contentOnly && (
       <div 
-        onClick={toggleExpanded}
+        onClick={handleSummaryClick}
         className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 h-[48px] gap-2"
       >
         {/* Left Side: Warning Icon + "{rootLabel} failed" */}
@@ -184,18 +194,23 @@ export function IncidentPropagationSummary({
           <button
             type="button"
             className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
-            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            style={{ transform: onOpenDrawer ? 'rotate(-90deg)' : isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           >
             ▼
           </button>
         </div>
       </div>
+      )}
 
       {/* EXPANDED STATE */}
       <div 
-        className={`transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
-        }`}
+        className={
+          contentOnly
+            ? ''
+            : `transition-all duration-300 ease-in-out ${
+                isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
+              }`
+        }
       >
         <div className="p-4 space-y-2 text-slate-655 dark:text-slate-300 rounded-b-lg">
           <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100 dark:border-slate-700/60">
@@ -420,10 +435,16 @@ export default function BlastRadiusDetailPanel({
   graph,
   isExpanded: controlledExpanded,
   onToggle,
+  onOpenDrawer,
+  contentOnly = false,
 }: Props) {
-  const [internalExpanded, setInternalExpanded] = useState(true);
-  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = contentOnly ? true : controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggleExpanded = onToggle || (() => setInternalExpanded((prev) => !prev));
+  const handleSummaryClick = () => {
+    if (onOpenDrawer) onOpenDrawer();
+    else toggleExpanded();
+  };
 
   const selectedNode = selection?.type === 'node' ? selection.detail : null;
   const selectedEdge = selection?.type === 'edge' ? selection.detail : null;
@@ -442,10 +463,10 @@ export default function BlastRadiusDetailPanel({
   }
 
   return (
-    <div className="bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out">
-      {/* COLLAPSED STATE DESIGN / SUMMARY BAR */}
+    <div className={contentOnly ? 'text-sm' : 'bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden transition-all duration-300 ease-in-out'}>
+      {!contentOnly && (
       <div 
-        onClick={toggleExpanded}
+        onClick={handleSummaryClick}
         className="flex items-center justify-between px-4 cursor-pointer select-none hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 h-[48px] gap-2"
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -494,18 +515,23 @@ export default function BlastRadiusDetailPanel({
           <button
             type="button"
             className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-300 p-1 rounded transition-transform duration-300"
-            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            style={{ transform: onOpenDrawer ? 'rotate(-90deg)' : isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           >
             ▼
           </button>
         </div>
       </div>
+      )}
 
       {/* EXPANDED CONTENT WRAPPER */}
       <div 
-        className={`transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
-        }`}
+        className={
+          contentOnly
+            ? ''
+            : `transition-all duration-300 ease-in-out ${
+                isExpanded ? 'max-h-[50vh] border-t border-slate-150 dark:border-slate-700/60 overflow-y-auto' : 'max-h-0 overflow-hidden'
+              }`
+        }
       >
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 shrink-0">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">Component Inspector</h3>

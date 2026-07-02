@@ -21,8 +21,9 @@ import BlastRadiusDetailPanel, {
   IncidentPropagationSummary,
 } from '../components/BlastRadiusDetailPanel';
 import BlastRadiusClickableTags from '../components/BlastRadiusClickableTags';
-import BlastRadiusPathChat from '../components/BlastRadiusPathChat';
 import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import DrawerAIAssistant, { type DrawerAIAssistantProps } from '../components/drilldown/DrawerAIAssistant';
+import RightDrawerShell, { RightDrawerBody, RightDrawerHeader } from '../components/drilldown/RightDrawerShell';
 
 import BlastRadiusEdge from '../components/BlastRadiusEdge';
 
@@ -48,7 +49,7 @@ export default function BlastRadiusDashboard() {
   const [selectedRegionHighlight, setSelectedRegionHighlight] = useState<string | null>(null);
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<string | null>(null);
   const [activeRegionModal, setActiveRegionModal] = useState<string | null>(null);
-  const [expandedPanel, setExpandedPanel] = useState<'dynamic' | 'component' | 'chat' | null>(null);
+  const [activeInvestigationDrawer, setActiveInvestigationDrawer] = useState<'propagation' | 'component' | 'investigation' | null>(null);
 
   const baseServiceImpact = useMemo(() => {
     const serviceImpactMap: Record<string, number> = {
@@ -191,8 +192,7 @@ export default function BlastRadiusDashboard() {
 
   const selectNode = useCallback((nodeId: string) => {
     setSelection({ type: 'node', id: nodeId });
-    setExpandedPanel('component');
-  }, [setExpandedPanel]);
+  }, []);
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     selectNode(node.id);
@@ -294,6 +294,172 @@ export default function BlastRadiusDashboard() {
   }, [result, service, rootLabel, selection, selectionDetail]);
 
   useRegisterCopilotContext(copilotContext);
+
+  const buildBlastDrawerAI = useCallback(
+    (focus: string, suggestedQuestions?: string[]): DrawerAIAssistantProps | null => {
+      if (!result) return null;
+      return {
+        pageType: 'blast',
+        selectedEntity: focus,
+        entityData: {
+          failure_source: service,
+          failure_source_label: rootLabel,
+          business_impact_score: result.business_impact_score,
+          severity_recommendation: result.severity_recommendation,
+          issue_scope: result.issue_scope,
+          impacted_customers_estimate: result.impacted_customers_estimate,
+          currently_impacted_services: result.currently_impacted_services,
+          likely_downstream_services: result.likely_downstream_services,
+          impacted_infrastructure: result.impacted_infrastructure,
+          impacted_regions: result.impacted_regions,
+          selected_component: selectionDetail
+            ? selectionDetail.type === 'node'
+              ? {
+                  type: 'node',
+                  id: selectionDetail.detail.id,
+                  label: selectionDetail.detail.label,
+                  health: selectionDetail.detail.health,
+                }
+              : {
+                  type: 'edge',
+                  source: selectionDetail.detail.sourceLabel,
+                  target: selectionDetail.detail.targetLabel,
+                }
+            : null,
+        },
+        relatedMetrics: {
+          business_impact_score: result.business_impact_score,
+          impacted_customers_estimate: result.impacted_customers_estimate,
+        },
+        suggestedQuestions:
+          suggestedQuestions ?? [
+            'Explain this blast radius and how the incident propagates',
+            'Which downstream services are most at risk?',
+            'Summarize business impact and affected customers',
+            'What should we investigate next?',
+          ],
+      };
+    },
+    [result, service, rootLabel, selectionDetail]
+  );
+
+  const renderInvestigationDrawer = () => {
+    if (!activeInvestigationDrawer || !result) return null;
+
+    const drawerConfig = {
+      propagation: {
+        title: 'Dynamic Impact Analysis',
+        subtitle: `${rootLabel} · ${result.severity_recommendation} · ${result.issue_scope}`,
+        aiFocus: `Incident propagation: ${rootLabel}`,
+        questions: [
+          'Summarize how this incident is propagating',
+          'Which services are directly impacted vs downstream?',
+          'What is the estimated business impact?',
+        ],
+      },
+      component: {
+        title: 'Component Inspector',
+        subtitle: selectionDetail?.type === 'node'
+          ? selectionDetail.detail.label
+          : selectionDetail?.type === 'edge'
+            ? `${selectionDetail.detail.sourceLabel} → ${selectionDetail.detail.targetLabel}`
+            : 'Select a node or edge on the graph',
+        aiFocus: selectionDetail?.type === 'node'
+          ? `Component: ${selectionDetail.detail.label}`
+          : selectionDetail?.type === 'edge'
+            ? `Dependency: ${selectionDetail.detail.sourceLabel} → ${selectionDetail.detail.targetLabel}`
+            : `Component analysis: ${rootLabel}`,
+        questions: [
+          'Why is this component affected by the incident?',
+          'What is the propagation path from the root cause?',
+          'What remediation steps apply to this component?',
+        ],
+      },
+      investigation: {
+        title: 'Blast Radius Investigation',
+        subtitle: `Live analysis · ${rootLabel}`,
+        aiFocus: `Blast Radius: ${rootLabel}`,
+        questions: [
+          'Explain this blast radius and how the incident propagates',
+          'Which downstream services are most at risk?',
+          'Summarize business impact and affected customers',
+          'What should we investigate next?',
+        ],
+      },
+    }[activeInvestigationDrawer];
+
+    const drawerAI = buildBlastDrawerAI(drawerConfig.aiFocus, drawerConfig.questions);
+
+    return (
+      <RightDrawerShell
+        isOpen
+        onClose={() => setActiveInvestigationDrawer(null)}
+        zIndexClass="z-[9999]"
+        ariaLabel={drawerConfig.title}
+        disableAutoAI
+      >
+        <RightDrawerHeader
+          title={drawerConfig.title}
+          subtitle={drawerConfig.subtitle}
+          onClose={() => setActiveInvestigationDrawer(null)}
+        />
+        <RightDrawerBody className="px-4 py-4 space-y-4">
+          {activeInvestigationDrawer === 'propagation' && (
+            <IncidentPropagationSummary
+              result={result}
+              rootLabel={rootLabel}
+              selection={selectionDetail}
+              alerts={alerts}
+              symptoms={symptoms}
+              contentOnly
+            />
+          )}
+          {activeInvestigationDrawer === 'component' && (
+            <BlastRadiusDetailPanel
+              rootId={service}
+              rootLabel={rootLabel}
+              selection={selectionDetail}
+              onSelectNode={selectNode}
+              onSetRootCause={handleSetRootCause}
+              result={result}
+              graph={graph}
+              contentOnly
+            />
+          )}
+          {activeInvestigationDrawer === 'investigation' && (
+            <p className="text-sm text-text-secondary">
+              Ask questions about blast radius propagation, impacted services, infrastructure dependencies,
+              and recommended investigation steps for <strong className="text-text-primary">{rootLabel}</strong>.
+            </p>
+          )}
+          {drawerAI && <DrawerAIAssistant {...drawerAI} embedded />}
+        </RightDrawerBody>
+      </RightDrawerShell>
+    );
+  };
+
+  const buildMetricDrawerAI = (modalTitle: string, modalKey: string): DrawerAIAssistantProps => ({
+    pageType: 'blast',
+    selectedEntity: modalTitle,
+    entityData: {
+      analysis_type: modalKey,
+      failure_source: service,
+      failure_source_label: rootLabel,
+      business_impact_score: result?.business_impact_score,
+      severity_recommendation: result?.severity_recommendation,
+      issue_scope: result?.issue_scope,
+      impacted_customers_estimate: result?.impacted_customers_estimate,
+    },
+    relatedMetrics: {
+      business_impact_score: result?.business_impact_score ?? 0,
+      impacted_customers_estimate: result?.impacted_customers_estimate ?? 0,
+    },
+    suggestedQuestions: [
+      `How is ${modalTitle.toLowerCase()} calculated for this incident?`,
+      'What is driving the current blast radius score?',
+      'Which services should we prioritize based on this metric?',
+    ],
+  });
 
   const renderMetricModal = () => {
     if (!activeModal || !result) return null;
@@ -424,46 +590,24 @@ export default function BlastRadiusDashboard() {
     }
 
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        {/* Backdrop overlay */}
-        <div
-          className="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm transition-opacity"
-          onClick={() => setActiveModal(null)}
-        />
-
-        {/* Modal container */}
-        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-250 dark:border-slate-700 rounded-2xl w-full max-w-md shadow-2xl relative z-10 overflow-hidden transform transition-all">
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-150 dark:border-slate-750 bg-slate-50/50 dark:bg-slate-900/40">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              {title} Analysis
-            </h3>
-            <button
-              onClick={() => setActiveModal(null)}
-              className="text-slate-400 dark:text-slate-500 hover:text-slate-655 dark:hover:text-slate-350 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-705 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="px-6 py-5">
-            {explanation}
-          </div>
-
-          {/* Footer */}
-          <div className="flex justify-end px-6 py-3.5 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-150 dark:border-slate-755">
-            <button
-              onClick={() => setActiveModal(null)}
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-105 dark:bg-slate-700 text-slate-750 dark:text-slate-250 border border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-            >
-              Close
-            </button>
-          </div>
+      <RightDrawerShell
+        isOpen
+        onClose={() => setActiveModal(null)}
+        zIndexClass="z-[9999]"
+        ariaLabel={`${title} analysis`}
+        aiAssistant={buildMetricDrawerAI(`${title} Analysis`, activeModal)}
+      >
+        <RightDrawerHeader title={`${title} Analysis`} onClose={() => setActiveModal(null)} />
+        <RightDrawerBody className="px-6 py-5">{explanation}</RightDrawerBody>
+        <div className="flex justify-end px-6 py-3.5 bg-card-hover/40 border-t border-border shrink-0">
+          <button
+            onClick={() => setActiveModal(null)}
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-card border border-border text-text-primary hover:bg-card-hover transition-colors"
+          >
+            Close
+          </button>
         </div>
-      </div>
+      </RightDrawerShell>
     );
   };
 
@@ -540,77 +684,83 @@ export default function BlastRadiusDashboard() {
     const statusEmoji = statusEmojiMap[status] || '🟢';
 
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        {/* Backdrop overlay */}
-        <div
-          className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-[2px] transition-opacity"
-          onClick={() => setActiveRegionModal(null)}
-        />
-
-        {/* Popover Card */}
-        <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-[320px] shadow-xl relative z-10 overflow-hidden transform transition-all text-xs">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-slate-800 dark:text-white uppercase">
-                {rName}
-              </span>
-              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${statusBadgeClass}`}>
-                {statusEmoji} {status}
-              </span>
-            </div>
-            <button
-              onClick={() => setActiveRegionModal(null)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-350 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      <RightDrawerShell
+        isOpen
+        onClose={() => setActiveRegionModal(null)}
+        zIndexClass="z-[9999]"
+        ariaLabel={`Region ${rName}`}
+        aiAssistant={{
+          pageType: 'blast',
+          selectedEntity: `Region ${rName}`,
+          entityData: {
+            region: rName,
+            status,
+            impacted_services: impactedServices,
+            failed_pods: failedPods,
+            affected_customers: affectedCustomers,
+            avg_latency: latency,
+            failure_source: service,
+            failure_source_label: rootLabel,
+          },
+          relatedMetrics: {
+            affected_customers: affectedCustomers,
+            impacted_service_count: impactedServices.length,
+          },
+          suggestedQuestions: [
+            `What is the blast radius impact in ${rName}?`,
+            'Which services in this region are most affected?',
+            'How many customers are impacted in this region?',
+            'What remediation steps should we take for this region?',
+          ],
+        }}
+      >
+        <RightDrawerHeader title={rName.toUpperCase()} onClose={() => setActiveRegionModal(null)}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-text-primary uppercase">{rName}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${statusBadgeClass}`}>
+              {statusEmoji} {status}
+            </span>
           </div>
-
-          {/* Content */}
-          <div className="px-4 py-3.5 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2 bg-slate-50 dark:bg-slate-900/30 border border-slate-150 dark:border-slate-700/50 rounded-lg">
-                <div className="text-[9px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider mb-0.5">Total Services</div>
-                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">{localServices.length}</div>
-              </div>
-              <div className="p-2 bg-slate-50 dark:bg-slate-900/30 border border-slate-150 dark:border-slate-700/50 rounded-lg">
-                <div className="text-[9px] font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-0.5">Impacted</div>
-                <div className={`text-xs font-bold ${impactedServices.length > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                  {impactedServices.length}
-                </div>
-              </div>
-              <div className="p-2 bg-slate-50 dark:bg-slate-900/30 border border-slate-150 dark:border-slate-700/50 rounded-lg">
-                <div className="text-[9px] font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-0.5">Failed Pods</div>
-                <div className={`text-xs font-semibold ${failedPods.length > 0 ? 'text-amber-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                  {failedPods.length}
-                </div>
-              </div>
-              <div className="p-2 bg-slate-50 dark:bg-slate-900/30 border border-slate-150 dark:border-slate-700/50 rounded-lg">
-                <div className="text-[9px] font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-0.5">Affected Customers</div>
-                <div className="text-xs font-semibold text-blue-500">{affectedCustomers.toLocaleString()}</div>
-              </div>
-              <div className="p-2 bg-slate-50 dark:bg-slate-900/30 border border-slate-150 dark:border-slate-700/50 rounded-lg col-span-2">
-                <div className="text-[9px] font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-0.5">Avg Latency</div>
-                <div className={`text-xs font-semibold ${status === 'Critical' ? 'text-red-500' : status === 'Warning' ? 'text-amber-500' : 'text-green-500'}`}>
-                  {latency}
-                </div>
+        </RightDrawerHeader>
+        <RightDrawerBody className="px-4 py-3.5 space-y-3 text-xs">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="p-2 bg-card-hover border border-border rounded-lg">
+              <div className="text-[9px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Total Services</div>
+              <div className="text-xs font-semibold text-text-primary">{localServices.length}</div>
+            </div>
+            <div className="p-2 bg-card-hover border border-border rounded-lg">
+              <div className="text-[9px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Impacted</div>
+              <div className={`text-xs font-bold ${impactedServices.length > 0 ? 'text-critical' : 'text-success'}`}>
+                {impactedServices.length}
               </div>
             </div>
+            <div className="p-2 bg-card-hover border border-border rounded-lg">
+              <div className="text-[9px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Failed Pods</div>
+              <div className={`text-xs font-semibold ${failedPods.length > 0 ? 'text-warning' : 'text-text-secondary'}`}>
+                {failedPods.length}
+              </div>
+            </div>
+            <div className="p-2 bg-card-hover border border-border rounded-lg">
+              <div className="text-[9px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Affected Customers</div>
+              <div className="text-xs font-semibold text-primary">{affectedCustomers.toLocaleString()}</div>
+            </div>
+            <div className="p-2 bg-card-hover border border-border rounded-lg col-span-2">
+              <div className="text-[9px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Avg Latency</div>
+              <div className={`text-xs font-semibold ${status === 'Critical' ? 'text-critical' : status === 'Warning' ? 'text-warning' : 'text-success'}`}>
+                {latency}
+              </div>
+            </div>
           </div>
-          {/* Action Buttons */}
-          <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-700/60">
-            <button
-              onClick={() => setActiveRegionModal(null)}
-              className="w-full py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors text-center"
-            >
-              Close
-            </button>
-          </div>
+        </RightDrawerBody>
+        <div className="px-4 py-3 border-t border-border shrink-0">
+          <button
+            onClick={() => setActiveRegionModal(null)}
+            className="w-full py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-primary/90 text-white transition-colors"
+          >
+            Close
+          </button>
         </div>
-      </div>
+      </RightDrawerShell>
     );
   };
 
@@ -951,8 +1101,7 @@ export default function BlastRadiusDashboard() {
                   selection={selectionDetail}
                   alerts={alerts}
                   symptoms={symptoms}
-                  isExpanded={expandedPanel === 'dynamic'}
-                  onToggle={() => setExpandedPanel(prev => prev === 'dynamic' ? null : 'dynamic')}
+                  onOpenDrawer={() => setActiveInvestigationDrawer('propagation')}
                 />
               </div>
 
@@ -965,26 +1114,43 @@ export default function BlastRadiusDashboard() {
                   onSetRootCause={handleSetRootCause}
                   result={result}
                   graph={graph}
-                  isExpanded={expandedPanel === 'component'}
-                  onToggle={() => setExpandedPanel(prev => prev === 'component' ? null : 'component')}
+                  onOpenDrawer={() => setActiveInvestigationDrawer('component')}
                 />
               </div>
 
-              <div className="shrink-0">
-                <BlastRadiusPathChat
-                  service={service}
-                  selection={selectionDetail}
-                  rootLabel={rootLabel}
-                  isExpanded={expandedPanel === 'chat'}
-                  onToggle={() => setExpandedPanel(prev => prev === 'chat' ? null : 'chat')}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveInvestigationDrawer('investigation')}
+                className="shrink-0 w-full bg-white dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-sm overflow-hidden hover:bg-[#f9fafb] dark:hover:bg-slate-750/30 transition-colors"
+              >
+                <div className="flex items-center justify-between px-4 h-[48px] gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0 text-base">🤖</span>
+                    <span className="font-bold text-slate-850 dark:text-slate-250 truncate text-xs sm:text-sm">
+                      Blast Radius Investigation
+                    </span>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-1.5 px-2">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-955/20 text-emerald-700 dark:text-emerald-450 border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-1.5">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                      </span>
+                      Live
+                    </span>
+                  </div>
+                  <span className="text-slate-400 dark:text-slate-500 p-1 shrink-0" style={{ transform: 'rotate(-90deg)' }}>
+                    ▼
+                  </span>
+                </div>
+              </button>
             </div>
           </div>
         </>
       )}
       {renderMetricModal()}
       {renderRegionModal()}
+      {renderInvestigationDrawer()}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { askCopilot, getOverview } from '../api/client';
+import { getOverview } from '../api/client';
 import type { Overview } from '../types/intelligence';
 import { PageHeader, Grid12 } from '../components/ui/layout-primitives';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';

@@ -54,13 +54,6 @@ function getUpstreamAppOrBs(nodeId: string, graph: DependencyGraph): string | nu
   return null;
 }
 
-function getUpstreamBsFromApp(appId: string, graph: DependencyGraph): string | null {
-  let parent = graph.edges.find(e => e.target === appId && e.relationship === 'contains')?.source;
-  if (!parent) return null;
-  const pNode = graph.nodes.find(n => n.id === parent);
-  if (pNode?.layer === 'business_service') return pNode.id;
-  return null;
-}
 
 export function buildHierarchicalSpecs(graph: DependencyGraph, selectedViews: Set<ViewType>): LayoutNode[] {
   const views = Array.from(selectedViews);
@@ -265,7 +258,7 @@ export function flattenComputedLayout(
     let hasHighlightedChild = false;
 
     if (computed.node.type === 'leaf') {
-      const gNode = graph.nodes.find(n => n.id === computed.node.id);
+      const gNode = graph.nodes.find(n => n.id === (computed.node as any).id);
       if (!gNode) return false;
       const isDimmed = isHighlighting && !highlightIds.has(gNode.id);
       hasHighlightedChild = !isDimmed;

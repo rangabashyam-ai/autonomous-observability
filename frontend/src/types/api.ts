@@ -19,6 +19,7 @@ export interface GraphNode {
   metrics: NodeMetrics;
   heatmap_value: number;
   platform?: string;
+  region?: string;
 }
 
 export interface GraphEdge {
@@ -67,6 +68,7 @@ export interface ServiceMetric {
 }
 
 export interface MonitoringDashboard {
+  dataset_available?: boolean;
   executive: ExecutiveMetrics;
   service: { services: ServiceMetric[] };
   technical: {

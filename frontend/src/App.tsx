@@ -14,6 +14,7 @@ import DataAdminPage from './pages/DataAdminPage';
 import ServiceDetailPage from './pages/ServiceDetailPage';
 import CloudIntegrationsPage from './pages/CloudIntegrationsPage';
 import SettingsPage from './pages/SettingsPage';
+import OpsConfigurationPage from './pages/OpsConfigurationPage';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="investigation" element={<InvestigationWorkflow />} />
           <Route path="admin" element={<DataAdminPage />} />
           <Route path="integrations" element={<CloudIntegrationsPage />} />
+          <Route path="ops-config" element={<OpsConfigurationPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

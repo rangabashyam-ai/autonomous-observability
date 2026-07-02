@@ -5,8 +5,8 @@ export function useLongPress(
   onClick: (e: any) => void,
   { shouldPreventDefault = true, delay = 500 } = {}
 ) {
-  const timeout = useRef<ReturnType<typeof setTimeout>>();
-  const target = useRef<EventTarget>();
+  const timeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const target = useRef<EventTarget>(undefined);
 
   const start = useCallback(
     (event: any) => {
