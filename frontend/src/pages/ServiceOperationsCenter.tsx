@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { getMonitoringDashboard, getOverview, getDependencyGraph, getDependencyPaths } from '../api/client';
 import type { MonitoringDashboard, ServiceMetric, GraphNode as APIGraphNode } from '../types/api';
-import type { Overview } from '../types/intelligence';
+import type { Overview, EarlyDetection } from '../types/intelligence';
 import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-primitives';
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -15,10 +15,25 @@ import { generateTrend, MiniLineChart, TrendChart } from '../components/charts/c
 import { useTheme } from '../context/ThemeContext';
 import { getHealthNodeStyle } from '../utils/graphTheme';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
-import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
 import RelatedResourcesPanel from '../components/drilldown/RelatedResourcesPanel';
-import { AlertCircle, Sparkles, ChevronRight, ExternalLink, Activity, Zap, Network } from 'lucide-react';
-import InlineCopilot from '../components/copilot/InlineCopilot';
+import { AlertCircle, Sparkles, ChevronRight, Activity, Network } from 'lucide-react';
+import { type DrawerAIAssistantProps } from '../components/drilldown/DrawerAIAssistant';
+import { useOpsDashboard } from '../hooks/useOpsDashboard';
+import OpsSubNav from '../components/ops/OpsSubNav';
+import OpsSectionContent from '../components/ops/OpsSectionContent';
+import OpsEntityDrawer from '../components/ops/OpsEntityDrawer';
+import type { OpsEntity } from '../types/ops';
+
+type IncidentPreview = Overview['recent_incidents'][number];
+
+type OpsDrawer =
+  | { kind: 'service'; node: APIGraphNode; deps: { upstream: any[]; downstream: any[] } | null }
+  | { kind: 'services-list' }
+  | { kind: 'incidents-list' }
+  | { kind: 'incident'; incident: IncidentPreview }
+  | { kind: 'latency' }
+  | { kind: 'error' }
+  | { kind: 'early-detection'; detection: EarlyDetection | null };
 
 export default function ServiceOperationsCenter() {
   const { theme } = useTheme();
@@ -29,10 +44,16 @@ export default function ServiceOperationsCenter() {
   const [graphEdges, setGraphEdges] = useState<Edge[]>([]);
   const [rawGraphNodes, setRawGraphNodes] = useState<APIGraphNode[]>([]);
 
-  // Drilldown drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<APIGraphNode | null>(null);
-  const [selectedNodeDeps, setSelectedNodeDeps] = useState<{ upstream: any[]; downstream: any[] } | null>(null);
+  const [drawer, setDrawer] = useState<OpsDrawer | null>(null);
+  const [opsEntity, setOpsEntity] = useState<OpsEntity | null>(null);
+
+  const {
+    entities: opsEntities,
+    navItems: serviceNav,
+    activeSection,
+    setActiveSection,
+    currentSection,
+  } = useOpsDashboard('service-ops');
 
   useEffect(() => {
     Promise.all([
@@ -106,43 +127,88 @@ export default function ServiceOperationsCenter() {
       .slice(0, 4);
   }, [services]);
 
-  const handleServiceClick = useCallback((serviceId: string, _label: string) => {
-    let graphNode = rawGraphNodes.find((n) => n.id === serviceId);
-    if (!graphNode) {
-      const matched = services.find((s) => s.id === serviceId);
-      if (matched) {
-        graphNode = {
-          id: matched.id,
-          label: matched.name,
-          type: 'microservice',
-          status: matched.health,
-          health: matched.health,
-          metrics: {
-            cpu: Math.random() * 30 + 40,
-            memory: Math.random() * 30 + 50,
-            latency: matched.latency_p99_ms,
-            error_rate: matched.error_rate,
-            risk_score: matched.health === 'critical' ? 85 : matched.health === 'warning' ? 55 : 20,
-            incident_count: matched.health === 'critical' ? 2 : 0,
-          }
-        } as any;
-      }
+
+  const closeDrawer = () => setDrawer(null);
+  const closeOpsEntity = () => setOpsEntity(null);
+
+  const openIncident = (incident: IncidentPreview) => {
+    setDrawer({ kind: 'incident', incident });
+  };
+
+  const selectedNode = drawer?.kind === 'service' ? drawer.node : null;
+  const selectedNodeDeps = drawer?.kind === 'service' ? drawer.deps : null;
+
+  const normalizeDrawerHealth = (h?: string): 'healthy' | 'warning' | 'critical' | undefined => {
+    const v = (h || '').toLowerCase();
+    if (v === 'healthy' || v === 'ok' || v === 'up') return 'healthy';
+    if (v === 'warning' || v === 'degraded' || v === 'warn') return 'warning';
+    if (v === 'critical' || v === 'down' || v === 'error') return 'critical';
+    return undefined;
+  };
+
+  const handleServiceClick = useCallback((serviceId: string, label: string) => {
+    const opsEnt =
+      opsEntities.find((e) => e.id === serviceId) ||
+      opsEntities.find((e) => e.name === serviceId) ||
+      opsEntities.find((e) => e.name === label) ||
+      opsEntities.find((e) => e.id === label);
+
+    if (opsEnt) {
+      setDrawer(null);
+      setOpsEntity(opsEnt);
+      return;
     }
-    if (graphNode) {
-      setSelectedNode(graphNode);
-      setDrawerOpen(true);
-      getDependencyPaths(serviceId)
-        .then((paths) => {
-          setSelectedNodeDeps({
-            upstream: paths.upstream || [],
-            downstream: paths.downstream || [],
-          });
-        })
-        .catch(() => {
-          setSelectedNodeDeps({ upstream: [], downstream: [] });
-        });
-    }
-  }, [rawGraphNodes, services]);
+
+    const matched = services.find((s) => s.id === serviceId || s.name === label);
+    const graphNode = rawGraphNodes.find((n) => n.id === serviceId);
+    const gm = graphNode?.metrics as Record<string, number> | undefined;
+
+    const node: APIGraphNode = {
+      id: serviceId,
+      label: label || matched?.name || graphNode?.label || serviceId,
+      type: graphNode?.type || 'microservice',
+      layer: graphNode?.layer || 'microservice',
+      health: normalizeDrawerHealth(matched?.health || graphNode?.health) ?? 'healthy',
+      metrics: {
+        cpu: gm?.cpu ?? 40,
+        memory: gm?.memory ?? 55,
+        storage: gm?.storage ?? 0,
+        io: gm?.io ?? 0,
+        network: gm?.network ?? 0,
+        latency: matched?.latency_p99_ms ?? gm?.latency ?? gm?.mean_response_time ?? 0,
+        error_rate: matched?.error_rate ?? gm?.error_rate ?? 0,
+        risk_score: gm?.risk_score ?? (matched?.health === 'critical' ? 85 : matched?.health === 'warning' ? 55 : 20),
+        incident_count: gm?.incident_count ?? 0,
+      },
+      heatmap_value: graphNode?.heatmap_value ?? matched?.latency_p99_ms ?? 0,
+      platform: graphNode?.platform,
+      region: graphNode?.region,
+    };
+
+    setOpsEntity(null);
+    setDrawer({ kind: 'service', node, deps: null });
+    getDependencyPaths(serviceId)
+      .then((paths) => {
+        setDrawer((current) =>
+          current?.kind === 'service' && current.node.id === serviceId
+            ? {
+                ...current,
+                deps: {
+                  upstream: paths.upstream || [],
+                  downstream: paths.downstream || [],
+                },
+              }
+            : current
+        );
+      })
+      .catch(() => {
+        setDrawer((current) =>
+          current?.kind === 'service' && current.node.id === serviceId
+            ? { ...current, deps: { upstream: [], downstream: [] } }
+            : current
+        );
+      });
+  }, [rawGraphNodes, services, opsEntities]);
 
   // Handle dependency graph node click → open drilldown drawer
   const onNodeClick = useCallback(
@@ -178,51 +244,214 @@ export default function ServiceOperationsCenter() {
     };
   }, [monitoring, overview, services, topRisks, avgLatency, avgError, exec]);
 
+
+  const drawerRelatedResources = useMemo(() => {
+    if (drawer?.kind !== 'service' || !drawer.deps) return [];
+    return [
+      ...drawer.deps.upstream.map((dep: any) => ({
+        id: dep.node,
+        name: dep.node.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        type: 'service' as const,
+        relationship: 'upstream' as const,
+        health: 'healthy' as const,
+        metrics: [{ label: 'Relationship', value: dep.relationship || 'depends_on' }],
+      })),
+      ...drawer.deps.downstream.map((dep: any) => ({
+        id: dep.node,
+        name: dep.node.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        type: 'service' as const,
+        relationship: 'downstream' as const,
+        health: 'healthy' as const,
+        metrics: [{ label: 'Relationship', value: dep.relationship || 'provides_to' }],
+      })),
+    ];
+  }, [drawer]);
+
+  const drawerMeta = useMemo(() => {
+    if (!drawer || !overview) return null;
+    switch (drawer.kind) {
+      case 'service':
+        return {
+          title: drawer.node.label,
+          subtitle: drawer.node.id,
+          type: 'service' as const,
+          health: normalizeDrawerHealth(drawer.node.health),
+          onBack: undefined,
+        };
+      case 'services-list':
+        return { title: 'Service Health Overview', subtitle: `${services.length} services monitored`, type: 'service' as const, onBack: undefined };
+      case 'incidents-list':
+        return { title: 'Active Incidents', subtitle: `${exec!.active_incidents} active`, type: 'incident' as const, onBack: undefined };
+      case 'incident':
+        return { title: drawer.incident.title, subtitle: drawer.incident.service, type: 'incident' as const, health: undefined, onBack: () => setDrawer({ kind: 'incidents-list' }) };
+      case 'latency':
+        return { title: 'Latency Trends', subtitle: `Avg P99 ${avgLatency.toFixed(0)}ms`, type: 'service' as const, onBack: undefined };
+      case 'error':
+        return { title: 'Error Rate Trends', subtitle: `Avg ${avgError.toFixed(2)}%`, type: 'service' as const, onBack: undefined };
+      case 'early-detection':
+        return {
+          title: drawer.detection ? 'AI Prediction Detail' : 'AI Recommendations',
+          subtitle: drawer.detection?.expected_impacted_service ?? 'Early detection patterns',
+          type: 'incident' as const,
+          onBack: drawer.detection ? () => setDrawer({ kind: 'early-detection', detection: null }) : undefined,
+        };
+    }
+  }, [drawer, overview, services, exec, avgLatency, avgError]);
+
+  const drawerAI = useMemo((): DrawerAIAssistantProps | null => {
+    if (!drawer || !overview) return null;
+    switch (drawer.kind) {
+      case 'service':
+        return {
+          pageType: 'service',
+          selectedEntity: drawer.node.label,
+          entityData: {
+            service_id: drawer.node.id,
+            name: drawer.node.label,
+            health: drawer.node.health,
+            metrics: drawer.node.metrics,
+          },
+          relatedMetrics: {
+            cpu: drawer.node.metrics?.cpu ?? 0,
+            memory: drawer.node.metrics?.memory ?? 0,
+            latency: drawer.node.metrics?.latency ?? 0,
+            error_rate: drawer.node.metrics?.error_rate ?? 0,
+          },
+          relatedAlerts: overview.open_alerts_preview?.filter((a: any) => a.entity_id === drawer.node.id || a.service === drawer.node.id) ?? [],
+          relatedIncidents: overview.recent_incidents?.filter((i: any) => i.service === drawer.node.id) ?? [],
+          suggestedQuestions: [
+            `Why is ${drawer.node.label} in ${drawer.node.health} state?`,
+            `Analyze CPU and memory usage for ${drawer.node.label}`,
+            `What are the active alerts/incidents for ${drawer.node.label}?`,
+          ],
+        };
+      case 'services-list':
+        return {
+          pageType: 'service',
+          selectedEntity: 'Service Health Overview',
+          entityData: {
+            services: services.map((s) => ({ id: s.id, name: s.name, health: s.health, latency: s.latency_p99_ms, error_rate: s.error_rate })),
+            total: services.length,
+          },
+          relatedMetrics: { avg_latency: avgLatency, avg_error_rate: avgError },
+          suggestedQuestions: [
+            'Which services are in critical or warning state?',
+            'Summarize overall service health across the fleet',
+            'Which services need immediate attention?',
+          ],
+        };
+      case 'incidents-list':
+        return {
+          pageType: 'incident',
+          selectedEntity: 'Active Incidents',
+          entityData: { incidents: overview.recent_incidents, active_count: exec?.active_incidents },
+          relatedIncidents: overview.recent_incidents,
+          suggestedQuestions: [
+            'Summarize all active incidents and their severity',
+            'Which services are most impacted by current incidents?',
+            'What should we prioritize first?',
+          ],
+        };
+      case 'incident':
+        return {
+          pageType: 'incident',
+          selectedEntity: drawer.incident.title,
+          entityData: { ...drawer.incident },
+          relatedIncidents: [drawer.incident],
+          suggestedQuestions: [
+            `What is the root cause of incident ${drawer.incident.incident_id}?`,
+            `How does this incident affect ${drawer.incident.service}?`,
+            'What remediation steps do you recommend?',
+          ],
+        };
+      case 'latency':
+        return {
+          pageType: 'service',
+          selectedEntity: 'Latency Trends',
+          entityData: { avg_p99_latency_ms: avgLatency, services: services.map((s) => ({ name: s.name, latency: s.latency_p99_ms })) },
+          relatedMetrics: { avg_latency: avgLatency },
+          suggestedQuestions: [
+            'Which services have the highest P99 latency?',
+            'Is current average latency within SLA targets?',
+            'What could be causing latency spikes?',
+          ],
+        };
+      case 'error':
+        return {
+          pageType: 'service',
+          selectedEntity: 'Error Rate Trends',
+          entityData: { avg_error_rate: avgError, services: services.map((s) => ({ name: s.name, error_rate: s.error_rate })) },
+          relatedMetrics: { avg_error_rate: avgError },
+          suggestedQuestions: [
+            'Which services have the highest error rates?',
+            'Are error rates trending up or down?',
+            'What actions reduce error rate across services?',
+          ],
+        };
+      case 'early-detection':
+        if (drawer.detection) {
+          return {
+            pageType: 'service',
+            selectedEntity: drawer.detection.expected_impacted_service,
+            entityData: { ...drawer.detection },
+            relatedMetrics: { confidence: drawer.detection.confidence, eta_minutes: drawer.detection.estimated_time_to_incident_minutes },
+            suggestedQuestions: [
+              `Why is ${drawer.detection.expected_impacted_service} at risk?`,
+              `Explain the ${drawer.detection.confidence}% confidence prediction`,
+              'What preventive actions should we take now?',
+            ],
+          };
+        }
+        return {
+          pageType: 'service',
+          selectedEntity: 'AI Recommendations',
+          entityData: { predictions: overview.early_detections },
+          suggestedQuestions: [
+            'Summarize all early detection patterns',
+            'Which predicted incidents are most urgent?',
+            'What proactive steps should the team take?',
+          ],
+        };
+      default:
+        return null;
+    }
+  }, [drawer, services, overview, exec, avgLatency, avgError]);
+
   useRegisterCopilotContext(copilotContext);
 
   if (!monitoring || !overview) {
     return <p className="text-text-secondary text-sm">Loading service operations center...</p>;
   }
 
-  // Build related resources for the drawer from dependencies
-  const drawerRelatedResources = selectedNodeDeps
-    ? [
-        ...selectedNodeDeps.upstream.map((dep: any) => ({
-          id: dep.node,
-          name: dep.node.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-          type: 'service' as const,
-          relationship: 'upstream' as const,
-          health: 'healthy' as const,
-          metrics: [{ label: 'Relationship', value: dep.relationship || 'depends_on' }],
-        })),
-        ...selectedNodeDeps.downstream.map((dep: any) => ({
-          id: dep.node,
-          name: dep.node.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-          type: 'service' as const,
-          relationship: 'downstream' as const,
-          health: 'healthy' as const,
-          metrics: [{ label: 'Relationship', value: dep.relationship || 'provides_to' }],
-        })),
-      ]
-    : [];
 
   return (
     <div>
       <PageHeader
-        title="Service Operations Center"
-        description="Operational monitoring, dependency mapping, and incident correlation"
+        title="Service Operations"
+        description="Business services, applications, APIs, and user-facing systems — regardless of where they run."
       />
 
-      {/* ─── Top Metric Cards (clickable) ─── */}
+      <div className="flex gap-6 items-start">
+        <OpsSubNav items={serviceNav} activeId={activeSection} onChange={setActiveSection} perspective="service" />
+
+        <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card/30 p-4 sm:p-5 shadow-sm">
+      {activeSection !== 'overview' && currentSection && (
+        <OpsSectionContent
+          section={currentSection}
+          entities={opsEntities}
+          onEntityClick={setOpsEntity}
+        />
+      )}
+
+      {activeSection === 'overview' && (
+      <>
       <Grid12 className="mb-4">
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Services Monitored"
             value={services.length}
             sub={`${services.filter((s) => s.health === 'healthy').length} healthy`}
-            onClick={() => {
-              document.getElementById('service-health-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => setDrawer({ kind: 'services-list' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -230,7 +459,7 @@ export default function ServiceOperationsCenter() {
             label="Active Incidents"
             value={exec!.active_incidents}
             variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
-            onClick={() => navigate('/incidents?active=true')}
+            onClick={() => setDrawer({ kind: 'incidents-list' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -238,9 +467,7 @@ export default function ServiceOperationsCenter() {
             label="Avg P99 Latency"
             value={`${avgLatency.toFixed(0)}ms`}
             variant="warning"
-            onClick={() => {
-              document.getElementById('latency-trends-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => setDrawer({ kind: 'latency' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -248,9 +475,7 @@ export default function ServiceOperationsCenter() {
             label="Avg Error Rate"
             value={`${avgError.toFixed(2)}%`}
             variant={avgError > 1.5 ? 'critical' : 'default'}
-            onClick={() => {
-              document.getElementById('error-trends-section')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => setDrawer({ kind: 'error' })}
           />
         </div>
       </Grid12>
@@ -343,13 +568,13 @@ export default function ServiceOperationsCenter() {
           {/* ─── Latency & Error Trend Charts ─── */}
           <Grid12>
             <div className="col-span-12 md:col-span-6" id="latency-trends-section">
-              <Card>
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setDrawer({ kind: 'latency' })}>
                 <CardHeader><CardTitle>Latency Trends</CardTitle></CardHeader>
                 <TrendChart data={latencyTrend} height={120} color="#F59E0B" />
               </Card>
             </div>
             <div className="col-span-12 md:col-span-6" id="error-trends-section">
-              <Card>
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setDrawer({ kind: 'error' })}>
                 <CardHeader><CardTitle>Error Rate Trends</CardTitle></CardHeader>
                 <TrendChart data={errorTrend} height={120} color="#EF4444" />
               </Card>
@@ -363,14 +588,15 @@ export default function ServiceOperationsCenter() {
           <Card>
             <CardHeader>
               <CardTitle>Active Incidents</CardTitle>
-              <Link to="/incidents?active=true" className="text-xs text-primary hover:underline">All →</Link>
+              <button type="button" onClick={() => setDrawer({ kind: 'incidents-list' })} className="text-xs text-primary hover:underline">All →</button>
             </CardHeader>
             <div className="space-y-2">
               {overview.recent_incidents.slice(0, exec?.active_incidents || 2).map((inc) => (
-                <Link
+                <button
                   key={inc.incident_id}
-                  to={`/incidents?id=${inc.incident_id}`}
-                  className="block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200"
+                  type="button"
+                  onClick={() => openIncident(inc)}
+                  className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>
@@ -379,7 +605,7 @@ export default function ServiceOperationsCenter() {
                     <span className="text-[10px] text-text-secondary">{inc.service}</span>
                   </div>
                   <p className="text-xs text-text-primary line-clamp-2">{inc.title}</p>
-                </Link>
+                </button>
               ))}
             </div>
           </Card>
@@ -421,23 +647,23 @@ export default function ServiceOperationsCenter() {
                 <Sparkles className="h-4 w-4 text-primary" />
                 <CardTitle>AI Recommendations</CardTitle>
               </div>
-              <Link to="/early-detection" className="text-xs text-primary hover:underline">View all →</Link>
+              <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">View all →</button>
             </CardHeader>
             <div className="space-y-2">
               {overview.early_detections.slice(0, 3).map((d, i) => (
-                <Link
+                <button
                   key={`${d.pattern_id}-${i}`}
-                  to="/early-detection"
-                  className="block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:border-primary/30 hover:shadow-sm transition-all duration-200 group"
+                  type="button"
+                  onClick={() => setDrawer({ kind: 'early-detection', detection: d })}
+                  className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:border-primary/30 hover:shadow-sm transition-all duration-200 group"
                 >
                   <p className="text-xs text-text-primary group-hover:text-primary transition-colors">{d.recommended_actions[0] ?? 'Investigate anomaly pattern'}</p>
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-[10px] text-text-secondary">
                       {d.expected_impacted_service} · {d.confidence}% confidence
                     </p>
-                    <ExternalLink className="h-3 w-3 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                </Link>
+                </button>
               ))}
               {overview.early_detections.length === 0 && (
                 <p className="text-xs text-text-secondary">No active recommendations</p>
@@ -449,23 +675,24 @@ export default function ServiceOperationsCenter() {
           <Card>
             <CardHeader>
               <CardTitle>Predicted Incidents</CardTitle>
-              <Link to="/early-detection" className="text-xs text-primary hover:underline">Analyze →</Link>
+              <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">Analyze →</button>
             </CardHeader>
             {overview.early_detections.length === 0 ? (
               <p className="text-xs text-text-secondary">No predicted incidents in next 4 hours</p>
             ) : (
               overview.early_detections.map((d, i) => (
-                <Link
+                <button
                   key={`${d.pattern_id}-${i}`}
-                  to="/early-detection"
-                  className="block mb-3 last:mb-0 p-3 -mx-1 rounded-lg hover:bg-card-hover transition-all duration-200 group"
+                  type="button"
+                  onClick={() => setDrawer({ kind: 'early-detection', detection: d })}
+                  className="w-full text-left block mb-3 last:mb-0 p-3 -mx-1 rounded-lg hover:bg-card-hover transition-all duration-200 group"
                 >
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-text-primary font-medium group-hover:text-primary transition-colors">{d.expected_impacted_service}</span>
                     <span className="text-critical font-mono font-semibold">{d.estimated_time_to_incident_minutes}m</span>
                   </div>
                   <MiniLineChart data={generateTrend(d.confidence, 8)} height={40} color="#EF4444" />
-                </Link>
+                </button>
               ))
             )}
           </Card>
@@ -484,9 +711,9 @@ export default function ServiceOperationsCenter() {
                   key={h}
                   onClick={() => {
                     if (matchingIncident) {
-                      navigate(`/incidents?id=${matchingIncident.incident_id}`);
+                      openIncident(matchingIncident);
                     } else {
-                      navigate(`/incidents`);
+                      setDrawer({ kind: 'incidents-list' });
                     }
                   }}
                   className="flex flex-col items-center gap-1 min-w-[32px] cursor-pointer group"
@@ -509,163 +736,233 @@ export default function ServiceOperationsCenter() {
         </Card>
       </CollapsibleSection>
 
-      {/* ─── Dependency Node Drilldown Drawer ─── */}
+      </>
+      )}
+
+        </div>
+      </div>
+
+      {/* Drawers live outside section content so clicks always open the right panel */}
       <DrilldownDrawer
-        isOpen={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setSelectedNode(null); setSelectedNodeDeps(null); }}
-        title={selectedNode?.label ?? ''}
-        subtitle={selectedNode?.id}
-        type="service"
-        health={selectedNode?.health as 'healthy' | 'warning' | 'critical' | undefined}
+        isOpen={drawer !== null}
+        onClose={closeDrawer}
+        onBack={drawerMeta?.onBack}
+        title={drawerMeta?.title ?? ''}
+        subtitle={drawerMeta?.subtitle}
+        type={drawerMeta?.type ?? 'service'}
+        health={drawerMeta?.health}
+        aiAssistant={drawerAI}
         actions={
-          selectedNode ? (
+          drawer?.kind === 'service' ? (
             <>
-              <DrilldownButton onClick={() => navigate(`/services/${selectedNode.id}`)}>
+              <DrilldownButton onClick={() => navigate(`/services/${drawer.node.id}`)}>
                 View Full Details
               </DrilldownButton>
-              <DrilldownButton onClick={() => navigate(`/rca?service=${selectedNode.id}`)} variant="secondary">
+              <DrilldownButton onClick={() => navigate(`/rca?service=${drawer.node.id}`)} variant="secondary">
                 Run RCA
               </DrilldownButton>
-              <DrilldownButton onClick={() => navigate(`/blast-radius?service=${selectedNode.id}`)} variant="secondary">
+              <DrilldownButton onClick={() => navigate(`/blast-radius?service=${drawer.node.id}`)} variant="secondary">
                 Blast Radius
+              </DrilldownButton>
+            </>
+          ) : drawer?.kind === 'incident' ? (
+            <>
+              <DrilldownButton onClick={() => navigate(`/rca?id=${drawer.incident.incident_id}`)}>
+                Run RCA
+              </DrilldownButton>
+              <DrilldownButton onClick={() => navigate(`/incidents?id=${drawer.incident.incident_id}`)} variant="secondary">
+                Open in Incidents
               </DrilldownButton>
             </>
           ) : undefined
         }
       >
-        {selectedNode && (
+        {drawer?.kind === 'service' && selectedNode && (
           <div className="space-y-6">
-            {/* Key Metrics */}
             <DrilldownSection title="Key Metrics" icon={<Activity className="w-4 h-4" />}>
               <div className="grid grid-cols-2 gap-3">
-                <DrilldownMetricCard
-                  label="CPU Usage"
-                  value={selectedNode.metrics.cpu.toFixed(1)}
-                  unit="%"
-                  status={selectedNode.metrics.cpu > 80 ? 'critical' : selectedNode.metrics.cpu > 60 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Memory"
-                  value={selectedNode.metrics.memory.toFixed(1)}
-                  unit="%"
-                  status={selectedNode.metrics.memory > 85 ? 'critical' : selectedNode.metrics.memory > 70 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Latency"
-                  value={selectedNode.metrics.latency.toFixed(1)}
-                  unit="ms"
-                  status={selectedNode.metrics.latency > 100 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Error Rate"
-                  value={selectedNode.metrics.error_rate.toFixed(2)}
-                  unit="%"
-                  status={selectedNode.metrics.error_rate > 2 ? 'critical' : selectedNode.metrics.error_rate > 0.5 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Risk Score"
-                  value={selectedNode.metrics.risk_score.toFixed(0)}
-                  status={selectedNode.metrics.risk_score > 70 ? 'critical' : selectedNode.metrics.risk_score > 40 ? 'warning' : 'good'}
-                />
-                <DrilldownMetricCard
-                  label="Incidents"
-                  value={selectedNode.metrics.incident_count}
-                  status={selectedNode.metrics.incident_count > 5 ? 'critical' : selectedNode.metrics.incident_count > 0 ? 'warning' : 'good'}
-                />
+                <DrilldownMetricCard label="CPU Usage" value={Number(selectedNode.metrics?.cpu ?? 0).toFixed(1)} unit="%" status={Number(selectedNode.metrics?.cpu ?? 0) > 80 ? 'critical' : Number(selectedNode.metrics?.cpu ?? 0) > 60 ? 'warning' : 'good'} />
+                <DrilldownMetricCard label="Memory" value={Number(selectedNode.metrics?.memory ?? 0).toFixed(1)} unit="%" status={Number(selectedNode.metrics?.memory ?? 0) > 85 ? 'critical' : Number(selectedNode.metrics?.memory ?? 0) > 70 ? 'warning' : 'good'} />
+                <DrilldownMetricCard label="Latency" value={Number(selectedNode.metrics?.latency ?? 0).toFixed(1)} unit="ms" status={Number(selectedNode.metrics?.latency ?? 0) > 100 ? 'warning' : 'good'} />
+                <DrilldownMetricCard label="Error Rate" value={Number(selectedNode.metrics?.error_rate ?? 0).toFixed(2)} unit="%" status={Number(selectedNode.metrics?.error_rate ?? 0) > 2 ? 'critical' : Number(selectedNode.metrics?.error_rate ?? 0) > 0.5 ? 'warning' : 'good'} />
+                <DrilldownMetricCard label="Risk Score" value={Number(selectedNode.metrics?.risk_score ?? 0).toFixed(0)} status={Number(selectedNode.metrics?.risk_score ?? 0) > 70 ? 'critical' : Number(selectedNode.metrics?.risk_score ?? 0) > 40 ? 'warning' : 'good'} />
+                <DrilldownMetricCard label="Incidents" value={Number(selectedNode.metrics?.incident_count ?? 0)} status={Number(selectedNode.metrics?.incident_count ?? 0) > 5 ? 'critical' : Number(selectedNode.metrics?.incident_count ?? 0) > 0 ? 'warning' : 'good'} />
               </div>
             </DrilldownSection>
-
-            {/* AI Insights */}
-            <AIInsightsPanel
-              insights={[]}
-              entityType="service"
-              entityName={selectedNode.label}
-              health={selectedNode.health as 'healthy' | 'warning' | 'critical'}
-            />
-
-            {/* Dependencies */}
             <DrilldownSection title="Dependencies" icon={<Network className="w-4 h-4" />}>
               {selectedNodeDeps ? (
-                <RelatedResourcesPanel resources={drawerRelatedResources} title="Connected Services" />
+                <RelatedResourcesPanel
+                  resources={drawerRelatedResources}
+                  title="Connected Services"
+                  />
               ) : (
                 <p className="text-xs text-slate-500 dark:text-slate-400">Loading dependencies...</p>
               )}
             </DrilldownSection>
+          </div>
+        )}
 
-            {/* Quick Navigation */}
-            <DrilldownSection title="Quick Actions" icon={<Zap className="w-4 h-4" />}>
-              <div className="space-y-2">
-                <Link
-                  to={`/services/${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
+        {drawer?.kind === 'services-list' && (
+          <div className="space-y-2">
+            {services.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => handleServiceClick(s.id, s.name)}
+                className="w-full flex items-center justify-between gap-3 p-3 rounded-lg border border-border hover:bg-card-hover transition-colors text-left"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text-primary truncate">{s.name}</p>
+                  <p className="text-xs text-text-secondary font-mono">{s.latency_p99_ms.toFixed(1)}ms · {s.error_rate.toFixed(2)}% errors</p>
+                </div>
+                <HealthBadge health={s.health} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {drawer?.kind === 'incidents-list' && (
+          <div className="space-y-2">
+            {overview.recent_incidents.length === 0 ? (
+              <p className="text-sm text-text-secondary">No active incidents</p>
+            ) : (
+              overview.recent_incidents.map((inc) => (
+                <button
+                  key={inc.incident_id}
+                  type="button"
+                  onClick={() => openIncident(inc)}
+                  className="w-full text-left p-3 rounded-lg border border-border hover:bg-card-hover transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Full Service Dashboard</span>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>{inc.severity}</Badge>
+                    <span className="text-xs text-text-secondary">{inc.service}</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
-                <Link
-                  to={`/rca?service=${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Root Cause Analysis</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
-                <Link
-                  to={`/blast-radius?service=${selectedNode.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-red-500" />
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">Blast Radius Analysis</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
-                </Link>
+                  <p className="text-sm text-text-primary">{inc.title}</p>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {drawer?.kind === 'incident' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Badge variant={drawer.incident.severity.startsWith('P1') || drawer.incident.severity === '1' ? 'critical' : 'warning'}>
+                {drawer.incident.severity}
+              </Badge>
+              <span className="text-sm text-text-secondary">{drawer.incident.service}</span>
+            </div>
+            <p className="text-sm text-text-primary">{drawer.incident.title}</p>
+            {drawer.incident.root_cause && (
+              <div className="p-4 rounded-lg border border-border bg-card-hover">
+                <p className="text-xs font-semibold text-text-secondary mb-1">Root Cause</p>
+                <p className="text-sm text-text-primary">{drawer.incident.root_cause}</p>
               </div>
-            </DrilldownSection>
+            )}
+            <button
+              type="button"
+              onClick={() => handleServiceClick(drawer.incident.service, drawer.incident.service)}
+              className="w-full text-left p-3 rounded-lg border border-border hover:bg-card-hover transition-colors"
+            >
+              <p className="text-xs text-text-secondary mb-1">Impacted Service</p>
+              <p className="text-sm font-medium text-primary">{drawer.incident.service}</p>
+            </button>
+          </div>
+        )}
 
-            {/* Scoped AI Assistant inside the Drawer */}
-            <div className="mt-4 border-t border-border pt-4">
-              <InlineCopilot
-                pageType="service"
-                selectedEntity={selectedNode.id}
-                entityData={{
-                  service_id: selectedNode.id,
-                  name: selectedNode.label,
-                  health: selectedNode.health,
-                  metrics: {
-                    cpu: selectedNode.metrics.cpu,
-                    memory: selectedNode.metrics.memory,
-                    latency: selectedNode.metrics.latency,
-                    error_rate: selectedNode.metrics.error_rate,
-                    risk_score: selectedNode.metrics.risk_score,
-                    incident_count: selectedNode.metrics.incident_count,
-                  },
-                }}
-                relatedMetrics={{
-                  cpu: selectedNode.metrics.cpu,
-                  memory: selectedNode.metrics.memory,
-                  latency: selectedNode.metrics.latency,
-                  error_rate: selectedNode.metrics.error_rate,
-                }}
-                relatedAlerts={overview.open_alerts_preview?.filter((a: any) => a.service === selectedNode.id) ?? []}
-                relatedIncidents={overview.recent_incidents?.filter((i: any) => i.service === selectedNode.id) ?? []}
-                title={`AI Assistant: ${selectedNode.label}`}
-                subtitle={`Ask questions about ${selectedNode.label} only`}
-                suggestedQuestions={[
-                  `Why is ${selectedNode.label} in ${selectedNode.health} state?`,
-                  `Analyze CPU and memory usage for ${selectedNode.label}`,
-                  `What are the active alerts/incidents for ${selectedNode.label}?`,
-                ]}
-              />
+        {drawer?.kind === 'latency' && (
+          <div className="space-y-4">
+            <TrendChart data={latencyTrend} height={200} color="#F59E0B" />
+            <div className="space-y-2">
+              {services.slice().sort((a, b) => b.latency_p99_ms - a.latency_p99_ms).slice(0, 8).map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleServiceClick(s.id, s.name)}
+                  className="w-full flex justify-between items-center p-3 rounded-lg border border-border hover:bg-card-hover text-left"
+                >
+                  <span className="text-sm text-text-primary">{s.name}</span>
+                  <span className="font-mono text-xs">{s.latency_p99_ms.toFixed(1)}ms</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
+
+        {drawer?.kind === 'error' && (
+          <div className="space-y-4">
+            <TrendChart data={errorTrend} height={200} color="#EF4444" />
+            <div className="space-y-2">
+              {services.slice().sort((a, b) => b.error_rate - a.error_rate).slice(0, 8).map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleServiceClick(s.id, s.name)}
+                  className="w-full flex justify-between items-center p-3 rounded-lg border border-border hover:bg-card-hover text-left"
+                >
+                  <span className="text-sm text-text-primary">{s.name}</span>
+                  <span className="font-mono text-xs">{s.error_rate.toFixed(2)}%</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {drawer?.kind === 'early-detection' && !drawer.detection && (
+          <div className="space-y-2">
+            {overview.early_detections.length === 0 ? (
+              <p className="text-sm text-text-secondary">No active recommendations</p>
+            ) : (
+              overview.early_detections.map((d, i) => (
+                <button
+                  key={`${d.pattern_id}-${i}`}
+                  type="button"
+                  onClick={() => setDrawer({ kind: 'early-detection', detection: d })}
+                  className="w-full text-left p-3 rounded-lg border border-border hover:bg-card-hover transition-colors"
+                >
+                  <p className="text-sm text-text-primary">{d.recommended_actions[0] ?? 'Investigate anomaly pattern'}</p>
+                  <p className="text-xs text-text-secondary mt-1">{d.expected_impacted_service} · {d.confidence}% confidence · ETA {d.estimated_time_to_incident_minutes}m</p>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {drawer?.kind === 'early-detection' && drawer.detection && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <DrilldownMetricCard label="Confidence" value={`${drawer.detection.confidence}%`} status={drawer.detection.confidence > 80 ? 'critical' : 'warning'} />
+              <DrilldownMetricCard label="ETA" value={`${drawer.detection.estimated_time_to_incident_minutes}m`} status="warning" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-2">Impacted Service</p>
+              <button
+                type="button"
+                onClick={() => handleServiceClick(drawer.detection!.expected_impacted_service, drawer.detection!.expected_impacted_service)}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                {drawer.detection.expected_impacted_service}
+              </button>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-text-secondary mb-2">Recommended Actions</p>
+              <ul className="space-y-1">
+                {drawer.detection.recommended_actions.map((action, i) => (
+                  <li key={i} className="text-sm text-text-primary">• {action}</li>
+                ))}
+              </ul>
+            </div>
+            <MiniLineChart data={generateTrend(drawer.detection.confidence, 8)} height={60} color="#EF4444" />
+          </div>
+        )}
+
       </DrilldownDrawer>
+
+      <OpsEntityDrawer
+        entity={opsEntity}
+        onClose={closeOpsEntity}
+        relatedEntities={opsEntities}
+      />
     </div>
   );
 }

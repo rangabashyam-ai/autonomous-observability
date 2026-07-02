@@ -48,9 +48,31 @@ export function ResourceHeatmap({
   );
 }
 
-export function UtilizationBar({ label, value, max = 100 }: { label: string; value: number; max?: number }) {
+export function UtilizationBar({
+  label,
+  value,
+  max = 100,
+  variant = 'utilization',
+}: {
+  label: string;
+  value: number;
+  max?: number;
+  /** utilization: higher = worse (CPU, latency). availability: higher = better (uptime, success rate). */
+  variant?: 'utilization' | 'availability';
+}) {
   const pct = Math.min(100, (value / max) * 100);
-  const color = pct >= 85 ? 'bg-critical' : pct >= 70 ? 'bg-warning' : 'bg-success';
+  const color =
+    variant === 'availability'
+      ? pct >= 95
+        ? 'bg-success'
+        : pct >= 80
+          ? 'bg-warning'
+          : 'bg-critical'
+      : pct >= 85
+        ? 'bg-critical'
+        : pct >= 70
+          ? 'bg-warning'
+          : 'bg-success';
 
   return (
     <div className="space-y-1">

@@ -340,6 +340,7 @@ function buildEdges(graph: DependencyGraph, highlightIds: Set<string>): Edge[] {
   });
 }
 
+
 function GroupDetailsPopup({ groupId, graph, nodes, heatmapMetric, onClose, onNodeSelect }: { groupId: string, graph: DependencyGraph, nodes: Node[], heatmapMetric: string, onClose: () => void, onNodeSelect: (id: string) => void }) {
   const children = nodes.filter(n => n.parentId === groupId);
   const childIds = new Set(children.map(c => c.id));
@@ -386,8 +387,8 @@ function GroupDetailsPopup({ groupId, graph, nodes, heatmapMetric, onClose, onNo
               <div className="flex justify-between items-center mb-2">
                 <span className="font-semibold text-sm text-slate-900 dark:text-white">{node.label}</span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${node.health === 'healthy' ? 'bg-emerald-100 text-emerald-700' :
-                    node.health === 'warning' ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
+                  node.health === 'warning' ? 'bg-amber-100 text-amber-700' :
+                    'bg-red-100 text-red-700'
                   }`}>
                   {node.health.toUpperCase()}
                 </span>
@@ -760,8 +761,8 @@ export default function DependencyMap() {
             <button
               onClick={() => setPlatformExpanded((p) => !p)}
               className={`px-3 py-1.5 text-xs rounded-lg border transition-colors flex items-center gap-1 ${PLATFORM_VIEWS.some((p) => selectedViews.has(p.id))
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-500'
                 }`}
             >
               Platform
@@ -1388,8 +1389,8 @@ function NodePicker({
             type="button"
             onClick={() => { setCategory(cat.id); onChange(''); }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${category === cat.id
-                ? 'bg-blue-600 border-blue-500 text-white'
-                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
+              ? 'bg-blue-600 border-blue-500 text-white'
+              : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
               }`}
           >
             <span>{cat.icon}</span>
@@ -1405,8 +1406,8 @@ function NodePicker({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 ${error
-                ? 'border-red-500 focus:ring-red-500/30'
-                : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500/30 focus:border-blue-500'
+              ? 'border-red-500 focus:ring-red-500/30'
+              : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500/30 focus:border-blue-500'
               }`}
           >
             <option value="">— select a component —</option>

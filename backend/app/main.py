@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm
+from app.ops import router as ops_router
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
@@ -72,6 +73,7 @@ app.add_middleware(
 
 app.include_router(dependencies.router)
 app.include_router(monitoring.router)
+app.include_router(ops_router.router)
 app.include_router(incidents.router)
 app.include_router(intelligence.router)
 app.include_router(admin.router)

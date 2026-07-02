@@ -4,7 +4,7 @@ import {
   AlertTriangle, ChevronDown, ChevronUp, Server,
   Box, Layers, Wifi, WifiOff, Loader2, Eye, EyeOff,
   Activity, FileText, GitBranch, ShieldCheck, Key,
-  Database, Zap, Radio, Clock, Filter, Search,
+  Database, Zap, Radio, Clock, Search,
   BarChart2, Terminal, BookOpen, AlertOctagon
 } from 'lucide-react';
 
@@ -1226,10 +1226,9 @@ export default function CloudIntegrationsPage() {
 
       {/* Provider stats — clickable to scope all tabs */}
       <div className="grid grid-cols-4 gap-3">
-        {(['all', 'aws', 'azure', 'gcp', 'kubernetes'] as (Provider | 'all')[]).map(p => {
-          const isAll = p === 'all';
-          const count = isAll ? connections.length : byProvider(p as Provider).length;
-          const cfg = isAll ? null : PROVIDER_CONFIG[p as Provider];
+        {(['aws', 'azure', 'gcp', 'kubernetes'] as Provider[]).map(p => {
+          const count = byProvider(p).length;
+          const cfg = PROVIDER_CONFIG[p];
           const isActive = activeProvider === p;
           return (
             <button
@@ -1240,24 +1239,22 @@ export default function CloudIntegrationsPage() {
                   : 'hover:scale-[1.01]'
                 }`}
               style={{
-                borderColor: isAll ? 'var(--color-border)' : (isActive ? cfg!.color : cfg!.border),
-                background: isAll ? 'var(--color-card)' : cfg!.bg,
+                borderColor: isActive ? cfg.color : cfg.border,
+                background: cfg.bg,
               }}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-lg">
-                  {p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : p === 'kubernetes' ? '⎈' : '🌐'}
+                  {p === 'aws' ? '☁' : p === 'azure' ? '⬡' : p === 'gcp' ? '◈' : '⎈'}
                 </span>
-                {isAll ? (
-                  <Filter className="h-3.5 w-3.5" style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }} />
-                ) : (count > 0
+                {count > 0
                   ? <Wifi className="h-3.5 w-3.5 text-green-400" />
-                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />)
+                  : <WifiOff className="h-3.5 w-3.5 text-[var(--color-text-secondary)]/40" />
                 }
               </div>
               <p className="text-lg font-bold text-[var(--color-text-primary)]">{count}</p>
               <p className="text-[10px] text-[var(--color-text-secondary)]">
-                {isAll ? 'All Clouds' : cfg!.label}
+                {cfg.label}
               </p>
             </button>
           );

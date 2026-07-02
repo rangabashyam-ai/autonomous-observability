@@ -18,6 +18,7 @@ interface ReportChatProps {
   entityName?: string;
   suggestedQuestions?: string[];
   className?: string;
+  embedded?: boolean;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -37,6 +38,7 @@ export function ReportChat({
   entityName = 'this report',
   suggestedQuestions = [],
   className,
+  embedded: _embedded,
 }: ReportChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');

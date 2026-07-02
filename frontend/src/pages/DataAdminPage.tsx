@@ -6,7 +6,7 @@ export default function DataAdminPage() {
   const [message, setMessage] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
-  const load = () => getDataStatus().then(() => {});
+  const load = () => getDataStatus().then(() => { });
 
   useEffect(() => { load(); }, []);
 

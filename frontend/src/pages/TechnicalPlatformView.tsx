@@ -9,14 +9,33 @@ import { DataTable } from '../components/ui/data-table';
 import { generateTrend, MiniAreaChart, MiniLineChart } from '../components/charts/charts';
 import { UtilizationBar } from '../components/dashboard/visualizations';
 import { DrilldownHeatmap } from '../components/dashboard/drilldown-heatmap';
-import { Modal } from '../components/ui/modal';
+import DrilldownDrawer from '../components/drilldown/DrilldownDrawer';
+import { type DrawerAIAssistantProps } from '../components/drilldown/DrawerAIAssistant';
+import { useOpsDashboard } from '../hooks/useOpsDashboard';
+import OpsSubNav from '../components/ops/OpsSubNav';
+import OpsSectionContent from '../components/ops/OpsSectionContent';
+import OpsEntityDrawer from '../components/ops/OpsEntityDrawer';
+import type { OpsEntity } from '../types/ops';
 
 export default function TechnicalPlatformView() {
   const [data, setData] = useState<MonitoringDashboard | null>(null);
-  const [openModal, setOpenModal] = useState<string | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
-  const [modalPage, setModalPage] = useState(1);
+  const [drawer, setDrawer] = useState<
+    | { kind: 'summary'; id: 'k8s' | 'pods' | 'cpu' | 'memory' | 'metric-k8s' | 'metric-apis' | 'metric-databases' | 'metric-queues' }
+    | { kind: 'pod'; data: { id: string; status: string; cpu: number; memory: number } }
+    | { kind: 'jvm'; data: { service: string; heap_used_pct: number; thread_count: number; gc_pause_ms: number } }
+    | null
+  >(null);
+  const [drawerPage, setDrawerPage] = useState(1);
+  const [opsEntity, setOpsEntity] = useState<OpsEntity | null>(null);
   const itemsPerPage = 25;
+
+  const {
+    entities: opsEntities,
+    navItems: platformNav,
+    activeSection,
+    setActiveSection,
+    currentSection,
+  } = useOpsDashboard('platform-ops');
 
   useEffect(() => {
     getMonitoringDashboard().then(setData).catch(console.error);
@@ -31,41 +50,189 @@ export default function TechnicalPlatformView() {
     return Math.round((healthy / tech.containers.length) * 100);
   }, [tech]);
 
-  if (!data) {
-    return <p className="text-text-secondary text-sm">Loading technical platform view...</p>;
-  }
-
   const avgCpu = infra?.summary.avg_cpu ?? 0;
   const avgMem = infra?.summary.avg_memory ?? 0;
+
+  const openSummaryDrawer = (id: 'k8s' | 'pods' | 'cpu' | 'memory') => {
+    setDrawer({ kind: 'summary', id });
+    setDrawerPage(1);
+  };
+
+  const openMetricDrawer = (id: 'k8s' | 'apis' | 'databases' | 'queues') => {
+    setDrawer({ kind: 'summary', id: `metric-${id}` as 'metric-k8s' | 'metric-apis' | 'metric-databases' | 'metric-queues' });
+    setDrawerPage(1);
+  };
+
+  const closeDrawer = () => setDrawer(null);
+
+  const summaryTitles: Record<string, { title: string; type: 'infrastructure' | 'api' }> = {
+    k8s: { title: 'K8s Cluster Health Details', type: 'infrastructure' },
+    pods: { title: 'Active Pods - Complete List', type: 'infrastructure' },
+    cpu: { title: 'CPU Usage - Nodes & Pods Breakdown', type: 'infrastructure' },
+    memory: { title: 'Memory Usage - Complete Breakdown', type: 'infrastructure' },
+    'metric-k8s': { title: 'K8s Cluster Status - Detailed View', type: 'infrastructure' },
+    'metric-apis': { title: 'API Performance - All Endpoints', type: 'api' },
+    'metric-databases': { title: 'Database Load - All Databases', type: 'infrastructure' },
+    'metric-queues': { title: 'Queue Metrics - All Queues', type: 'infrastructure' },
+  };
+
+  const platformDrawerMeta = !drawer
+    ? null
+    : drawer.kind === 'pod'
+      ? { title: drawer.data.id, subtitle: 'Kubernetes Pod', type: 'infrastructure' as const, health: drawer.data.status as 'healthy' | 'warning' | 'critical' }
+      : drawer.kind === 'jvm'
+        ? { title: drawer.data.service, subtitle: 'JVM Runtime Metrics', type: 'infrastructure' as const, health: undefined }
+        : { title: summaryTitles[drawer.id].title, subtitle: undefined, type: summaryTitles[drawer.id].type, health: undefined };
+
+  const platformDrawerAI = useMemo((): DrawerAIAssistantProps | null => {
+    if (!drawer || !tech || !infra) return null;
+
+    if (drawer.kind === 'pod') {
+      const pod = drawer.data;
+      const shortName = pod.id.split('-').pop() ?? pod.id;
+      return {
+        pageType: 'service',
+        selectedEntity: shortName,
+        entityData: { pod_id: pod.id, status: pod.status, cpu: pod.cpu, memory: pod.memory },
+        relatedMetrics: { cpu: pod.cpu, memory: pod.memory },
+        suggestedQuestions: [
+          `Why is pod ${shortName} status ${pod.status}?`,
+          `Analyze CPU utilization for ${shortName}`,
+          'Recommend remediation steps for this pod',
+        ],
+      };
+    }
+
+    if (drawer.kind === 'jvm') {
+      const jvm = drawer.data;
+      return {
+        pageType: 'service',
+        selectedEntity: jvm.service,
+        entityData: { ...jvm },
+        relatedMetrics: { heap_used_pct: jvm.heap_used_pct, thread_count: jvm.thread_count, gc_pause_ms: jvm.gc_pause_ms },
+        suggestedQuestions: [
+          `Is heap usage at ${jvm.heap_used_pct.toFixed(1)}% healthy for ${jvm.service}?`,
+          `Analyze GC pause of ${jvm.gc_pause_ms.toFixed(0)}ms for ${jvm.service}`,
+          `Should we scale ${jvm.service} based on JVM metrics?`,
+        ],
+      };
+    }
+
+    const summaryAI: Record<string, DrawerAIAssistantProps> = {
+      k8s: {
+        pageType: 'service',
+        selectedEntity: 'K8s Cluster',
+        entityData: { cluster_health_pct: k8sHealth, containers: tech.containers },
+        relatedMetrics: { health_pct: k8sHealth, pod_count: tech.containers.length },
+        suggestedQuestions: [
+          'Summarize K8s cluster health and pod distribution',
+          'Which pods are degraded or critical?',
+          'What remediation steps improve cluster health?',
+        ],
+      },
+      pods: {
+        pageType: 'service',
+        selectedEntity: 'Active Pods',
+        entityData: { pods: tech.containers, total: tech.containers.length },
+        relatedMetrics: { total_pods: tech.containers.length },
+        suggestedQuestions: [
+          'Which pods have the highest resource utilization?',
+          'Are there unhealthy pods that need restart?',
+          'Summarize pod status across the cluster',
+        ],
+      },
+      cpu: {
+        pageType: 'service',
+        selectedEntity: 'Cluster CPU',
+        entityData: { avg_cpu: avgCpu, nodes: infra.servers },
+        relatedMetrics: { avg_cpu: avgCpu, node_count: infra.servers.length },
+        suggestedQuestions: [
+          'Which nodes have the highest CPU usage?',
+          'Is average cluster CPU within safe limits?',
+          'Recommend CPU optimization actions',
+        ],
+      },
+      memory: {
+        pageType: 'service',
+        selectedEntity: 'Cluster Memory',
+        entityData: { avg_memory: avgMem, nodes: infra.servers },
+        relatedMetrics: { avg_memory: avgMem },
+        suggestedQuestions: [
+          'Which nodes are memory constrained?',
+          'Summarize memory pressure across the cluster',
+          'What scaling actions reduce memory risk?',
+        ],
+      },
+      'metric-k8s': {
+        pageType: 'service',
+        selectedEntity: 'K8s Cluster Status',
+        entityData: { containers: tech.containers },
+        relatedMetrics: { health_pct: k8sHealth },
+        suggestedQuestions: ['Summarize container health distribution', 'Which containers need attention?'],
+      },
+      'metric-apis': {
+        pageType: 'service',
+        selectedEntity: 'API Performance',
+        entityData: { apis: tech.apis },
+        suggestedQuestions: ['Which API endpoints have highest latency?', 'Summarize API error rates'],
+      },
+      'metric-databases': {
+        pageType: 'service',
+        selectedEntity: 'Database Load',
+        entityData: { databases: tech.databases },
+        suggestedQuestions: ['Which databases have highest connection load?', 'Summarize query latency issues'],
+      },
+      'metric-queues': {
+        pageType: 'service',
+        selectedEntity: 'Queue Metrics',
+        entityData: { queues: tech.queues },
+        suggestedQuestions: ['Which queues have the deepest backlog?', 'Summarize consumer lag across queues'],
+      },
+    };
+
+    return summaryAI[drawer.id] ?? null;
+  }, [drawer, tech, infra, k8sHealth, avgCpu, avgMem]);
+
+  if (!data) {
+    return <p className="text-text-secondary text-sm">Loading platform ops...</p>;
+  }
 
   return (
     <div>
       <PageHeader
-        title="Technical Platform View"
-        description="Kubernetes, infrastructure, API, database, and queue metrics for platform engineering"
+        title="Platform Operations"
+        description="Compute, cloud, networking, storage, databases, messaging, and platform health — the full technology stack."
       />
 
+      <div className="flex gap-6 items-start">
+        <OpsSubNav items={platformNav} activeId={activeSection} onChange={setActiveSection} perspective="platform" />
+
+        <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card/30 p-4 sm:p-5 shadow-sm">
+      {activeSection !== 'overview' && currentSection && (
+        <OpsSectionContent
+          section={currentSection}
+          entities={opsEntities}
+          onEntityClick={setOpsEntity}
+        />
+      )}
+
+      {activeSection === 'overview' && (
+      <>
       <Grid12 className="mb-4">
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
-            label="K8s Cluster Health"
-            value={`${k8sHealth}%`}
-            variant={k8sHealth >= 90 ? 'success' : 'warning'}
-            onClick={() => {
-              setOpenModal('k8s');
-              setModalPage(1);
-            }}
+            label="Compute Hosts"
+            value={opsEntities.filter((e) => ['host', 'vm', 'node'].includes(e.entity_type)).length || infra!.servers.length}
+            sub="Physical, VM, cloud instances"
+            onClick={() => { setActiveSection('compute'); }}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
-            label="Active Pods"
-            value={tech!.containers.length}
+            label="Containers"
+            value={opsEntities.filter((e) => ['pod', 'container'].includes(e.entity_type)).length || tech!.containers.length}
             sub={`${tech!.containers.filter((c) => c.status !== 'healthy').length} degraded`}
-            onClick={() => {
-              setOpenModal('pods');
-              setModalPage(1);
-            }}
+            onClick={() => { setActiveSection('containers'); }}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
@@ -73,10 +240,7 @@ export default function TechnicalPlatformView() {
             label="Avg CPU"
             value={`${avgCpu.toFixed(1)}%`}
             variant={avgCpu > 75 ? 'warning' : 'default'}
-            onClick={() => {
-              setOpenModal('cpu');
-              setModalPage(1);
-            }}
+            onClick={() => openSummaryDrawer('cpu')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
@@ -84,10 +248,7 @@ export default function TechnicalPlatformView() {
             label="Avg Memory"
             value={`${avgMem.toFixed(1)}%`}
             variant={avgMem > 80 ? 'critical' : 'default'}
-            onClick={() => {
-              setOpenModal('memory');
-              setModalPage(1);
-            }}
+            onClick={() => openSummaryDrawer('memory')}
           />
         </div>
       </Grid12>
@@ -126,7 +287,7 @@ export default function TechnicalPlatformView() {
 
       <CollapsibleSection title="Platform Metrics" className="mt-6" defaultOpen>
         <Grid12>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('k8s')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('k8s')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>K8s Cluster Status</CardTitle></CardHeader>
               <MiniAreaChart data={generateTrend(k8sHealth, 12)} height={80} color="#10B981" />
@@ -146,7 +307,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('apis')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('apis')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>API Performance</CardTitle></CardHeader>
               <MiniLineChart
@@ -161,7 +322,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('databases')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('databases')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Database Load</CardTitle></CardHeader>
               <MiniAreaChart
@@ -182,7 +343,7 @@ export default function TechnicalPlatformView() {
               </div>
             </Card>
           </div>
-          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => setSelectedMetric('queues')}>
+          <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('queues')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Queue Metrics</CardTitle></CardHeader>
               <MiniLineChart
@@ -213,6 +374,7 @@ export default function TechnicalPlatformView() {
               <DataTable
                 compact
                 data={tech!.containers}
+                onRowClick={(c) => setDrawer({ kind: 'pod', data: c })}
                 columns={[
                   { key: 'id', header: 'Pod', render: (c) => <span className="text-xs font-mono">{c.id}</span> },
                   { key: 'status', header: 'Status', render: (c) => <HealthBadge health={c.status} /> },
@@ -230,6 +392,7 @@ export default function TechnicalPlatformView() {
               <DataTable
                 compact
                 data={tech!.jvm}
+                onRowClick={(j) => setDrawer({ kind: 'jvm', data: j })}
                 columns={[
                   { key: 'service', header: 'Service', render: (j) => <span className="text-xs">{j.service}</span> },
                   { key: 'heap', header: 'Heap', render: (j) => <span className="font-mono text-xs">{j.heap_used_pct.toFixed(1)}%</span> },
@@ -242,9 +405,18 @@ export default function TechnicalPlatformView() {
         </Grid12>
       </CollapsibleSection>
 
-      {/* K8s Cluster Health Modal */}
-      <Modal isOpen={openModal === 'k8s'} onClose={() => setOpenModal(null)} title="K8s Cluster Health Details" size="lg">
-        <div className="space-y-6">
+      <DrilldownDrawer
+        isOpen={drawer !== null}
+        onClose={closeDrawer}
+        title={platformDrawerMeta?.title ?? ''}
+        subtitle={platformDrawerMeta?.subtitle}
+        type={platformDrawerMeta?.type ?? 'infrastructure'}
+        health={platformDrawerMeta?.health}
+        aiAssistant={platformDrawerAI}
+      >
+        {drawer?.kind === 'summary' && drawer.id === 'k8s' && (
+          <div className="space-y-6">
+
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
               <p className="text-xs text-text-secondary mb-1">Running</p>
@@ -264,7 +436,7 @@ export default function TechnicalPlatformView() {
             <h3 className="text-sm font-semibold mb-3">Pod Distribution ({tech!.containers.length} total)</h3>
             <div className="space-y-2">
               {tech!.containers
-                .slice((modalPage - 1) * itemsPerPage, modalPage * itemsPerPage)
+                .slice((drawerPage - 1) * itemsPerPage, drawerPage * itemsPerPage)
                 .map((c) => (
                   <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
                     <div>
@@ -279,18 +451,18 @@ export default function TechnicalPlatformView() {
             {tech!.containers.length > itemsPerPage && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <button
-                  onClick={() => setModalPage((p) => Math.max(1, p - 1))}
-                  disabled={modalPage === 1}
+                  onClick={() => setDrawerPage((p) => Math.max(1, p - 1))}
+                  disabled={drawerPage === 1}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   ← Prev
                 </button>
                 <span className="text-xs text-text-secondary">
-                  Page {modalPage} of {Math.ceil(tech!.containers.length / itemsPerPage)}
+                  Page {drawerPage} of {Math.ceil(tech!.containers.length / itemsPerPage)}
                 </span>
                 <button
-                  onClick={() => setModalPage((p) => Math.min(Math.ceil(tech!.containers.length / itemsPerPage), p + 1))}
-                  disabled={modalPage === Math.ceil(tech!.containers.length / itemsPerPage)}
+                  onClick={() => setDrawerPage((p) => Math.min(Math.ceil(tech!.containers.length / itemsPerPage), p + 1))}
+                  disabled={drawerPage === Math.ceil(tech!.containers.length / itemsPerPage)}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   Next →
@@ -299,10 +471,9 @@ export default function TechnicalPlatformView() {
             )}
           </div>
         </div>
-      </Modal>
-
-      {/* Active Pods Modal */}
-      <Modal isOpen={openModal === 'pods'} onClose={() => setOpenModal(null)} title="Active Pods - Complete List" size="xl">
+        )}
+        {drawer?.kind === 'summary' && drawer.id === 'pods' && (
+          <div className="space-y-6">
         <div className="space-y-4">
           <p className="text-sm text-text-secondary">Total Pods: <span className="font-semibold text-text-primary">{tech!.containers.length}</span></p>
           <div className="overflow-x-auto">
@@ -318,7 +489,7 @@ export default function TechnicalPlatformView() {
               </thead>
               <tbody>
                 {tech!.containers
-                  .slice((modalPage - 1) * itemsPerPage, modalPage * itemsPerPage)
+                  .slice((drawerPage - 1) * itemsPerPage, drawerPage * itemsPerPage)
                   .map((c) => (
                     <tr key={c.id} className="border-b border-border hover:bg-card-hover">
                       <td className="py-2 px-3 font-mono text-xs">{c.id}</td>
@@ -342,30 +513,30 @@ export default function TechnicalPlatformView() {
           {tech!.containers.length > itemsPerPage && (
             <div className="flex justify-center items-center gap-2">
               <button
-                onClick={() => setModalPage((p) => Math.max(1, p - 1))}
-                disabled={modalPage === 1}
+                onClick={() => setDrawerPage((p) => Math.max(1, p - 1))}
+                disabled={drawerPage === 1}
                 className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
               >
                 ← Prev
               </button>
               <span className="text-xs text-text-secondary">
-                Page {modalPage} of {Math.ceil(tech!.containers.length / itemsPerPage)}
+                Page {drawerPage} of {Math.ceil(tech!.containers.length / itemsPerPage)}
               </span>
               <button
-                onClick={() => setModalPage((p) => Math.min(Math.ceil(tech!.containers.length / itemsPerPage), p + 1))}
-                disabled={modalPage === Math.ceil(tech!.containers.length / itemsPerPage)}
+                onClick={() => setDrawerPage((p) => Math.min(Math.ceil(tech!.containers.length / itemsPerPage), p + 1))}
+                disabled={drawerPage === Math.ceil(tech!.containers.length / itemsPerPage)}
                 className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
               >
                 Next →
               </button>
             </div>
           )}
+          </div>
         </div>
-      </Modal>
+        )}
+        {drawer?.kind === 'summary' && drawer.id === 'cpu' && (
+          <div className="space-y-6">
 
-      {/* Average CPU Modal */}
-      <Modal isOpen={openModal === 'cpu'} onClose={() => setOpenModal(null)} title="CPU Usage - Nodes & Pods Breakdown" size="xl">
-        <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
               <p className="text-xs text-text-secondary mb-1">Average Cluster CPU</p>
@@ -381,7 +552,7 @@ export default function TechnicalPlatformView() {
             <h3 className="text-sm font-semibold mb-3">Node CPU Usage ({infra!.servers.length} total)</h3>
             <div className="space-y-2">
               {infra!.servers
-                .slice((modalPage - 1) * itemsPerPage, modalPage * itemsPerPage)
+                .slice((drawerPage - 1) * itemsPerPage, drawerPage * itemsPerPage)
                 .map((s) => (
                   <div key={s.id} className="space-y-1">
                     <div className="flex justify-between text-xs">
@@ -403,18 +574,18 @@ export default function TechnicalPlatformView() {
             {infra!.servers.length > itemsPerPage && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <button
-                  onClick={() => setModalPage((p) => Math.max(1, p - 1))}
-                  disabled={modalPage === 1}
+                  onClick={() => setDrawerPage((p) => Math.max(1, p - 1))}
+                  disabled={drawerPage === 1}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   ← Prev
                 </button>
                 <span className="text-xs text-text-secondary">
-                  Page {modalPage} of {Math.ceil(infra!.servers.length / itemsPerPage)}
+                  Page {drawerPage} of {Math.ceil(infra!.servers.length / itemsPerPage)}
                 </span>
                 <button
-                  onClick={() => setModalPage((p) => Math.min(Math.ceil(infra!.servers.length / itemsPerPage), p + 1))}
-                  disabled={modalPage === Math.ceil(infra!.servers.length / itemsPerPage)}
+                  onClick={() => setDrawerPage((p) => Math.min(Math.ceil(infra!.servers.length / itemsPerPage), p + 1))}
+                  disabled={drawerPage === Math.ceil(infra!.servers.length / itemsPerPage)}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   Next →
@@ -449,11 +620,10 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         </div>
-      </Modal>
+        )}
+        {drawer?.kind === 'summary' && drawer.id === 'memory' && (
+          <div className="space-y-6">
 
-      {/* Average Memory Modal */}
-      <Modal isOpen={openModal === 'memory'} onClose={() => setOpenModal(null)} title="Memory Usage - Complete Breakdown" size="xl">
-        <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-card-hover">
               <p className="text-xs text-text-secondary mb-1">Average Cluster Memory</p>
@@ -469,7 +639,7 @@ export default function TechnicalPlatformView() {
             <h3 className="text-sm font-semibold mb-3">Node Memory Usage ({infra!.servers.length} total)</h3>
             <div className="space-y-2">
               {infra!.servers
-                .slice((modalPage - 1) * itemsPerPage, modalPage * itemsPerPage)
+                .slice((drawerPage - 1) * itemsPerPage, drawerPage * itemsPerPage)
                 .map((s) => (
                   <div key={s.id} className="space-y-1">
                     <div className="flex justify-between text-xs">
@@ -491,18 +661,18 @@ export default function TechnicalPlatformView() {
             {infra!.servers.length > itemsPerPage && (
               <div className="flex justify-center items-center gap-2 mt-4">
                 <button
-                  onClick={() => setModalPage((p) => Math.max(1, p - 1))}
-                  disabled={modalPage === 1}
+                  onClick={() => setDrawerPage((p) => Math.max(1, p - 1))}
+                  disabled={drawerPage === 1}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   ← Prev
                 </button>
                 <span className="text-xs text-text-secondary">
-                  Page {modalPage} of {Math.ceil(infra!.servers.length / itemsPerPage)}
+                  Page {drawerPage} of {Math.ceil(infra!.servers.length / itemsPerPage)}
                 </span>
                 <button
-                  onClick={() => setModalPage((p) => Math.min(Math.ceil(infra!.servers.length / itemsPerPage), p + 1))}
-                  disabled={modalPage === Math.ceil(infra!.servers.length / itemsPerPage)}
+                  onClick={() => setDrawerPage((p) => Math.min(Math.ceil(infra!.servers.length / itemsPerPage), p + 1))}
+                  disabled={drawerPage === Math.ceil(infra!.servers.length / itemsPerPage)}
                   className="px-3 py-1 rounded border border-border text-sm disabled:opacity-50"
                 >
                   Next →
@@ -552,11 +722,8 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         </div>
-      </Modal>
-
-      {/* K8s Cluster Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'k8s'} onClose={() => setSelectedMetric(null)} title="K8s Cluster Status - Detailed View" size="xl">
-        {tech && (
+        )}
+        {drawer?.kind === 'summary' && drawer.id === 'metric-k8s' && tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-success/10 to-success/5 border border-success/20">
@@ -593,11 +760,7 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* API Performance Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'apis'} onClose={() => setSelectedMetric(null)} title="API Performance - All Endpoints" size="xl">
-        {tech && (
+        {drawer?.kind === 'summary' && drawer.id === 'metric-apis' && tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
@@ -650,11 +813,7 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Database Load Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'databases'} onClose={() => setSelectedMetric(null)} title="Database Load - All Databases" size="xl">
-        {tech && (
+        {drawer?.kind === 'summary' && drawer.id === 'metric-databases' && tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
@@ -703,11 +862,7 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Queue Metrics Drill-Down Modal */}
-      <Modal isOpen={selectedMetric === 'queues'} onClose={() => setSelectedMetric(null)} title="Queue Metrics - All Queues" size="xl">
-        {tech && (
+        {drawer?.kind === 'summary' && drawer.id === 'metric-queues' && tech && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
@@ -756,7 +911,61 @@ export default function TechnicalPlatformView() {
             </div>
           </div>
         )}
-      </Modal>
+        {drawer?.kind === 'pod' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">Status</p>
+                <HealthBadge health={drawer.data.status} />
+              </div>
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">Health Score</p>
+                <p className="text-2xl font-bold text-text-primary">{((drawer.data.cpu + drawer.data.memory) / 2).toFixed(0)}%</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">CPU</p>
+                <p className="text-2xl font-bold text-primary">{drawer.data.cpu.toFixed(1)}%</p>
+              </div>
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">Memory</p>
+                <p className="text-2xl font-bold text-warning">{drawer.data.memory.toFixed(1)}%</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {drawer?.kind === 'jvm' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">Heap Used</p>
+                <p className="text-2xl font-bold text-primary">{drawer.data.heap_used_pct.toFixed(1)}%</p>
+              </div>
+              <div className="p-4 rounded-xl border border-border">
+                <p className="text-xs text-text-secondary mb-2">Thread Count</p>
+                <p className="text-2xl font-bold text-text-primary">{drawer.data.thread_count}</p>
+              </div>
+            </div>
+            <div className="p-4 rounded-xl border border-border">
+              <p className="text-xs text-text-secondary mb-2">GC Pause</p>
+              <p className="text-2xl font-bold text-warning">{drawer.data.gc_pause_ms.toFixed(0)}ms</p>
+            </div>
+          </div>
+        )}
+
+      </DrilldownDrawer>
+      </>
+      )}
+        </div>
+      </div>
+
+      <OpsEntityDrawer
+        entity={opsEntity}
+        onClose={() => setOpsEntity(null)}
+        relatedEntities={opsEntities}
+      />
     </div>
   );
 }

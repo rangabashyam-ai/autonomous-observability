@@ -17,6 +17,13 @@ import type {
 } from '../types/api';
 
 import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
+import type {
+  OpsCatalog,
+  OpsDashboardDefinition,
+  OpsDashboardId,
+  OpsEntitiesResponse,
+  OpsEntity,
+} from '../types/ops';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -570,4 +577,57 @@ export async function getNodeLogs(nodeId: string, health: string) {
   );
 }
 
+export async function getIntegrationTraces(params?: {
+  service?: string;
+  has_error?: boolean;
+  limit?: number;
+}): Promise<{ traces: any[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params?.service) q.set('service', params.service);
+  if (params?.has_error !== undefined) q.set('has_error', String(params.has_error));
+  if (params?.limit !== undefined) q.set('limit', String(params.limit));
+  const suffix = q.toString() ? `?${q}` : '';
+  return fetchJson(`${BASE}/integrations/traces${suffix}`);
+}
+
+// --- Enterprise Operations ---
+export async function getOpsCatalog(): Promise<OpsCatalog> {
+  return fetchJson(`${BASE}/ops/catalog`);
+}
+
+export async function getOpsDashboard(dashboardId: OpsDashboardId): Promise<OpsDashboardDefinition> {
+  return fetchJson(`${BASE}/ops/dashboards/${dashboardId}`);
+}
+
+export async function getOpsEntities(params?: {
+  entity_type?: string;
+  perspective?: 'service' | 'platform';
+  health?: string;
+}): Promise<OpsEntitiesResponse> {
+  const q = new URLSearchParams();
+  if (params?.entity_type) q.set('entity_type', params.entity_type);
+  if (params?.perspective) q.set('perspective', params.perspective);
+  if (params?.health) q.set('health', params.health);
+  const suffix = q.toString() ? `?${q}` : '';
+  return fetchJson(`${BASE}/ops/entities${suffix}`);
+}
+
+export async function getOpsEntity(entityId: string): Promise<OpsEntity> {
+  return fetchJson(`${BASE}/ops/entities/${encodeURIComponent(entityId)}`);
+}
+
+export async function getOpsEntityTelemetry(entityId: string): Promise<import('../types/ops').OpsEntityTelemetry> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    return await fetchJson(`${BASE}/ops/entities/${encodeURIComponent(entityId)}/telemetry`, {
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('Telemetry query timed out');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 

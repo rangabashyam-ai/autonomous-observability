@@ -1439,6 +1439,182 @@ def query_incident_telemetry(
     return result
 
 
+def _dataset_time_window(lookback_seconds: int = 7200) -> tuple[int, int]:
+    """Use the latest timestamps present in the parquet dataset."""
+    try:
+        ma = _metric_app()
+        end_ts = int(ma["timestamp_s"].max())
+        start_ts = max(int(ma["timestamp_s"].min()), end_ts - lookback_seconds)
+        return start_ts, end_ts
+    except Exception:
+        import time
+
+        end_ts = int(time.time())
+        return end_ts - lookback_seconds, end_ts
+
+
+def _entity_match_ids(entity_id: str, entity_name: str) -> list[str]:
+    ids = {entity_id, entity_name, entity_id.lower(), entity_name.lower()}
+    return [x for x in ids if x]
+
+
+def query_entity_telemetry(
+    entity_id: str,
+    entity_name: str,
+    lookback_seconds: int = 7200,
+) -> dict:
+    """Query logs, metrics, and traces from parquet for a single ops entity."""
+    start_ts, end_ts = _dataset_time_window(lookback_seconds)
+    match_ids = _entity_match_ids(entity_id, entity_name)
+    service_keys = {entity_id, entity_name}
+
+    result: dict = {
+        "entity_id": entity_id,
+        "entity_name": entity_name,
+        "window": {"start": _ts_iso(start_ts), "end": _ts_iso(end_ts)},
+        "metrics": [],
+        "host_metrics": [],
+        "logs": [],
+        "traces": [],
+        "dataset_available": is_dataset_available(),
+    }
+
+    if not is_dataset_available():
+        return result
+
+    # ── Service metrics ───────────────────────────────────────────────────────
+    try:
+        ma = _metric_app()
+        svc_df = ma[
+            (ma["service"].isin(list(service_keys)))
+            & (ma["timestamp_s"] >= start_ts)
+            & (ma["timestamp_s"] <= end_ts)
+        ].sort_values("timestamp_s")
+        if svc_df.empty:
+            svc_df = ma[
+                (ma["service"].str.lower().isin([s.lower() for s in service_keys]))
+                & (ma["timestamp_s"] >= start_ts)
+                & (ma["timestamp_s"] <= end_ts)
+            ].sort_values("timestamp_s")
+        result["metrics"] = [
+            {
+                "timestamp": _ts_iso(int(r.timestamp_s)),
+                "request_rate": round(float(r.rr), 2),
+                "success_rate": round(float(r.sr), 2),
+                "request_count": int(r.cnt),
+                "mean_response_time": round(float(r.mrt), 2),
+            }
+            for r in svc_df.itertuples()
+        ]
+    except Exception as e:
+        result["metric_error"] = str(e)
+
+    # ── Host CPU metrics ──────────────────────────────────────────────────────
+    try:
+        cpu = _metric_cpu()
+        host_df = cpu[
+            (cpu["cmdb_id"].isin(match_ids))
+            & (cpu["timestamp_s"] >= start_ts)
+            & (cpu["timestamp_s"] <= end_ts)
+        ].sort_values("timestamp_s")
+        if host_df.empty:
+            lowered = [m.lower() for m in match_ids]
+            host_df = cpu[
+                (cpu["cmdb_id"].str.lower().isin(lowered))
+                & (cpu["timestamp_s"] >= start_ts)
+                & (cpu["timestamp_s"] <= end_ts)
+            ].sort_values("timestamp_s")
+        result["host_metrics"] = [
+            {
+                "timestamp": _ts_iso(int(r.timestamp_s)),
+                "host": str(r.cmdb_id),
+                "cpu": round(float(r.value), 2),
+            }
+            for r in host_df.head(100).itertuples()
+        ]
+    except Exception:
+        pass
+
+    # ── Logs ──────────────────────────────────────────────────────────────────
+    try:
+        log_filters: list = [
+            ("timestamp_s", ">=", start_ts),
+            ("timestamp_s", "<=", end_ts),
+        ]
+        log_df = pd.read_parquet(
+            PARQUET_DIR / "log_service.parquet",
+            filters=log_filters,
+            columns=["cmdb_id", "log_name", "value", "timestamp_s"],
+        )
+        if not log_df.empty:
+            lowered = [m.lower() for m in match_ids]
+            log_df = log_df[
+                log_df["cmdb_id"].isin(match_ids)
+                | log_df["cmdb_id"].str.lower().isin(lowered)
+            ]
+        result["logs"] = [
+            {
+                "timestamp": _ts_iso(int(r.timestamp_s)),
+                "host": str(r.cmdb_id),
+                "log_name": str(r.log_name),
+                "message": str(r.value)[:300],
+                "severity": (
+                    "error"
+                    if any(
+                        w in str(r.value).lower()
+                        for w in ("error", "exception", "fail", "oom", "timeout", "critical", "gc")
+                    )
+                    else "info"
+                ),
+            }
+            for r in log_df.sort_values("timestamp_s").head(100).itertuples()
+        ]
+    except Exception as e:
+        result["log_error"] = str(e)
+
+    # ── Traces ─────────────────────────────────────────────────────────────────
+    try:
+        trace_filters: list = [
+            ("timestamp_s", ">=", start_ts),
+            ("timestamp_s", "<=", end_ts),
+        ]
+        trace_df = pd.read_parquet(
+            PARQUET_DIR / "trace_span.parquet",
+            filters=trace_filters,
+            columns=["service", "cmdb_id", "parent_span_id", "trace_id", "timestamp_s"],
+        )
+        if not trace_df.empty:
+            lowered = [m.lower() for m in match_ids]
+            trace_df = trace_df[
+                trace_df["service"].isin(list(service_keys))
+                | trace_df["service"].str.lower().isin([s.lower() for s in service_keys])
+                | trace_df["cmdb_id"].isin(match_ids)
+                | trace_df["cmdb_id"].str.lower().isin(lowered)
+            ]
+        if not trace_df.empty:
+            sampled = (
+                trace_df.sort_values("timestamp_s")
+                .groupby("trace_id", observed=True)
+                .first()
+                .reset_index()
+                .head(20)
+            )
+            result["traces"] = [
+                {
+                    "trace_id": str(r.trace_id),
+                    "service": str(r.service),
+                    "host": str(r.cmdb_id),
+                    "timestamp": _ts_iso(int(r.timestamp_s)),
+                    "has_parent": bool(r.parent_span_id),
+                }
+                for r in sampled.itertuples()
+            ]
+    except Exception as e:
+        result["trace_error"] = str(e)
+
+    return result
+
+
 def _q_incident_graph() -> dict:
     if not is_dataset_available():
         return {"nodes": [], "edges": [], "dataset_available": False}

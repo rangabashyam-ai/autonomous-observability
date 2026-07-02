@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { analyzeEarlyDetection, copilotChat, getIncidents } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { CopilotResponse } from '../ai/types';
@@ -686,6 +686,7 @@ export default function EarlyDetectionDashboard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<CopilotResponse | null>(null);
   const [aiChat, setAiChat] = useState<AiChatEntry[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [historicalIncidents, setHistoricalIncidents] = useState<Record<string, Incident[]>>({});
@@ -1700,6 +1701,7 @@ export default function EarlyDetectionDashboard() {
       <DrilldownDrawer
         isOpen={drill !== null}
         onClose={closeDrill}
+        disableAutoAI
         onBack={
           drill?.patternId
             ? () => setDrill({ panel: drill.panel })
@@ -1769,18 +1771,6 @@ export default function EarlyDetectionDashboard() {
           </button>
         }
       >
-        {drill && (
-          <AiSuggestionsBlock
-            loading={aiLoading}
-            response={aiResponse}
-            fallbackPlan={clearancePlan}
-            chatHistory={aiChat}
-            suggestedQuestions={suggestedQuestions}
-            onAskAi={runAiAnalysis}
-            onAskQuestion={(q) => runAiQuery(q, true)}
-          />
-        )}
-
         {drill?.panel === 'active-alerts' && (
           <>
             <DrilldownSection title="Critical signals" icon={<AlertTriangle className="h-4 w-4" />}>
@@ -1922,10 +1912,10 @@ export default function EarlyDetectionDashboard() {
                         return (
                           <div className="space-y-2">
                             {matchedIncidents.slice(0, 5).map((inc) => (
-                              <Link
+                              <button
                                 key={inc.incident_id}
-                                to={`/incidents?id=${inc.incident_id}`}
-                                className="block p-3 rounded-lg border border-border bg-card-hover hover:border-primary/40 hover:bg-primary/5 transition-all text-xs"
+                                onClick={() => setSelectedIncident(inc)}
+                                className="block w-full text-left p-3 rounded-lg border border-border bg-card-hover hover:border-primary/40 hover:bg-primary/5 transition-all text-xs cursor-pointer"
                               >
                                 <div className="flex justify-between items-start mb-1">
                                   <span className="font-semibold text-primary hover:underline">{inc.incident_id}</span>
@@ -1933,7 +1923,7 @@ export default function EarlyDetectionDashboard() {
                                 </div>
                                 <p className="font-medium text-text-primary mb-1">{inc.title}</p>
                                 <p className="text-text-secondary">Root Cause: <strong className="text-text-primary">{inc.root_cause}</strong> · Resolved in {inc.duration_minutes ? `${Math.round(inc.duration_minutes)}m` : 'N/A'}</p>
-                              </Link>
+                              </button>
                             ))}
                           </div>
                         );
@@ -2439,6 +2429,59 @@ export default function EarlyDetectionDashboard() {
               Open in main detail panel →
             </button>
           </>
+        )}
+
+        {drill && (
+          <AiSuggestionsBlock
+            loading={aiLoading}
+            response={aiResponse}
+            fallbackPlan={clearancePlan}
+            chatHistory={aiChat}
+            suggestedQuestions={suggestedQuestions}
+            onAskAi={runAiAnalysis}
+            onAskQuestion={(q) => runAiQuery(q, true)}
+          />
+        )}
+      </DrilldownDrawer>
+
+      {/* Detail Drawer for Incident Info */}
+      <DrilldownDrawer
+        isOpen={selectedIncident !== null}
+        onClose={() => setSelectedIncident(null)}
+        title={selectedIncident ? `Incident: ${selectedIncident.incident_id}` : ''}
+        subtitle="Historical incident details, alerts, and resolution status"
+        type="incident"
+        health="critical"
+      >
+        {selectedIncident && (
+          <div className="space-y-6 text-left">
+            <Card className="p-4 bg-red-500/10 border-red-500/20">
+              <h4 className="text-sm font-bold text-text-primary mb-1">{selectedIncident.title}</h4>
+              <p className="text-xs text-text-secondary">
+                Service: <span className="font-semibold text-text-primary">{selectedIncident.service}</span> · Severity: <span className="font-semibold text-text-primary">{selectedIncident.severity}</span>
+              </p>
+              <p className="text-xs text-text-secondary mt-1">
+                Root Cause: <span className="font-semibold text-text-primary">{selectedIncident.root_cause}</span>
+              </p>
+              <p className="text-xs text-text-secondary mt-1">
+                Applied Fix: <span className="font-semibold text-text-primary">{selectedIncident.fix}</span>
+              </p>
+            </Card>
+
+            <DrilldownSection title="Golden Symptoms & Impacted Components">
+              <div className="space-y-2 text-xs text-text-primary">
+                <p><strong>Symptoms:</strong> {selectedIncident.symptoms.join(', ')}</p>
+                <p><strong>Impacted Components:</strong> {selectedIncident.impacted_components.join(', ')}</p>
+                <p><strong>Alerts Fired:</strong> {selectedIncident.alerts.join(', ')}</p>
+              </div>
+            </DrilldownSection>
+
+            <DrilldownSection title="AI Diagnostics Summary">
+              <p className="text-xs text-text-secondary leading-relaxed font-sans">
+                This historical incident has been resolved. The fix applied resolved the SLA regression within {selectedIncident.duration_minutes || 45} minutes.
+              </p>
+            </DrilldownSection>
+          </div>
         )}
       </DrilldownDrawer>
     </div>
