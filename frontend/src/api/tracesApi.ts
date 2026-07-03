@@ -1,7 +1,7 @@
 // Client for the external distributed-tracing service. It returns traces in OTLP/JSON
 // wire format ({ trace: { batches: [{ resource, scopeSpans: [{ spans: [...] }] }] } }),
 // which this module flattens into a simple span list for the UI to render.
-const TRACES_BASE = import.meta.env.VITE_TRACES_API_BASE_URL ?? 'http://192.168.3.221:8080';
+const TRACES_BASE = import.meta.env.VITE_TRACES_API_BASE_URL ?? '/api/vm';
 
 export interface TraceSpan {
   traceId: string;
