@@ -195,7 +195,7 @@ export function buildBlastFlowEdges(
         return { edge: e, kind };
       })
       .filter(x => x.kind === 'impact' && !visitedNodes.has(x.edge.target));
-    
+
     // Sort outgoing edges deterministically by target ID
     outgoing.sort((a, b) => a.edge.target.localeCompare(b.edge.target));
 
