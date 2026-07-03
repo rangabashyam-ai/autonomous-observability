@@ -149,3 +149,18 @@ def get_vm_alerts(
             "count": len(local_data),
             "alerts": local_data,
         }
+
+
+@router.get("/traces/get_trace_by_id")
+def get_vm_trace_by_id(trace_id: str = Query(..., description="The trace ID to fetch")):
+    try:
+        url = f"{VM_API_URL}/traces/get_trace_by_id"
+        params = {"trace_id": trace_id}
+        log.info(f"Proxying trace request to VM: {url} with ID: {trace_id}")
+        res = requests.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except requests.exceptions.RequestException as e:
+        log.warning(f"Failed to fetch trace from VM API ({e}).")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch trace from VM: {e}")
+
