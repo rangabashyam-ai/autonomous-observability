@@ -12,10 +12,13 @@ import {
   Sun,
   Moon,
   ChevronRight,
+  ChevronLeft,
   Network,
   Shield,
   FileSearch,
   Cloud,
+  Upload,
+  GitBranch,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { Input } from './ui/input';
@@ -28,19 +31,22 @@ import type { Overview } from '../types/intelligence';
 const primaryNav = [
   { to: '/', label: 'Executive', icon: LayoutDashboard, end: true },
   { to: '/operations', label: 'Service Ops', icon: Activity, end: false },
-  { to: '/platform', label: 'Platform', icon: Server, end: false },
+  { to: '/platform', label: 'Platform Ops', icon: Server, end: false },
   { to: '/copilot', label: 'AI Copilot', icon: Bot, end: false },
 ];
 
 const secondaryNav = [
   { to: '/dependencies', label: 'Map', icon: Map },
+  { to: '/traces', label: 'Traces', icon: GitBranch },
   { to: '/incidents', label: 'Incidents', icon: AlertTriangle },
   { to: '/rca', label: 'RCA', icon: FileSearch },
   { to: '/blast-radius', label: 'Blast Radius', icon: Network },
   { to: '/early-detection', label: 'Early Detection', icon: Shield },
   { to: '/investigation', label: 'Investigation', icon: Activity },
   { to: '/integrations', label: 'Integrations', icon: Cloud },
-  { to: '/admin', label: 'Settings', icon: Settings },
+  { to: '/ops-config', label: 'Ops Catalog', icon: Network },
+  { to: '/admin', label: 'Custom', icon: Upload },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 /* ─── NavItem ────────────────────────────────────────────────────────────── */
@@ -89,7 +95,7 @@ export default function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sidebar expands on hover, collapses when mouse leaves
+  // Sidebar toggled via explicit collapse/expand control
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
 
   useEffect(() => {
@@ -122,32 +128,45 @@ export default function Layout() {
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        onClick={() => setSidebarExpanded(prev => !prev)}
         className={cn(
-          'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0 cursor-pointer',
+          'h-screen sticky top-0 flex flex-col overflow-hidden z-40 shrink-0',
           'border-r border-border bg-card',
           'transition-[width] duration-200 ease-in-out',
-          sidebarExpanded ? 'w-[220px]' : 'w-[60px]'
+          sidebarExpanded ? 'w-[220px]' : 'w-[60px]',
+          !sidebarExpanded && 'cursor-pointer'
         )}
+        onClick={!sidebarExpanded ? () => setSidebarExpanded(true) : undefined}
       >
-        {/* Logo row */}
-        <div className="h-[60px] border-b border-border flex items-center gap-2.5 px-3 shrink-0">
+        {/* Logo row + collapse control */}
+        <div
+          className={cn(
+            'border-b border-border shrink-0 flex gap-2 px-2 py-2',
+            sidebarExpanded ? 'h-[60px] flex-row items-center' : 'flex-col items-center justify-center min-h-[60px]'
+          )}
+        >
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
             <Activity className="h-4 w-4 text-primary" />
           </div>
-          <div
-            className={cn(
-              'min-w-0 transition-all duration-200',
-              sidebarExpanded ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
-            )}
-          >
-            <h1 className="text-sm font-semibold text-text-primary leading-tight whitespace-nowrap">
-              Autonomous Ops
-            </h1>
-            <p className="text-[10px] text-text-secondary whitespace-nowrap">
-              Enterprise Platform
-            </p>
-          </div>
+          {sidebarExpanded && (
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-semibold text-text-primary leading-tight whitespace-nowrap">
+                AI Ops
+              </h1>
+              <p className="text-[10px] text-text-secondary whitespace-nowrap">
+                Enterprise Platform
+              </p>
+            </div>
+          )}
+          {sidebarExpanded && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSidebarExpanded(false); }}
+              className="ml-auto shrink-0 h-7 w-7 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Nav — fills remaining height, scrolls independently */}

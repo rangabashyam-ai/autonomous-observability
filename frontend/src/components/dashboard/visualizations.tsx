@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn';
+import { WorldMapBackground } from './WorldMapBackground';
 
 interface HeatmapCell {
   id: string;
@@ -47,9 +48,31 @@ export function ResourceHeatmap({
   );
 }
 
-export function UtilizationBar({ label, value, max = 100 }: { label: string; value: number; max?: number }) {
+export function UtilizationBar({
+  label,
+  value,
+  max = 100,
+  variant = 'utilization',
+}: {
+  label: string;
+  value: number;
+  max?: number;
+  /** utilization: higher = worse (CPU, latency). availability: higher = better (uptime, success rate). */
+  variant?: 'utilization' | 'availability';
+}) {
   const pct = Math.min(100, (value / max) * 100);
-  const color = pct >= 85 ? 'bg-critical' : pct >= 70 ? 'bg-warning' : 'bg-success';
+  const color =
+    variant === 'availability'
+      ? pct >= 95
+        ? 'bg-success'
+        : pct >= 80
+          ? 'bg-warning'
+          : 'bg-critical'
+      : pct >= 85
+        ? 'bg-critical'
+        : pct >= 70
+          ? 'bg-warning'
+          : 'bg-success';
 
   return (
     <div className="space-y-1">
@@ -64,21 +87,21 @@ export function UtilizationBar({ label, value, max = 100 }: { label: string; val
   );
 }
 
-/** Simplified regional health map */
+/** Regional health map using precise SVG viewBox coordinates */
 const REGIONS = [
-  { id: 'us-east', label: 'US East', x: 22, y: 38, health: 'healthy' as const },
-  { id: 'us-west', label: 'US West', x: 12, y: 40, health: 'healthy' as const },
-  { id: 'eu-west', label: 'EU West', x: 48, y: 32, health: 'warning' as const },
-  { id: 'eu-central', label: 'EU Central', x: 52, y: 30, health: 'healthy' as const },
-  { id: 'ap-south', label: 'AP South', x: 68, y: 52, health: 'healthy' as const },
-  { id: 'ap-northeast', label: 'AP Northeast', x: 82, y: 38, health: 'critical' as const },
-  { id: 'sa-east', label: 'SA East', x: 32, y: 68, health: 'healthy' as const },
+  { id: 'us-east', label: 'US East', x: 200.00, y: 365.00, health: 'healthy' as const },
+  { id: 'us-west', label: 'US West', x: 85.00, y: 355.00, health: 'healthy' as const },
+  { id: 'eu-west', label: 'EU West', x: 400.02, y: 382.07, health: 'warning' as const },
+  { id: 'eu-central', label: 'EU Central', x: 428.73, y: 392.28, health: 'healthy' as const },
+  { id: 'ap-south', label: 'AP South', x: 600.18, y: 464.96, health: 'healthy' as const },
+  { id: 'ap-northeast', label: 'AP Northeast', x: 722.24, y: 403.69, health: 'critical' as const },
+  { id: 'sa-east', label: 'SA East', x: 268.20, y: 558.12, health: 'healthy' as const },
 ];
 
-const healthDot: Record<string, string> = {
-  healthy: 'bg-success',
-  warning: 'bg-warning',
-  critical: 'bg-critical',
+const healthColor: Record<string, string> = {
+  healthy: '#10b981', // Emerald / success
+  warning: '#f59e0b', // Amber / warning
+  critical: '#ef4444', // Red / critical
 };
 
 export function RegionalHealthMap({
@@ -89,28 +112,91 @@ export function RegionalHealthMap({
   onRegionClick?: (region: typeof REGIONS[0]) => void;
 }) {
   return (
-    <div className={cn('relative w-full', className)}>
-      <svg viewBox="0 0 100 80" className="w-full h-full opacity-30">
-        <ellipse cx="50" cy="40" rx="45" ry="30" fill="none" stroke="var(--color-border)" strokeWidth="0.5" />
-        <ellipse cx="30" cy="35" rx="12" ry="18" fill="none" stroke="var(--color-border)" strokeWidth="0.3" />
-        <ellipse cx="52" cy="32" rx="10" ry="14" fill="none" stroke="var(--color-border)" strokeWidth="0.3" />
-        <ellipse cx="75" cy="42" rx="14" ry="12" fill="none" stroke="var(--color-border)" strokeWidth="0.3" />
-      </svg>
-      {REGIONS.map((r) => (
-        <div
-          key={r.id}
-          className={cn('absolute group', onRegionClick && 'cursor-pointer hover:scale-110 z-10 transition-transform')}
-          style={{ left: `${r.x}%`, top: `${r.y}%`, transform: 'translate(-50%, -50%)' }}
-          onClick={() => onRegionClick?.(r)}
-        >
-          <div className={cn('h-3 w-3 rounded-full ring-2 ring-card shadow-sm', healthDot[r.health])} />
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
-            <div className="whitespace-nowrap rounded-md border border-border bg-card px-2 py-1 text-[10px] text-text-primary shadow-sm">
-              {r.label}
-            </div>
-          </div>
-        </div>
-      ))}
+    <div className={cn('relative w-full overflow-hidden', className)}>
+      <WorldMapBackground className="w-full h-full">
+        {REGIONS.map((r) => {
+          const tooltipWidth = r.label.length * 15 + 24;
+          return (
+            <g
+              key={r.id}
+              id={`region-group-${r.id}`}
+              className="group cursor-pointer"
+              onClick={() => onRegionClick?.(r)}
+            >
+              {/* Pulsing glow ring */}
+              <circle
+                id={`region-pulse-${r.id}`}
+                cx={r.x}
+                cy={r.y}
+                r="22"
+                fill={healthColor[r.health]}
+                className="opacity-25 animate-pulse"
+              />
+              {/* Transparent click target area */}
+              <circle
+                id={`region-click-target-${r.id}`}
+                cx={r.x}
+                cy={r.y}
+                r="32"
+                fill="transparent"
+                className="cursor-pointer"
+              />
+              {/* Hover ring */}
+              <circle
+                id={`region-hover-ring-${r.id}`}
+                cx={r.x}
+                cy={r.y}
+                r="23"
+                fill="none"
+                stroke={healthColor[r.health]}
+                strokeWidth="3"
+                className="opacity-0 group-hover:opacity-60 transition-all duration-200 scale-90 group-hover:scale-100 origin-center"
+                style={{ transformOrigin: `${r.x}px ${r.y}px` }}
+              />
+              {/* Main visible dot */}
+              <circle
+                id={`region-dot-${r.id}`}
+                cx={r.x}
+                cy={r.y}
+                r="14"
+                fill={healthColor[r.health]}
+                stroke="var(--color-card)"
+                strokeWidth="3"
+                className="transition-transform duration-200 group-hover:scale-110 origin-center"
+                style={{ transformOrigin: `${r.x}px ${r.y}px` }}
+              />
+
+              {/* Tooltip */}
+              <g id={`region-tooltip-${r.id}`} className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                <rect
+                  id={`region-tooltip-bg-${r.id}`}
+                  x={r.x - tooltipWidth / 2}
+                  y={r.y - 64}
+                  width={tooltipWidth}
+                  height={36}
+                  rx="8"
+                  fill="var(--color-card)"
+                  stroke="var(--color-border)"
+                  strokeWidth="2"
+                  className="shadow-sm"
+                />
+                <text
+                  id={`region-tooltip-text-${r.id}`}
+                  x={r.x}
+                  y={r.y - 39}
+                  textAnchor="middle"
+                  fill="var(--color-text-primary)"
+                  fontSize="24"
+                  fontWeight="600"
+                  className="select-none font-sans"
+                >
+                  {r.label}
+                </text>
+              </g>
+            </g>
+          );
+        })}
+      </WorldMapBackground>
     </div>
   );
 }

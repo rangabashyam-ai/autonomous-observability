@@ -33,6 +33,8 @@ interface InlineCopilotProps {
   subtitle?: string;
   /** Custom class name */
   className?: string;
+  /** Flatter look when nested inside a drawer panel */
+  embedded?: boolean;
 }
 
 function newId(): string {
@@ -50,6 +52,7 @@ export default function InlineCopilot({
   title = 'AI Assistant',
   subtitle,
   className,
+  embedded = false,
 }: InlineCopilotProps) {
   const [messages, setMessages] = useState<InlineChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -138,12 +141,14 @@ export default function InlineCopilot({
   };
 
   return (
-    <div className={cn(
-      'rounded-xl border overflow-hidden',
-      'border-primary/20 bg-gradient-to-br from-primary/[0.03] to-indigo-500/[0.03]',
-      'dark:from-primary/[0.06] dark:to-indigo-500/[0.06]',
-      className
-    )}>
+    <div
+      className={cn(
+        embedded
+          ? 'rounded-lg border border-border bg-card-hover/30 overflow-hidden'
+          : 'rounded-xl border overflow-hidden border-primary/20 bg-gradient-to-br from-primary/[0.03] to-indigo-500/[0.03] dark:from-primary/[0.06] dark:to-indigo-500/[0.06]',
+        className
+      )}
+    >
       {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}

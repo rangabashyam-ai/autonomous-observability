@@ -1,78 +1,136 @@
-# ── Python ────────────────────────────────────────────────────────────────────
+# =============================================================================
+# OS / editor
+# =============================================================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+.vscode/
+.idea/
+.cursor/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =============================================================================
+# Secrets & local env (keep *.example tracked)
+# =============================================================================
+.env
+.env.*
+!.env.example
+!**/.env.example
+backend/.env
+frontend/.env
+
+# =============================================================================
+# Python — virtualenvs, caches, packaging
+# =============================================================================
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.pyc
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
+*$py.class
 *.so
+.Python
 
-# Virtual environments
 venv/
 .venv/
-env/
-.env/
 ENV/
+env/
 
-# Python test / coverage
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+.mypy_cache/
 .pytest_cache/
+.ruff_cache/
 .coverage
 .coverage.*
 htmlcov/
+*.cover
+.hypothesis/
 .tox/
-.mypy_cache/
-.ruff_cache/
+.nox/
+pip-log.txt
+pip-delete-this-directory.txt
 
-# ── Node / Frontend ───────────────────────────────────────────────────────────
+# =============================================================================
+# Node / frontend
+# =============================================================================
 node_modules/
-.cache/
-
-# Vite build output
-frontend/dist/
-frontend/.vite/
-
-# ── Environment & secrets ─────────────────────────────────────────────────────
-.env
-.env.local
-.env.*.local
-.env.development
-.env.production
-*.env
-
-# ── OS ────────────────────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ── IDE / Editor ──────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.iml
-*.suo
-*.user
-*.swp
-*.swo
-*~
-
-# ── Logs ──────────────────────────────────────────────────────────────────────
-*.log
-logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+.pnpm-debug.log*
 
-# ── Build artefacts ───────────────────────────────────────────────────────────
+frontend/dist/
+frontend/build/
+frontend/.vite/
+.next/
+out/
+.nuxt/
+.vuepress/dist
 *.tsbuildinfo
-frontend/tsconfig.tsbuildinfo
 
-# ── Misc ──────────────────────────────────────────────────────────────────────
-*.bak
+# =============================================================================
+# Local datasets & generated runtime data (do not commit)
+# =============================================================================
+data/
+openRCA_Bank/
+openrca_bank/
+openRCA_bank/
+
+# Large tabular / telemetry dumps (anywhere in repo)
+*.parquet
+*.feather
+*.arrow
+
+# CSV data exports (allow small docs/samples via force-add if needed)
+*.csv
+
+openRCA_Bank/
+# Local databases created at runtime
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded / ingested files
+uploads/
+backend/uploads/
+frontend/uploads/
+
+# =============================================================================
+# Logs & scratch files
+# =============================================================================
+*.log
+logs/
 *.tmp
-*.orig
+*.temp
+_platform_drawer.txt
 
-conflict_solver.py
+# =============================================================================
+# Terraform / infra local state (if used locally)
+# =============================================================================
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+.gemini/

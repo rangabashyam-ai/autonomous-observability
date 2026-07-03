@@ -1,0 +1,43 @@
+// ---------------------------------------------------------
+// Multi-Region Latency & Error Timechart
+// Aggregates request durations and error counts across the central hub and regional spokes.
+// Replace the workspace IDs with your actual regional/hub workspace IDs.
+// ---------------------------------------------------------
+let HubWorkspace = workspace("law-central-hub-id");
+let SpokeWE = workspace("law-spoke-westeurope-id");
+let SpokeSEA = workspace("law-spoke-southeastasia-id");
+
+let AllRequests = union 
+    HubWorkspace.AppRequests,
+    SpokeWE.AppRequests,
+    SpokeSEA.AppRequests;
+
+AllRequests
+| where TimeGenerated > ago(1h)
+| summarize 
+    AvgLatencyMs = avg(DurationMs),
+    ErrorCount = countif(Success == false)
+  by bin(TimeGenerated, 5m), Region = tostring(customDimensions.Region)
+| render timechart with (title="Multi-Region Latency and Errors (Last 1 Hour)")
+
+
+// ---------------------------------------------------------
+// Trace Correlation (Distributed Traces to Syslog Errors)
+// Correlates a distributed AppRequest (trace) with infrastructure Syslog errors
+// occurring in the same region and time window, using OperationId.
+// ---------------------------------------------------------
+let AllSyslog = union 
+    HubWorkspace.Syslog,
+    SpokeWE.Syslog,
+    SpokeSEA.Syslog;
+
+AllRequests
+| where TimeGenerated > ago(1h)
+| where Success == false
+| join kind=inner (
+    AllSyslog
+    | where SeverityLevel in ("error", "critical", "emergency")
+) on $left.OperationId == $right.OperationId
+| project TimeGenerated, OperationId, Region = tostring(customDimensions.Region), 
+          RequestName = Name, DurationMs, SyslogMessage, Computer
+| order by TimeGenerated desc

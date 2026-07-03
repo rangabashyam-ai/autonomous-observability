@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import DrawerAIAssistant from '../drilldown/DrawerAIAssistant';
+import RightDrawerShell, { RightDrawerBody, RightDrawerHeader } from '../drilldown/RightDrawerShell';
 
 interface ResourceTileProps {
   id: string;
@@ -52,28 +53,25 @@ function DetailPanel({ resource, onClose }: DetailPanelProps) {
   const colors = getHealthColor(resource.health);
   
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
-        <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded border font-medium uppercase ${getHealthBadge(resource.health)}`}>
-                {resource.health}
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 uppercase">{resource.type}</span>
-            </div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{resource.name}</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{resource.id}</p>
+    <RightDrawerShell isOpen onClose={onClose} ariaLabel={resource.name} disableAutoAI>
+      <RightDrawerHeader
+        title={resource.name}
+        subtitle={resource.id}
+        onClose={onClose}
+      >
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-[10px] px-2 py-0.5 rounded border font-medium uppercase ${getHealthBadge(resource.health)}`}>
+              {resource.health}
+            </span>
+            <span className="text-xs text-text-secondary uppercase">{resource.type}</span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-          </button>
+          <h2 className="text-sm font-semibold text-text-primary">{resource.name}</h2>
+          <p className="text-xs text-text-secondary font-mono">{resource.id}</p>
         </div>
+      </RightDrawerHeader>
 
-        <div className="p-6 space-y-6">
+      <RightDrawerBody className="p-6 space-y-6">
           {/* Primary Metric */}
           <div className={`p-4 rounded-lg border ${colors.bg} ${colors.border}`}>
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">{resource.primaryMetric.label}</p>
@@ -131,18 +129,6 @@ function DetailPanel({ resource, onClose }: DetailPanelProps) {
             </div>
           </div>
 
-          {/* AI Insights Placeholder */}
-          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">AI Insights</h3>
-            <p className="text-xs text-blue-700 dark:text-blue-400">
-              {resource.health === 'critical' 
-                ? `⚠️ Critical resource detected. Consider scaling or investigating recent changes.`
-                : resource.health === 'warning'
-                ? `⚡ Resource showing elevated metrics. Monitor for potential issues.`
-                : `✓ Resource operating within normal parameters.`}
-            </p>
-          </div>
-
           {/* Related Incidents Placeholder */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Recent Incidents</h3>
@@ -150,9 +136,32 @@ function DetailPanel({ resource, onClose }: DetailPanelProps) {
               No recent incidents related to this resource
             </p>
           </div>
-        </div>
-      </div>
-    </div>
+
+          <DrawerAIAssistant
+            pageType="service"
+            selectedEntity={resource.name}
+            entityData={{
+              resource_id: resource.id,
+              resource_type: resource.type,
+              health: resource.health,
+              primary_metric: resource.primaryMetric,
+              metrics: resource.metrics ?? {},
+            }}
+            relatedMetrics={{
+              cpu: resource.metrics?.cpu,
+              memory: resource.metrics?.memory,
+              latency: resource.metrics?.latency,
+              error_rate: resource.metrics?.error_rate,
+            }}
+            suggestedQuestions={[
+              `Summarize health for ${resource.name}`,
+              `What metrics should I watch on ${resource.name}?`,
+              `Recommend next steps for ${resource.name}`,
+            ]}
+            embedded
+          />
+      </RightDrawerBody>
+    </RightDrawerShell>
   );
 }
 

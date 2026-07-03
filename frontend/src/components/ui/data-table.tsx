@@ -17,17 +17,19 @@ interface DataTableProps<T> {
 }
 
 export function DataTable<T>({ columns, data, onRowClick, className, compact }: DataTableProps<T>) {
+  const cellPad = compact ? 'px-4 py-2.5' : 'px-5 py-3';
+
   return (
     <div className={cn('overflow-x-auto', className)}>
-      <table className="w-full text-left">
+      <table className="w-full border-collapse text-left">
         <thead>
-          <tr className="border-b border-border">
+          <tr className="border-b border-border bg-card-hover/40">
             {columns.map((col) => (
               <th
                 key={col.key}
                 className={cn(
-                  'text-[11px] font-medium text-text-secondary uppercase tracking-wider',
-                  compact ? 'py-2 pr-3' : 'py-3 pr-4',
+                  'text-[11px] font-semibold text-text-secondary uppercase tracking-wider whitespace-nowrap align-middle',
+                  cellPad,
                   col.className
                 )}
               >
@@ -50,8 +52,8 @@ export function DataTable<T>({ columns, data, onRowClick, className, compact }: 
                 <td
                   key={col.key}
                   className={cn(
-                    'text-sm text-text-primary',
-                    compact ? 'py-2 pr-3' : 'py-3 pr-4',
+                    'text-sm text-text-primary align-middle',
+                    cellPad,
                     col.className
                   )}
                 >

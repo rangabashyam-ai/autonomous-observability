@@ -140,10 +140,75 @@ def discover_cloudsql(credentials, project_id: str) -> list[dict]:
         return []
 
 
-def discover_all(credentials, project_id: str) -> list[dict]:
+def discover_pubsub(credentials, project_id: str) -> list[dict]:
+    """Discover Pub/Sub topics."""
+    try:
+        from google.cloud import pubsub_v1
+        publisher = pubsub_v1.PublisherClient(credentials=credentials)
+        project_path = f"projects/{project_id}"
+        resources = []
+        for topic in publisher.list_topics(request={"project": project_path}):
+            resources.append(_make_resource(
+                id=topic.name,
+                name=topic.name.split('/')[-1],
+                resource_type="pubsub_topic",
+                region="global",
+                health="healthy",
+                extra={},
+            ))
+        logger.info(f"[GCP] Discovered {len(resources)} Pub/Sub topics")
+        return resources
+    except Exception as exc:
+        logger.error(f"[GCP] Pub/Sub discovery failed: {exc}")
+        return []
+
+
+def discover_loadbalancers(credentials, project_id: str) -> list[dict]:
+    """Discover Cloud Load Balancers (Forwarding Rules)."""
+    try:
+        from google.cloud import compute_v1
+        client = compute_v1.ForwardingRulesClient(credentials=credentials)
+        resources = []
+        request = compute_v1.AggregatedListForwardingRulesRequest(project=project_id)
+        for zone, response in client.aggregated_list(request=request):
+            for rule in response.forwarding_rules or []:
+                region = zone.replace("regions/", "") if "regions/" in zone else "global"
+                resources.append(_make_resource(
+                    id=str(rule.self_link or rule.name),
+                    name=rule.name,
+                    resource_type="load_balancer",
+                    region=region,
+                    health="healthy",
+                    extra={
+                        "ip_address": rule.i_p_address,
+                        "load_balancing_scheme": rule.load_balancing_scheme,
+                    },
+                ))
+        logger.info(f"[GCP] Discovered {len(resources)} Load Balancers")
+        return resources
+    except Exception as exc:
+        logger.error(f"[GCP] Load Balancer discovery failed: {exc}")
+        return []
+
+
+def discover_all(credentials, project_id: str, services: list[str] = None, regions: list[str] = None) -> list[dict]:
     """Run all GCP discovery and return combined resource list."""
+    services = services or ['gke', 'compute', 'monitoring', 'sql', 'logging', 'pubsub', 'trace', 'lb']
     resources: list[dict] = []
-    resources.extend(discover_compute(credentials, project_id))
-    resources.extend(discover_gke(credentials, project_id))
-    resources.extend(discover_cloudsql(credentials, project_id))
+
+    if 'compute' in services:
+        resources.extend(discover_compute(credentials, project_id))
+    if 'gke' in services:
+        resources.extend(discover_gke(credentials, project_id))
+    if 'sql' in services:
+        resources.extend(discover_cloudsql(credentials, project_id))
+    if 'pubsub' in services:
+        resources.extend(discover_pubsub(credentials, project_id))
+    if 'lb' in services:
+        resources.extend(discover_loadbalancers(credentials, project_id))
+
+    if regions:
+        resources = [r for r in resources if r.get("region") in regions]
+        logger.info(f"[GCP] Region filter {regions} applied — {len(resources)} resources retained")
+
     return resources

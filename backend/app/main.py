@@ -1,3 +1,4 @@
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,14 +7,49 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm
+from app.ops import router as ops_router
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
+_DEP_FILES = [
+    "dependencies/services.json",
+    "dependencies/infrastructure.json",
+    "dependencies/dependency_graph.json",
+]
+
+
+def _prebuild_dependency_files() -> None:
+    """
+    Pre-compute dependency graph data from parquet and persist to JSON files.
+    On first run this takes a few seconds; on every subsequent startup the JSON
+    files are already present so this returns immediately.
+    Delete any of the three files to force a rebuild.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        from app import parquet_store
+        log.info("[startup] Pre-warming parquet cache...")
+        parquet_store._svc_host_map()
+        parquet_store._metric_app()
+        parquet_store._metric_cpu()
+        
+        log.info("[startup] Warming logical query cache...")
+        for filename in parquet_store._ROUTES.keys():
+            parquet_store.query(filename)
+            
+        log.info("[startup] Parquet cache ready.")
+    except Exception as exc:
+        log.warning(f"[startup] Parquet pre-warm failed (non-fatal): {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start background scheduler on startup; stop it on shutdown."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _prebuild_dependency_files)
     from app.integrations.scheduler import start_scheduler, stop_scheduler
     start_scheduler()
     yield
@@ -37,11 +73,15 @@ app.add_middleware(
 
 app.include_router(dependencies.router)
 app.include_router(monitoring.router)
+app.include_router(ops_router.router)
 app.include_router(incidents.router)
 app.include_router(intelligence.router)
 app.include_router(admin.router)
 app.include_router(copilot.router)
 app.include_router(integrations.router)
+app.include_router(otel.router)
+app.include_router(vm.router, prefix="/api/vm", tags=["VM"])
+app.include_router(rca_engine.router)
 
 
 @app.get("/api/health")

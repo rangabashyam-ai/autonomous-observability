@@ -1,15 +1,58 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getOverview } from '../api/client';
-import type { Overview } from '../types/intelligence';
+import { getOverview, getIncidentClickAnalysis, getIncidentChangeRequests } from '../api/client';
+import type { Overview, Incident, IncidentClickAnalysis } from '../types/intelligence';
 import { PageHeader, StatCard, severityClass } from '../components/ui';
+import { IncidentPopup } from './IncidentExplorer';
+import DrilldownDrawer, { DrilldownSection } from '../components/drilldown/DrilldownDrawer';
+import { Card } from '../components/ui/card';
 
 export default function HomeOverview() {
   const [data, setData] = useState<Overview | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [analysis, setAnalysis] = useState<IncidentClickAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [changeRequests, setChangeRequests] = useState<any | null>(null);
+  const [selectedWarning, setSelectedWarning] = useState<any | null>(null);
 
   useEffect(() => {
     getOverview().then(setData).catch(console.error);
   }, []);
+
+  const handleIncidentClick = (inc: any) => {
+    const compliant: Incident = {
+      incident_id: inc.incident_id,
+      title: inc.title,
+      severity: inc.severity,
+      service: inc.service,
+      root_cause: inc.root_cause || '',
+      state: inc.state || 'Open',
+      owner_team: inc.owner_team || 'Platform Team',
+      environment: inc.environment || 'Production',
+      region: inc.region || 'us-east',
+      duration_minutes: inc.duration_minutes || 0,
+      alerts: inc.alerts || [],
+      symptoms: inc.symptoms || [],
+      impacted_components: inc.impacted_components || [],
+      similar_incidents: inc.similar_incidents || [],
+      fix: inc.fix || '',
+      start_time: inc.start_time || '',
+      end_time: inc.end_time || ''
+    };
+    setSelectedIncident(compliant);
+    setAnalysis(null);
+    setAnalysisError(null);
+    setAnalysisLoading(true);
+    setChangeRequests(null);
+    getIncidentClickAnalysis(compliant.incident_id)
+      .then(setAnalysis)
+      .catch((err) => setAnalysisError(err?.message ?? 'Analysis failed'))
+      .finally(() => setAnalysisLoading(false));
+    getIncidentChangeRequests(compliant.incident_id)
+      .then((r) => setChangeRequests({ tickets: r.tickets }))
+      .catch(() => setChangeRequests(null));
+  };
 
   if (!data) return <p className="text-slate-500 dark:text-slate-400">Loading command center...</p>;
 
@@ -39,18 +82,18 @@ export default function HomeOverview() {
           </div>
           <div className="space-y-2">
             {data.recent_incidents.slice(0, 6).map((inc) => (
-              <Link
+              <button
                 key={inc.incident_id}
-                to={`/incidents?id=${inc.incident_id}`}
-                className="block p-3 bg-slate-100 dark:bg-slate-900/50 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                onClick={() => handleIncidentClick(inc)}
+                className="w-full text-left block p-3 bg-slate-100 dark:bg-slate-900/50 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer border border-transparent hover:border-primary/20"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded border ${severityClass(inc.severity)}`}>{inc.severity}</span>
                   <span className="text-xs text-slate-600 dark:text-slate-400">{inc.incident_id}</span>
                 </div>
-                <p className="text-sm text-slate-900 dark:text-white">{inc.title}</p>
+                <p className="text-sm text-slate-900 dark:text-white font-semibold font-sans">{inc.title}</p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">RC: {inc.root_cause}</p>
-              </Link>
+              </button>
             ))}
           </div>
         </section>
@@ -63,16 +106,20 @@ export default function HomeOverview() {
           {data.early_detections.length === 0 ? (
             <p className="text-sm text-slate-600 dark:text-slate-400">No active patterns detected</p>
           ) : (
-            data.early_detections.map((d) => (
-              <div key={d.pattern_id} className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-500/30 rounded-lg mb-2">
+            data.early_detections.map((d, i) => (
+              <button
+                key={`${d.pattern_id}-${i}`}
+                onClick={() => setSelectedWarning(d)}
+                className="w-full text-left block p-3 bg-red-50 dark:bg-red-950/20 border border-red-500/30 rounded-lg mb-2 cursor-pointer hover:bg-red-500/10 transition-all"
+              >
                 <div className="flex justify-between">
-                  <span className="text-sm text-red-700 dark:text-red-300 font-medium">Probable incident forming</span>
+                  <span className="text-sm text-red-700 dark:text-red-300 font-semibold font-sans">Probable incident forming</span>
                   <span className="text-sm font-bold text-red-600 dark:text-red-400">{d.confidence}%</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                   {d.expected_impacted_service} · ETA {d.estimated_time_to_incident_minutes} min
                 </p>
-              </div>
+              </button>
             ))
           )}
 
@@ -102,6 +149,68 @@ export default function HomeOverview() {
           </div>
         </section>
       </div>
+
+      {/* Incident Detail Drawer */}
+      {selectedIncident && (
+        <IncidentPopup
+          incident={selectedIncident}
+          analysis={analysis}
+          analysisLoading={analysisLoading}
+          analysisError={analysisError}
+          changeRequests={changeRequests}
+          onClose={() => setSelectedIncident(null)}
+          onResolved={(updated) => {
+            setSelectedIncident(updated);
+            if (data) {
+              setData({
+                ...data,
+                recent_incidents: data.recent_incidents.map(inc => inc.incident_id === updated.incident_id ? updated : inc)
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* Early Warning Detail Drawer */}
+      <DrilldownDrawer
+        isOpen={selectedWarning !== null}
+        onClose={() => setSelectedWarning(null)}
+        title={selectedWarning ? `Imminent Precursor: ${selectedWarning.expected_impacted_service}` : ''}
+        subtitle="Probable incident pattern details and warning levels"
+        type="incident"
+        health="critical"
+      >
+        {selectedWarning && (
+          <div className="space-y-6 text-left">
+            <Card className="p-4 bg-red-500/10 border-red-500/20">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-critical font-sans">Risk Level: High</span>
+                <span className="text-sm font-bold text-critical">{selectedWarning.confidence}% confidence</span>
+              </div>
+              <h4 className="text-sm font-bold text-text-primary mb-1">{selectedWarning.expected_impacted_service}</h4>
+              <p className="text-xs text-text-secondary mt-1">
+                Estimated time to incident: <span className="font-semibold text-text-primary">{selectedWarning.estimated_time_to_incident_minutes} minutes</span>
+              </p>
+            </Card>
+
+            <DrilldownSection title="Golden Signal Precursors">
+              <div className="p-3 bg-card-hover rounded-lg text-xs text-text-primary font-mono space-y-1">
+                {selectedWarning.matched_alerts?.map((a: string) => (
+                  <p key={a}>⚠ {a}</p>
+                )) || <p>No specific precursors listed.</p>}
+              </div>
+            </DrilldownSection>
+
+            <DrilldownSection title="Recommended Mitigation Actions">
+              <ul className="list-disc pl-4 text-xs text-text-secondary space-y-1.5">
+                {selectedWarning.recommended_actions?.map((act: string) => (
+                  <li key={act}>{act}</li>
+                )) || <li>Check cluster configuration settings.</li>}
+              </ul>
+            </DrilldownSection>
+          </div>
+        )}
+      </DrilldownDrawer>
     </div>
   );
 }

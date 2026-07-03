@@ -62,14 +62,14 @@ function BlastRadiusNode({ data }: NodeProps<BlastRadiusNodeData>) {
     badgeColor = 'bg-orange-500 text-white';
   }
 
-  const borderStyle = data.isSelected 
-    ? '#3b82f6' 
+  const borderStyle = data.isSelected
+    ? '#3b82f6'
     : nodeStyle.border;
 
-  const { 
-    isFocusMode = false, 
-    isGlowing = false, 
-    isPulsing = false 
+  const {
+    isFocusMode = false,
+    isGlowing = false,
+    isPulsing = false
   } = data;
 
   let boxShadowStyle: string | undefined = undefined;

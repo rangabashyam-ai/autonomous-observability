@@ -8,15 +8,16 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import { SERVICES } from '../constants/services';
 import {
   copilotChat,
   startInvestigation,
   advanceInvestigation,
   approveInvestigation,
   executeInvestigation,
+  getDependencyGraph,
 } from '../api/client';
 import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
 import type { Investigation, InvestigationStep } from '../types/intelligence';
@@ -208,13 +209,34 @@ async function generateWorkflowAiRecommendations(investigation: Investigation): 
 /* ─── Main page ──────────────────────────────────────────────────────────── */
 
 export default function InvestigationWorkflow() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [inv, setInv] = useState<Investigation | null>(null);
+  const [hasStartedFromParams, setHasStartedFromParams] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [aiResponse, setAiResponse] = useState<CopilotResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [leftFixExpanded, setLeftFixExpanded] = useState(false);
+  const [services, setServices] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDependencyGraph(['microservice'], 'risk_score')
+      .then((g) => {
+        if (g.nodes) {
+          setServices(g.nodes.map((n) => n.id));
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const dynamicPresets = useMemo(() => {
+    if (services.length === 0) return PRESETS;
+    return PRESETS.map((p, idx) => {
+      const svc = services[idx % services.length];
+      return { ...p, service: svc };
+    });
+  }, [services]);
 
   const completedCount = inv ? inv.steps.filter((s) => s.status === 'completed').length : 0;
   const totalCount = inv ? inv.steps.length : 0;
@@ -261,6 +283,53 @@ export default function InvestigationWorkflow() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const serviceParam = searchParams.get('service');
+    const alertsParam = searchParams.get('alerts');
+    const symptomsParam = searchParams.get('symptoms');
+
+    if ((serviceParam || alertsParam) && !hasStartedFromParams) {
+      setHasStartedFromParams(true);
+      
+      let alerts: string[] = [];
+      try {
+        alerts = alertsParam ? JSON.parse(alertsParam) : [];
+      } catch {
+        alerts = alertsParam ? [alertsParam] : [];
+      }
+      if (!Array.isArray(alerts) && typeof alerts === 'string') {
+        alerts = [alerts];
+      }
+
+      let symptoms: string[] = [];
+      try {
+        symptoms = symptomsParam ? JSON.parse(symptomsParam) : [];
+      } catch {
+        symptoms = symptomsParam ? [symptomsParam] : [];
+      }
+      if (!Array.isArray(symptoms) && typeof symptoms === 'string') {
+        symptoms = [symptoms];
+      }
+
+      const preset = {
+        service: serviceParam || 'custom-service',
+        alerts: alerts.length > 0 ? alerts : ['Early Detection Signal'],
+        symptoms: symptoms.length > 0 ? symptoms : ['Outage Precursor Pattern'],
+      };
+
+      setCustomDesc(`Investigation for ${serviceParam || 'Service'}`);
+      setCustomSvc(serviceParam || 'custom-service');
+
+      start(preset, 3);
+
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('service');
+      newParams.delete('alerts');
+      newParams.delete('symptoms');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, hasStartedFromParams]);
 
   const approve = async () => {
     if (!inv) return;
@@ -375,7 +444,7 @@ export default function InvestigationWorkflow() {
 
       {/* ── Preset cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {PRESETS.map((p, i) => (
+        {dynamicPresets.map((p, i) => (
           <motion.button
             key={i}
             onClick={() => start(p, i)}
@@ -479,7 +548,7 @@ export default function InvestigationWorkflow() {
                     className="w-full px-3 py-2 text-sm rounded-xl border border-border bg-background/50 text-text-primary focus:outline-none focus:ring-1 focus:ring-violet-500"
                   >
                     <option value="">Select a service...</option>
-                    {SERVICES.map((s) => (
+                    {services.map((s) => (
                       <option key={s} value={s}>
                         {s.replace(/-/g, ' ')}
                       </option>

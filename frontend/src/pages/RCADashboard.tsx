@@ -1,859 +1,419 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ReportChat } from '../components/ReportChat';
-import { Link } from 'react-router-dom';
-import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
-import { Search, RefreshCw, ChevronDown, History, GitCompare, Brain, AlertCircle, CheckCircle, Clock, TrendingUp, Zap, Activity } from 'lucide-react';
-import { analyzeRCA, analyzeRCAWithAgent } from '../api/client';
-import type { RCAResult, IncidentClickAnalysis, ComponentMetrics } from '../types/intelligence';
-import { PageHeader, ConfidenceBar, TagList, inputClass, selectClass, btnPrimary, emptyState, textMuted, textLink, textDanger, textAccent } from '../components/ui';
-
-const ALERT_OPTIONS = [
-  'CPU Saturation', 'API Error Spike', 'Packet Loss', 'Disk I/O Saturation',
-  'Memory Pressure', 'Connection Pool Exhaustion', 'Queue Buildup Alert', 'Network Latency Alert',
-];
-
-const SYMPTOM_OPTIONS = [
-  'Latency Increase', 'Retry Storm', 'Queue Buildup', 'Timeout Increase',
-  'Connection Refused', 'Throughput Drop', 'Error Rate Spike',
-];
-
-import { SERVICES } from '../constants/services';
-
-interface RCAHistory {
-  timestamp: string;
-  user: string;
-  version: string;
-  rootCause: string;
-  confidence: number;
-  analysisType: string;
-}
-
-interface SearchResult {
-  type: 'incident' | 'service' | 'alert' | 'rca';
-  id: string;
-  title: string;
-  subtitle?: string;
-  relevance: number;
-}
+import { useSearchParams } from 'react-router-dom';
+import { PageHeader, inputClass } from '../components/ui';
+import type { BankIncident, BankAlertItem } from './IncidentExplorer';
+import { BankRCAPanel } from './IncidentExplorer';
 
 // ---------------------------------------------------------------------------
-// Build compact context string from agent result for the chat
+// Shared constants (mirrored from IncidentExplorer)
 // ---------------------------------------------------------------------------
 
-function buildAgentContext(
-  result: IncidentClickAnalysis,
-  service: string,
-  alerts: string[],
-  symptoms: string[],
-): string {
-  // Prefer the pre-built context from the backend agent (includes origin/endpoint labels)
-  if (result.chat_context) return result.chat_context;
-
-  const depPath   = result.dependency_path ?? [];
-  const anomalous = result.anomalous_components ?? {};
-  const metrics   = result.component_metrics ?? {};
-
-  const lines: string[] = [
-    `SERVICE: ${service}`,
-    `ALERTS: ${alerts.join(', ') || '(none)'}`,
-    `SYMPTOMS: ${symptoms.join(', ') || '(none)'}`,
-  ];
-
-  if (result.primary_component) lines.push(`PRIMARY_COMPONENT: ${result.primary_component}`);
-
-  if (depPath.length > 0) {
-    lines.push(`DEPENDENCY_PATH: ${depPath.join(' → ')}`);
-    lines.push(`ORIGIN_COMPONENT: ${depPath[0]}`);
-    lines.push(`ENDPOINT_COMPONENT: ${depPath[depPath.length - 1]}`);
-  }
-
-  // Only anomalous components to keep context compact
-  const anomEntries = Object.entries(anomalous);
-  if (anomEntries.length > 0) {
-    lines.push('ANOMALOUS_COMPONENTS:');
-    anomEntries.forEach(([comp, issues]) => {
-      const m = metrics[comp];
-      const mStr = m ? ` (cpu=${(m.cpu ?? 0).toFixed(1)}, err%=${(m.error_rate ?? 0).toFixed(1)})` : '';
-      lines.push(`  ${comp}${mStr}: ${(issues as string[]).join(', ')}`);
-    });
-  } else {
-    lines.push('ANOMALOUS_COMPONENTS: none');
-  }
-
-  if (result.root_cause_candidates?.length) {
-    const top = result.root_cause_candidates[0];
-    lines.push(`TOP_ROOT_CAUSE: ${top.root_cause} (${top.confidence}%) → ${top.suggested_fixes?.[0] ?? '—'}`);
-    result.root_cause_candidates.slice(1).forEach((c, i) =>
-      lines.push(`ALT_ROOT_CAUSE_${i + 2}: ${c.root_cause} (${c.confidence}%)`)
-    );
-  }
-  if (result.suggested_fix) lines.push(`SUGGESTED_FIX: ${result.suggested_fix}`);
-  if (result.reasoning)     lines.push(`REASONING: ${result.reasoning}`);
-  if (result.llm_analysis)  lines.push(`AI_ANALYSIS: ${result.llm_analysis}`);
-  return lines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// RCA Agent Popup
-// ---------------------------------------------------------------------------
-
-const THRESHOLDS: Record<string, number> = {
-  cpu: 80, memory: 85, error_rate: 5, latency: 500, storage: 90,
+const BANK_SEV_DOT: Record<string, string> = {
+  High: 'bg-red-500', Medium: 'bg-orange-400', Low: 'bg-yellow-400', Informational: 'bg-blue-400',
+};
+const BANK_SEV_BADGE: Record<string, string> = {
+  High: 'bg-red-50    text-red-700    border-red-200    dark:bg-red-950/30    dark:text-red-400    dark:border-red-800',
+  Medium: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',
+  Low: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-500 dark:border-yellow-800',
+  Informational: 'bg-blue-50   text-blue-700   border-blue-200   dark:bg-blue-950/30   dark:text-blue-400   dark:border-blue-800',
+};
+const ALERT_SEV_DOT: Record<string, string> = {
+  Sev1: 'bg-red-500', Sev2: 'bg-orange-400', Sev3: 'bg-yellow-400',
+};
+const ALERT_SEV_BADGE: Record<string, string> = {
+  Sev1: 'text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/40 dark:border-red-800',
+  Sev2: 'text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950/40 dark:border-orange-800',
+  Sev3: 'text-yellow-700 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/40 dark:border-yellow-800',
+};
+const SIGNAL_TYPE_BADGE: Record<string, string> = {
+  Metric: 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-950/40 dark:border-blue-800',
+  Log: 'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/40 dark:border-purple-800',
+  Trace: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-950/40 dark:border-cyan-800',
+};
+const ALERT_CATEGORY_LABEL: Record<string, string> = {
+  CPU: 'High CPU usage', MEM: 'High memory usage',
+  DISK_IO: 'High disk I/O read usage', DISK_SP: 'High disk space usage',
+  NET_LAT: 'Network latency', NET_PKT: 'Network packet loss',
+  JVM_OOM: 'JVM Out of Memory (OOM) Heap', JVM_CPU: 'High JVM CPU load',
+  APP_ERR: 'Low application success rate', APP_LAT: 'High application response latency',
+  TRACE_SLOW: 'Slow distributed trace span',
 };
 
-function AgentMetricPill({ label, value, warn }: { label: string; value?: number; warn?: boolean }) {
-  if (value == null) return null;
-  return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-      warn
-        ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-    }`}>
-      {label}&nbsp;{value.toFixed(1)}
-    </span>
-  );
+
+function parseAlertCategory(rule: string): string {
+  const catKey = (rule.split('-').pop() ?? '').toUpperCase();
+  return ALERT_CATEGORY_LABEL[catKey] ?? catKey;
 }
 
-function AgentMetricRow({ name, metrics, anomalies }: { name: string; metrics: ComponentMetrics; anomalies?: string[] }) {
-  const hasAnomaly = anomalies && anomalies.length > 0;
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 py-1.5 border-b border-slate-100 dark:border-slate-700/50 last:border-0">
-      <span className={`text-[10px] font-medium w-40 truncate ${hasAnomaly ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
-        {hasAnomaly ? '⚠ ' : ''}{name}
-      </span>
-      <AgentMetricPill label="CPU"  value={metrics.cpu}        warn={(metrics.cpu        ?? 0) > THRESHOLDS.cpu} />
-      <AgentMetricPill label="MEM"  value={metrics.memory}     warn={(metrics.memory     ?? 0) > THRESHOLDS.memory} />
-      <AgentMetricPill label="LAT"  value={metrics.latency}    warn={(metrics.latency    ?? 0) > THRESHOLDS.latency} />
-      <AgentMetricPill label="ERR%" value={metrics.error_rate} warn={(metrics.error_rate ?? 0) > THRESHOLDS.error_rate} />
-    </div>
-  );
+function parseAlertComponent(rule: string): string {
+  const parts = rule.split('-');
+  return parts.slice(1, -1).join('-') || parts[0];
 }
 
-function AgentLLMBlock({ content, model, error }: { content?: string | null; model?: string; error?: string }) {
-  if (error && !content) {
-    return (
-      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
-        AI analysis unavailable: {error}
-      </div>
-    );
-  }
-  if (!content) return null;
-  return (
-    <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-semibold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase">AI Deep Analysis</span>
-        {model && <span className="ml-auto text-[10px] text-slate-400 font-mono">{model}</span>}
-      </div>
-      <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed space-y-1">
-        {content.split('\n').map((line, i) => (
-          line.trim() === '' ? <div key={i} className="h-1" /> : <p key={i}>{line}</p>
-        ))}
-      </div>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// Incident list item (left sidebar)
+// ---------------------------------------------------------------------------
 
-function RCAAgentPopup({ result, service, alerts, symptoms, onClose }: {
-  result: IncidentClickAnalysis;
-  service: string;
-  alerts: string[];
-  symptoms: string[];
-  onClose: () => void;
+function IncidentListItem({
+  incident, selected, onClick,
+}: {
+  incident: BankIncident;
+  selected: boolean;
+  onClick: () => void;
 }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  const depPath   = result.dependency_path ?? [];
-  const metrics   = result.component_metrics ?? {};
-  const anomalous = result.anomalous_components ?? {};
-  const candidates = result.root_cause_candidates ?? [];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl">
-
-        {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
-          <div className="flex-1 min-w-0 pr-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded font-semibold tracking-wide uppercase">Agent RCA</span>
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{service}</span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Alerts: <span className="text-slate-700 dark:text-slate-300">{alerts.join(', ')}</span>
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Symptoms: <span className="text-slate-700 dark:text-slate-300">{symptoms.join(', ')}</span>
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            aria-label="Close"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs">
-
-          {/* Dependency path */}
-          {depPath.length > 0 && (
-            <div>
-              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Dependency Path</p>
-              <div className="flex flex-wrap items-center gap-1">
-                {depPath.map((node, i) => (
-                  <span key={node} className="flex items-center gap-1">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-                      anomalous[node]
-                        ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-                        : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                    }`}>{node}</span>
-                    {i < depPath.length - 1 && <span className="text-slate-400 text-[10px]">→</span>}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Component metrics */}
-          {Object.keys(metrics).length > 0 && (
-            <div>
-              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Component Metrics</p>
-              <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-                {Object.entries(metrics).map(([comp, m]) => (
-                  <AgentMetricRow key={comp} name={comp} metrics={m} anomalies={anomalous[comp]} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Root cause candidates */}
-          {candidates.length > 0 && (
-            <div>
-              <p className="text-slate-500 dark:text-slate-400 mb-1.5 font-medium">Root Cause Candidates</p>
-              <div className="space-y-2">
-                {candidates.map((c, i) => (
-                  <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-slate-800 dark:text-white">{c.root_cause}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        c.confidence >= 75 ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
-                          : c.confidence >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                      }`}>{c.confidence}%</span>
-                    </div>
-                    {c.suggested_fixes?.[0] && (
-                      <p className="text-emerald-700 dark:text-emerald-400">→ {c.suggested_fixes[0]}</p>
-                    )}
-                    <p className="text-slate-400 dark:text-slate-500 text-[10px] mt-0.5">{c.matching_incident_count} historical match(es)</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Suggested fix */}
-          {result.suggested_fix && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg">
-              <p className="text-slate-500 dark:text-slate-400 mb-0.5">Suggested Fix</p>
-              <p className="font-semibold text-emerald-700 dark:text-emerald-400">{result.suggested_fix}</p>
-            </div>
-          )}
-
-          {/* Reasoning */}
-          {result.reasoning && (
-            <div className="p-3 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg">
-              <p className="text-slate-500 dark:text-slate-400 mb-1">Reasoning</p>
-              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{result.reasoning}</p>
-            </div>
-          )}
-
-          {/* LLM output moved to the bottom */}
-          <AgentLLMBlock content={result.llm_analysis} model={result.llm_model} error={result.llm_error} />
-
-          {/* Chat */}
-          <ReportChat
-            reportContext={buildAgentContext(result, service, alerts, symptoms)}
-            reportType="incident_rca"
-            subtitle="Scoped to RCA"
-            entityName={`${service} RCA`}
-            suggestedQuestions={['Why was this identified as the root cause?', 'Suggest alternative hypotheses', 'Explain the confidence score']}
-          />
-        </div>
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 transition-colors ${selected
+          ? 'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500'
+          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border-l-2 border-l-transparent'
+        }`}
+    >
+      <div className="flex items-center gap-2 mb-0.5">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${BANK_SEV_DOT[incident.severity] ?? 'bg-slate-400'}`} />
+        <span className={`text-[11px] font-mono font-semibold ${selected ? 'text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}>
+          {incident.incidentId}
+        </span>
+        <span className="ml-auto text-[10px] font-mono text-slate-400 dark:text-slate-500 shrink-0">
+          {incident.alerts.count}
+        </span>
       </div>
-    </div>
+      <p className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-snug pl-4">
+        {incident.title}
+      </p>
+    </button>
   );
 }
 
-export default function RCADashboard() {
-  const [alerts, setAlerts] = useState<string[]>(['CPU Saturation', 'API Error Spike']);
-  const [symptoms, setSymptoms] = useState<string[]>(['Latency Increase', 'Retry Storm']);
-  const [service, setService] = useState('payment-authorization');
-  const [timeWindow, setTimeWindow] = useState(24);
-  const [result, setResult] = useState<RCAResult | null>(null);
-  const [previousResult, setPreviousResult] = useState<RCAResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [agentResult, setAgentResult] = useState<IncidentClickAnalysis | null>(null);
-  const [agentPopupOpen, setAgentPopupOpen] = useState(false);
-  const [agentError, setAgentError] = useState<string | null>(null);
-  const [showRerunMenu, setShowRerunMenu] = useState(false);
-  const [showComparison, setShowComparison] = useState(false);
-  const [showCopilot, setShowCopilot] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  const [rcaHistory, setRcaHistory] = useState<RCAHistory[]>([]);
-  const [analysisProgress, setAnalysisProgress] = useState<string[]>([]);
+// ---------------------------------------------------------------------------
+// Inline alerts table (shown inside the detail view)
+// ---------------------------------------------------------------------------
 
-  const toggle = (list: string[], setList: (v: string[]) => void, item: string) => {
-    setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
-  };
+function InlineAlertsTable({ alerts }: { alerts?: BankAlertItem[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const alertList = alerts ?? [];
+  const visible = showAll ? alertList : alertList.slice(0, 10);
 
-  const runAnalysis = async (analysisType: string = 'full') => {
-    setLoading(true);
-    setAnalysisProgress([]);
-    setAgentResult(null);
-    setAgentError(null);
-    
-    // Simulate progress
-    const steps = [
-      'Collecting telemetry...',
-      'Analyzing dependencies...',
-      'Correlating incidents...',
-      'Generating RCA...',
-      'Completed'
-    ];
-    
-    for (let i = 0; i < steps.length; i++) {
-      setAnalysisProgress(prev => [...prev, steps[i]]);
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-
-    try {
-      const r = await analyzeRCA({ alerts, symptoms, service, time_window_hours: timeWindow });
-      
-      // Save previous result for comparison
-      if (result) {
-        setPreviousResult(result);
-        setShowComparison(true);
-      }
-      
-      setResult(r);
-
-      // Run agent analysis in parallel — opens popup when done
-      analyzeRCAWithAgent({ alerts, symptoms, service, time_window_hours: timeWindow })
-        .then((ar) => { setAgentResult(ar); setAgentPopupOpen(true); })
-        .catch((err) => setAgentError(err?.message ?? 'Agent analysis failed'));
-
-      // Add to history
-      const newHistory: RCAHistory = {
-        timestamp: new Date().toLocaleTimeString(),
-        user: 'ops-engineer',
-        version: 'v2.3',
-        rootCause: r.root_cause_candidates[0]?.root_cause || 'Unknown',
-        confidence: r.root_cause_candidates[0]?.confidence || 0,
-        analysisType,
-      };
-      setRcaHistory(prev => [newHistory, ...prev].slice(0, 5));
-    } finally {
-      setLoading(false);
-      setAnalysisProgress([]);
-    }
-  };
-
-  const handleSearch = async (query: string) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
-      setSearchResults([]);
-      setShowSearchResults(false);
-      return;
-    }
-
-    // Mock search results - in production, call search API
-    const mockResults: SearchResult[] = [
-      {
-        type: 'incident' as const,
-        id: 'INC-1023',
-        title: 'Database connection timeout',
-        subtitle: 'Payment Authorization Service',
-        relevance: 95,
-      },
-      {
-        type: 'incident' as const,
-        id: 'INC-1044',
-        title: 'PostgreSQL saturation',
-        subtitle: 'Settlement Processing',
-        relevance: 87,
-      },
-      {
-        type: 'rca' as const,
-        id: 'RCA-2024-03-15',
-        title: 'Database Connection Pool Exhaustion',
-        subtitle: '91% confidence',
-        relevance: 82,
-      },
-      {
-        type: 'service' as const,
-        id: 'settlement-processing',
-        title: 'Settlement Processing',
-        subtitle: 'Warning state',
-        relevance: 75,
-      },
-    ].filter(r =>
-      r.title.toLowerCase().includes(query.toLowerCase()) ||
-      r.subtitle?.toLowerCase().includes(query.toLowerCase())
-    );
-
-    setSearchResults(mockResults);
-    setShowSearchResults(true);
-  };
-
-  const similarRCACases = [
-    {
-      incidentId: 'INC-0987',
-      rootCause: 'Database Connection Pool Exhaustion',
-      resolution: 'Increased pool size from 100 to 200',
-      timeToRecovery: '45 minutes',
-      confidence: 89,
-    },
-    {
-      incidentId: 'INC-0856',
-      rootCause: 'PostgreSQL Query Timeout',
-      resolution: 'Added missing index on transactions table',
-      timeToRecovery: '2 hours',
-      confidence: 84,
-    },
-    {
-      incidentId: 'INC-0723',
-      rootCause: 'Connection Leak in Application Code',
-      resolution: 'Fixed connection handling in payment service',
-      timeToRecovery: '3 hours',
-      confidence: 78,
-    },
-  ];
-
-  const copilotQuestions = [
-    'Why was this identified as the root cause?',
-    'What changed after the last deployment?',
-    'Show all affected services',
-    'Suggest alternative hypotheses',
-    'What is the confidence breakdown?',
-  ];
-
-  const copilotContext = useMemo(() => {
-    if (!result) return null;
-    return {
-      pageType: 'rca' as const,
-      selectedEntity: `RCA-${service}-${timeWindow}h`,
-      entityData: { alerts, symptoms, service, time_window: `${timeWindow}h` },
-      analysisResults: {
-        ranked_root_causes: result.root_cause_candidates,
-        analysis_result: result,
-        related_alerts: result.related_alerts_to_check,
-        related_symptoms: result.related_symptoms_to_check,
-        recent_changes: result.relevant_recent_changes,
-      },
-    };
-  }, [result, alerts, symptoms, service, timeWindow]);
-
-  useRegisterCopilotContext(copilotContext);
+  const byCat = alertList.reduce<Record<string, number>>((acc, a) => {
+    const cat = parseAlertCategory(a.alertRule);
+    acc[cat] = (acc[cat] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div>
-      <PageHeader
-        title="Root Cause Analysis - Investigation Workspace"
-        description="Interactive RCA with search, re-run, comparison, and AI assistance"
-      />
+    <div className="space-y-3">
+      {/* Category summary chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(byCat)
+          .sort((a, b) => b[1] - a[1])
+          .map(([cat, cnt]) => (
+            <span key={cat} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium">
+              {cat} &times; {cnt}
+            </span>
+          ))}
+      </div>
 
-      {/* Global Search Bar */}
-      <div className="mb-6 relative">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
-            placeholder="Search incidents, services, logs, traces, alerts, deployments, or RCA findings..."
-            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        {/* Search Results Dropdown */}
-        {showSearchResults && searchResults.length > 0 && (
-          <div className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-96 overflow-y-auto">
-            <div className="p-2">
-              <p className="text-xs text-slate-500 dark:text-slate-400 px-2 py-1">
-                Found {searchResults.length} results
-              </p>
-              {searchResults.map((result) => (
-                <Link
-                  key={result.id}
-                  to={`/${result.type}s/${result.id}`}
-                  className="block p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  onClick={() => setShowSearchResults(false)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{result.title}</p>
-                      {result.subtitle && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{result.subtitle}</p>
-                      )}
-                    </div>
-                    <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
-                      {result.type}
+      {/* Table */}
+      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+            <tr className="text-left">
+              <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400 w-24">Severity</th>
+              <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400 w-32">Component</th>
+              <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400">Description</th>
+              <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400 w-20">Signal</th>
+              <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400 w-40">Fired at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((a, i) => (
+              <tr key={i} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${ALERT_SEV_DOT[a.severity] ?? 'bg-slate-400'}`} />
+                    <span className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${ALERT_SEV_BADGE[a.severity] ?? ''}`}>
+                      {a.severity}
                     </span>
                   </div>
-                </Link>
+                </td>
+                <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                  {parseAlertComponent(a.alertRule)}
+                </td>
+                <td className="px-3 py-2 text-slate-700 dark:text-slate-200 max-w-sm truncate" title={a.description}>
+                  {a.description}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${SIGNAL_TYPE_BADGE[a.signalType] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                    {a.signalType}
+                  </span>
+                </td>
+                <td className="px-3 py-2 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap text-[10px]">
+                  {a.firedAt.replace('T', ' ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {alertList.length > 10 && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          {showAll ? `Show less` : `Show all ${alertList.length} alerts`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Full incident detail view (right panel)
+// ---------------------------------------------------------------------------
+
+function IncidentDetailView({ incident }: { incident: BankIncident }) {
+  return (
+    <div className="flex flex-col gap-6 overflow-y-auto h-full px-6 py-5">
+
+      {/* Header */}
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${BANK_SEV_BADGE[incident.severity] ?? ''}`}>
+              {incident.severity}
+            </span>
+            <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{incident.incidentId}</span>
+            <span className="px-1.5 py-0.5 rounded border text-[10px] font-medium bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600">
+              {incident.status}
+            </span>
+          </div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white leading-snug">
+            {incident.title}
+          </h2>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 shrink-0">
+          <span className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {incident.alerts?.count ?? 0} alerts
+          </span>
+        </div>
+      </div>
+
+      {/* Metadata grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Created</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.createdTime ? incident.createdTime.replace('T', ' ') : 'N/A'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Last Update</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.lastUpdateTime ? incident.lastUpdateTime.replace('T', ' ') : 'N/A'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Owner</p>
+          <p className="text-slate-700 dark:text-slate-300">{incident.owner?.assignedTo ?? 'Unassigned'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Query index</p>
+          <p className="font-mono text-slate-700 dark:text-slate-300">{incident.queryIndex ?? 'N/A'}</p>
+        </div>
+      </div>
+
+      {/* Investigation window */}
+      <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">Investigation Window</p>
+        <p className="font-mono text-slate-700 dark:text-slate-300">
+          {incident.timeWindow?.start ? incident.timeWindow.start.replace('T', ' ') : 'N/A'} &mdash; {incident.timeWindow?.end ? incident.timeWindow.end.replace('T', ' ') : 'N/A'}
+        </p>
+      </div>
+
+      {/* RCA Analysis */}
+      {incident.timeWindow && <BankRCAPanel timeWindow={incident.timeWindow} />}
+
+      {/* Entities + Tactics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {incident.entities && incident.entities.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Entities</p>
+            <div className="flex flex-wrap gap-1">
+              {incident.entities.map((e) => (
+                <span key={e} className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                  {e}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {incident.tactics && incident.tactics.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Tactics</p>
+            <div className="flex flex-wrap gap-1">
+              {incident.tactics.map((t) => (
+                <span key={t} className="text-[10px] px-2 py-0.5 rounded bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400">
+                  {t}
+                </span>
               ))}
             </div>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Left Panel - Input & Controls */}
-        <div className="space-y-4">
-          <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Input Signals</h3>
-            <p className={`text-xs ${textMuted} mb-2`}>Alerts</p>
-            <div className="flex flex-wrap gap-1 mb-4">
-              {ALERT_OPTIONS.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => toggle(alerts, setAlerts, a)}
-                  className={`text-[10px] px-2 py-1 rounded border ${alerts.includes(a) ? 'bg-red-100 dark:bg-red-600/30 border-red-400 dark:border-red-500 text-red-800 dark:text-red-300' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-400 bg-white dark:bg-transparent'}`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-            <p className={`text-xs ${textMuted} mb-2`}>Symptoms</p>
-            <div className="flex flex-wrap gap-1 mb-4">
-              {SYMPTOM_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => toggle(symptoms, setSymptoms, s)}
-                  className={`text-[10px] px-2 py-1 rounded border ${symptoms.includes(s) ? 'bg-amber-100 dark:bg-yellow-600/30 border-amber-400 dark:border-yellow-500 text-amber-900 dark:text-yellow-300' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-400 bg-white dark:bg-transparent'}`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <label className={`text-xs ${textMuted}`}>Service</label>
-            <select
-              value={service}
-              onChange={(e) => setService(e.target.value)}
-              className={`w-full mt-1 mb-3 ${selectClass}`}
-            >
-              {SERVICES.map((s) => <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>)}
-            </select>
-            <label className={`text-xs ${textMuted}`}>Time window (hours)</label>
-            <input
-              type="number"
-              value={timeWindow}
-              onChange={(e) => setTimeWindow(Number(e.target.value))}
-              className={`w-full mt-1 mb-4 ${inputClass}`}
-            />
-            
-            {/* Re-Run RCA with Dropdown */}
-            <div className="relative">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => runAnalysis('full')}
-                  disabled={loading}
-                  className={`flex-1 py-2.5 ${btnPrimary} font-medium flex items-center justify-center gap-2`}
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  {loading ? 'Analyzing...' : 'Run RCA Analysis'}
-                </button>
-                <button
-                  onClick={() => setShowRerunMenu(!showRerunMenu)}
-                  className="px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Dropdown Menu */}
-              {showRerunMenu && (
-                <div className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl">
-                  {[
-                    { id: 'full', label: 'Full RCA', icon: RefreshCw },
-                    { id: 'logs', label: 'Logs Only', icon: AlertCircle },
-                    { id: 'traces', label: 'Traces Only', icon: TrendingUp },
-                    { id: 'metrics', label: 'Metrics Only', icon: Activity },
-                    { id: 'dependency', label: 'Dependency Analysis', icon: Zap },
-                  ].map((option) => (
-                    <button
-                      key={option.id}
-                      onClick={() => {
-                        runAnalysis(option.id);
-                        setShowRerunMenu(false);
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      <option.icon className="w-4 h-4 text-slate-500" />
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Analysis Progress */}
-            {loading && analysisProgress.length > 0 && (
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="space-y-2">
-                  {analysisProgress.map((step, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs">
-                      {idx === analysisProgress.length - 1 && step !== 'Completed' ? (
-                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <CheckCircle className="w-3 h-3 text-green-600" />
-                      )}
-                      <span className="text-slate-700 dark:text-slate-300">{step}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* RCA History / Audit Trail */}
-          {rcaHistory.length > 0 && (
-            <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-              <div className="flex items-center gap-2 mb-3">
-                <History className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">RCA History</h3>
-              </div>
-              <div className="space-y-2">
-                {rcaHistory.map((h, idx) => (
-                  <div key={idx} className="p-2 bg-slate-50 dark:bg-slate-900/50 rounded text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-slate-600 dark:text-slate-400">{h.timestamp}</span>
-                      <span className="text-blue-600 dark:text-blue-400 font-mono">{h.version}</span>
-                    </div>
-                    <p className="text-slate-900 dark:text-white font-medium truncate">{h.rootCause}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-slate-500 dark:text-slate-400">{h.analysisType}</span>
-                      <span className="text-green-600 dark:text-green-400 font-bold">{h.confidence}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Similar RCA Cases */}
-          <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Similar RCA Cases</h3>
-            <div className="space-y-3">
-              {similarRCACases.map((rca) => (
-                <div key={rca.incidentId} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-mono text-blue-600 dark:text-blue-400">{rca.incidentId}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{rca.confidence}%</span>
-                  </div>
-                  <p className="text-xs font-medium text-slate-900 dark:text-white mb-1">{rca.rootCause}</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">{rca.resolution}</p>
-                  <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                    <Clock className="w-3 h-3" />
-                    <span>TTR: {rca.timeToRecovery}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content - RCA Results */}
-        <div className="xl:col-span-2 space-y-4">
-          {!result ? (
-            <div className={emptyState}>
-              Select alerts and symptoms, then run analysis
-            </div>
-          ) : (
-            <>
-              {/* Comparison View */}
-              {showComparison && previousResult && (
-                <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border border-purple-200 dark:border-purple-800 rounded-xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <GitCompare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">RCA Comparison</h3>
-                    </div>
-                    <button
-                      onClick={() => setShowComparison(false)}
-                      className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                    >
-                      Hide
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Previous Root Cause</p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">
-                        {previousResult.root_cause_candidates[0]?.root_cause}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {previousResult.root_cause_candidates[0]?.confidence}% confidence
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Current Root Cause</p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">
-                        {result.root_cause_candidates[0]?.root_cause}
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                        {result.root_cause_candidates[0]?.confidence}% confidence
-                        {result.root_cause_candidates[0]?.confidence > (previousResult.root_cause_candidates[0]?.confidence || 0) && ' ↗'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800">
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      <strong>New Evidence:</strong> {result.similar_historical_incidents.length - previousResult.similar_historical_incidents.length} additional incidents detected
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* AI RCA Copilot */}
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">AI RCA Assistant</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowCopilot(!showCopilot)}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {showCopilot ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {showCopilot && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">Ask the AI assistant:</p>
-                    {copilotQuestions.map((q) => (
-                      <button
-                        key={q}
-                        className="w-full text-left p-2 bg-white dark:bg-slate-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-slate-700 dark:text-slate-300 transition-colors"
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Root Cause Candidates */}
-              <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Root Cause Candidates</h3>
-                <div className="space-y-4">
-                  {result.root_cause_candidates.map((c, i) => (
-                    <div key={c.root_cause} className="p-3 bg-slate-100 dark:bg-slate-900/50 rounded-lg">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-lg font-bold text-slate-500">#{i + 1}</span>
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white flex-1">{c.root_cause}</span>
-                        <span className={`text-lg font-bold ${textLink}`}>{c.confidence}%</span>
-                      </div>
-                      <ConfidenceBar value={c.confidence} />
-                      <p className="text-xs text-slate-500 mt-2">
-                        {c.matching_incident_count} matching incidents · Fixes: {c.suggested_fixes.join(', ')}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Rest of the existing content */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Suggested Fix Playbook</h3>
-                  <TagList items={result.suggested_fix_playbook} color="yellow" />
-                </div>
-                <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Dependency Path</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {result.dependency_path.length > 0
-                      ? result.dependency_path.join(' → ')
-                      : 'No path found'}
-                  </p>
-                  {result.suspected_component && (
-                    <p className={`text-xs ${textAccent} mt-2`}>Suspected: {result.suspected_component}</p>
-                  )}
-                </div>
-                <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Related Alerts to Check</h3>
-                  <TagList items={result.related_alerts_to_check} color="red" />
-                </div>
-                <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Related Symptoms to Check</h3>
-                  <TagList items={result.related_symptoms_to_check} color="yellow" />
-                </div>
-              </div>
-
-              <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Similar Historical Incidents</h3>
-                <div className="space-y-2">
-                  {result.similar_historical_incidents.map((inc) => (
-                    <Link
-                      key={inc.incident_id}
-                      to={`/incidents?id=${inc.incident_id}`}
-                      className="flex justify-between text-xs p-2 bg-slate-100 dark:bg-slate-900/50 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <span className={`${textLink} font-mono`}>{inc.incident_id}</span>
-                      <span className="text-slate-700 dark:text-slate-300 flex-1 mx-3 truncate">{inc.title}</span>
-                      <span className={textDanger}>{inc.root_cause}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Relevant Recent Changes</h3>
-                {result.relevant_recent_changes.map((c) => (
-                  <div key={c.id} className="flex justify-between text-xs py-1.5 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-700 dark:text-slate-300">{c.title}</span>
-                    <span className={`${c.risk === 'high' ? textDanger : textMuted}`}>{c.risk}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+      {/* Description */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">Description</p>
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+          {incident.description}
+        </p>
       </div>
 
-      {/* Agent error banner */}
-      {agentError && (
-        <div className="fixed bottom-4 right-4 z-40 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400 shadow-lg max-w-xs">
-          Agent analysis failed: {agentError}
-          <button onClick={() => setAgentError(null)} className="ml-2 font-bold">×</button>
-        </div>
-      )}
-
-      {/* RCA Agent popup */}
-      {agentPopupOpen && agentResult && (
-        <RCAAgentPopup
-          result={agentResult}
-          service={service}
-          alerts={alerts}
-          symptoms={symptoms}
-          onClose={() => setAgentPopupOpen(false)}
-        />
-      )}
+      {/* Linked alerts */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+          Linked Alerts <span className="ml-1 text-slate-500">({incident.alerts?.count ?? 0})</span>
+        </p>
+        <InlineAlertsTable alerts={incident.alerts?.items} />
+      </div>
     </div>
   );
 }
 
-// Made with Bob
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
+export default function RCADashboard() {
+  const [searchParams] = useSearchParams();
+  const [incidents, setIncidents] = useState<BankIncident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<BankIncident | null>(null);
+  const [filterSev, setFilterSev] = useState<string>('All');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    fetch('/api/vm/incidents')
+      .then((r) => r.json())
+      .then((data: any) => {
+        const payload = Array.isArray(data) ? data : data.incidents || [];
+        setIncidents(payload);
+
+        const serviceParam = searchParams.get('service');
+        if (serviceParam) {
+          setSearch(serviceParam);
+          const found = payload.find(
+            (i: BankIncident) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) ||
+              i.description?.toLowerCase().includes(serviceParam.toLowerCase())
+          );
+          setSelected(found ?? payload[0] ?? null);
+        } else {
+          setSelected(payload[0] ?? null);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [searchParams]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return incidents.filter((i) => {
+      if (filterSev !== 'All' && i.severity !== filterSev) return false;
+      if (filterStatus !== 'All' && i.status !== filterStatus) return false;
+      if (q && !i.title.toLowerCase().includes(q) && !i.incidentId.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [incidents, filterSev, filterStatus, search]);
+
+  // Auto-select first filtered incident when filters change
+  useEffect(() => {
+    if (filtered.length > 0 && selected && !filtered.find((i) => i.incidentId === selected.incidentId)) {
+      setSelected(filtered[0]);
+    }
+  }, [filtered]);
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Root Cause Analysis" description="Loading incidents…" />
+        <p className="py-12 text-center text-slate-400 dark:text-slate-500">Loading…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-80px)]">
+      <PageHeader
+        title="Root Cause Analysis"
+        description="Select an incident to view full details and run root cause analysis"
+      />
+
+      {/* Master-detail layout */}
+      <div className="flex flex-1 min-h-0 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+
+        {/* Left: incident list */}
+        <div className="w-72 shrink-0 flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50">
+          {/* List filter bar */}
+          <div className="p-2.5 border-b border-slate-200 dark:border-slate-700 space-y-2 shrink-0">
+            <input
+              placeholder="Search title or ID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`w-full text-xs ${inputClass}`}
+            />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className={`w-full text-xs ${inputClass}`}
+            >
+              <option value="All">Status: All</option>
+              <option value="New">New</option>
+              <option value="Active">Active</option>
+            </select>
+            <select value={filterSev} onChange={(e) => setFilterSev(e.target.value)} className={`w-full text-xs ${inputClass}`}>
+              <option value="All">Severity: All</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+              <option value="Informational">Informational</option>
+            </select>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 text-right">
+              {filtered.length} of {incidents.length}
+            </p>
+          </div>
+
+          {/* Scrollable list */}
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="p-4 text-xs text-slate-400 text-center">No incidents match filters</p>
+            ) : (
+              filtered.map((inc) => (
+                <IncidentListItem
+                  key={inc.incidentId}
+                  incident={inc}
+                  selected={selected?.incidentId === inc.incidentId}
+                  onClick={() => setSelected(inc)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Right: detail view */}
+        <div className="flex-1 overflow-hidden bg-white dark:bg-slate-800/30">
+          {selected ? (
+            <IncidentDetailView key={selected.incidentId} incident={selected} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 gap-3">
+              <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-sm">Select an incident to view details</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

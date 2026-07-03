@@ -101,7 +101,7 @@ def trace_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[st
                 queue.append((e["source"], depth + 1))
     return result
 
-def call_gemini(prompt: str) -> str:
+def call_gemini( prompt: str) -> str:
     groq_key = os.environ.get("GROQ_API_KEY")
 
     if groq_key:

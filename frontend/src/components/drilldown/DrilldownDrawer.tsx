@@ -1,5 +1,10 @@
-import { X, ExternalLink, AlertTriangle, TrendingUp, Activity, Zap } from 'lucide-react';
+import { X, ExternalLink, AlertTriangle, TrendingUp, Activity, Zap, ArrowLeft } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
+import { cn } from '../../lib/cn';
+import ResizableDrawerPanel from './ResizableDrawerPanel';
+import DrawerAIAssistant, { type DrawerAIAssistantProps } from './DrawerAIAssistant';
+import { defaultDrawerAIProps, pageTypeFromDrawerType } from './drawerAIHelpers';
 
 interface DrilldownDrawerProps {
   isOpen: boolean;
@@ -10,11 +15,14 @@ interface DrilldownDrawerProps {
   health?: 'healthy' | 'warning' | 'critical';
   children: ReactNode;
   actions?: ReactNode;
+  onBack?: () => void;
+  aiAssistant?: DrawerAIAssistantProps | null;
+  disableAutoAI?: boolean;
 }
 
 function getHealthBadge(health?: string) {
   if (!health) return null;
-  
+
   const styles = {
     healthy: 'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/40',
     warning: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40',
@@ -58,23 +66,46 @@ export default function DrilldownDrawer({
   health,
   children,
   actions,
+  onBack,
+  aiAssistant,
+  disableAutoAI = false,
 }: DrilldownDrawerProps) {
   if (!isOpen) return null;
 
-  return (
+  const resolvedAI =
+    aiAssistant === null
+      ? null
+      : aiAssistant ??
+        (!disableAutoAI && title
+          ? defaultDrawerAIProps({
+              selectedEntity: title,
+              pageType: pageTypeFromDrawerType(type),
+              entityData: { title, subtitle, type, health },
+            })
+          : null);
+
+  return createPortal(
     <>
-      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
         onClick={onClose}
       />
 
-      {/* Drawer */}
-      <div className="fixed right-0 top-0 bottom-0 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white dark:bg-slate-900 shadow-2xl z-50 overflow-y-auto">
-        {/* Header */}
+      <ResizableDrawerPanel
+        className="bg-white dark:bg-slate-900 shadow-2xl z-[70] overflow-y-auto animate-in slide-in-from-right duration-300 fixed right-0 top-0 bottom-0"
+      >
         <div className="sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-6 z-10">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors mr-1 cursor-pointer"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                </button>
+              )}
               <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400">
                 {getTypeIcon(type)}
               </div>
@@ -107,12 +138,13 @@ export default function DrilldownDrawer({
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        <div className="p-6 space-y-6">
           {children}
+        {resolvedAI && <DrawerAIAssistant {...resolvedAI} embedded />}
         </div>
-      </div>
-    </>
+      </ResizableDrawerPanel>
+    </>,
+    document.body
   );
 }
 
@@ -129,8 +161,6 @@ export function DrilldownSection({ title, children, icon }: { title: string; chi
     </div>
   );
 }
-
-import { cn } from '../../lib/cn';
 
 export function DrilldownMetricCard({ label, value, unit, trend, status, onClick }: {
   label: string;
@@ -155,8 +185,8 @@ export function DrilldownMetricCard({ label, value, unit, trend, status, onClick
   return (
     <div
       className={cn(
-        "p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors duration-150",
-        onClick && "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:shadow-sm"
+        'p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors duration-150',
+        onClick && 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:shadow-sm'
       )}
       onClick={onClick}
     >
@@ -207,5 +237,3 @@ export function DrilldownLink({ to, children }: { to: string; children: ReactNod
     </a>
   );
 }
-
-// Made with Bob

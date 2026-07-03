@@ -188,9 +188,10 @@ export function IncidentContextPanel({ incidents, alerts }: IncidentContextPanel
           <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Active Alerts</h4>
           <div className="space-y-2">
             {alerts.map((alert) => (
-              <div
+              <Link
                 key={alert.id}
-                className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+                to={`/early-detection?search=${encodeURIComponent(alert.title)}`}
+                className="block p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:shadow-md transition-all text-left"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -199,10 +200,11 @@ export function IncidentContextPanel({ incidents, alerts }: IncidentContextPanel
                     </span>
                     {getStatusBadge(alert.status)}
                   </div>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
                 </div>
                 <p className="text-sm font-medium text-slate-900 dark:text-white mb-1">{alert.title}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{alert.timestamp}</p>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
