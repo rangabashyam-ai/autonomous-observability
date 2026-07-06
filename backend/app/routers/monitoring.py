@@ -7,8 +7,64 @@ router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
 @router.get("/dashboard")
 def get_monitoring_dashboard():
-    from app import parquet_store
+    from app import parquet_store, vm_data_store
+    from app.data_availability import is_ui_data_available
     from app.services.intelligence import _load_incidents, _load_alerts
+
+    dataset_available = is_ui_data_available()
+    if not parquet_store.is_dataset_available():
+        pushed = vm_data_store.get("monitoring/dashboard")
+        if pushed:
+            return {**pushed, "dataset_available": True, "source": "vm_push"}
+        if dataset_available:
+            try:
+                incidents = _load_incidents()
+                alerts = _load_alerts()
+                active_inc = len([i for i in incidents if i.get("state") in ("Open", "In Progress", "New")])
+                open_alerts = len([a for a in alerts if a.get("status") in ("open", "Pending", "Fired")])
+            except Exception:
+                active_inc = 0
+                open_alerts = 0
+            return {
+                "dataset_available": True,
+                "source": "minio_intel",
+                "executive": {
+                    "service_availability": 0,
+                    "transaction_success_rate": 0,
+                    "sla_compliance": 0,
+                    "revenue_impact_usd": 0,
+                    "customer_impact_count": 0,
+                    "services_at_risk": 0,
+                    "active_incidents": active_inc,
+                    "open_alerts": open_alerts,
+                },
+                "service": {"services": []},
+                "technical": {"containers": [], "apis": [], "databases": [], "queues": [], "jvm": []},
+                "infrastructure": {
+                    "summary": {"avg_cpu": 0, "avg_memory": 0, "avg_storage": 0, "avg_network": 0, "avg_io": 0},
+                    "servers": [],
+                },
+            }
+        return {
+            "dataset_available": False,
+            "source": "none",
+            "executive": {
+                "service_availability": 0,
+                "transaction_success_rate": 0,
+                "sla_compliance": 0,
+                "revenue_impact_usd": 0,
+                "customer_impact_count": 0,
+                "services_at_risk": 0,
+                "active_incidents": 0,
+                "open_alerts": 0,
+            },
+            "service": {"services": []},
+            "technical": {"containers": [], "apis": [], "databases": [], "queues": [], "jvm": []},
+            "infrastructure": {
+                "summary": {"avg_cpu": 0, "avg_memory": 0, "avg_storage": 0, "avg_network": 0, "avg_io": 0},
+                "servers": [],
+            },
+        }
 
     services_raw = parquet_store.query("dependencies/services.json").get("services", [])
     infra_raw    = parquet_store.query("dependencies/infrastructure.json").get("nodes", [])
@@ -156,6 +212,27 @@ def get_events(limit: int = Query(default=50, le=500)):
     data   = parquet_store.query("monitoring/events.json")
     events = data.get("events", [])
     return {"events": events[:limit], "total": len(events)}
+
+
+@router.get("/timeseries")
+def get_timeseries(
+    metric: str = Query(..., description="Metric name"),
+    entity_id: Optional[str] = Query(None),
+):
+    """Return VM-pushed time-series points. Frontend displays without synthesis."""
+    from app import vm_data_store, parquet_store
+
+    store_key = f"timeseries/{metric}/{entity_id}" if entity_id else f"timeseries/{metric}"
+    pushed = vm_data_store.get(store_key)
+    if pushed:
+        return {**pushed, "source": "vm_push", "dataset_available": True}
+    return {
+        "metric": metric,
+        "entity_id": entity_id,
+        "points": [],
+        "source": "none",
+        "dataset_available": parquet_store.is_dataset_available(),
+    }
 
 
 @router.get("/node-metrics/{node_id}")

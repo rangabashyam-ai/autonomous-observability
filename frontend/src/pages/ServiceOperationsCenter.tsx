@@ -3,15 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { getMonitoringDashboard, getOverview, getDependencyGraph, getDependencyPaths } from '../api/client';
-import type { MonitoringDashboard, ServiceMetric, GraphNode as APIGraphNode } from '../types/api';
+import { getMonitoringDashboard, getOverview, getDependencyGraph, getDependencyPaths, getTimeseries } from '../api/client';
+import type { MonitoringDashboard, GraphNode as APIGraphNode, GraphEdge as APIGraphEdge } from '../types/api';
 import type { Overview, EarlyDetection } from '../types/intelligence';
 import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-primitives';
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { DataTable, HealthBadge } from '../components/ui/data-table';
-import { generateTrend, MiniLineChart, TrendChart } from '../components/charts/charts';
+import { TrendChart } from '../components/charts/charts';
 import { useTheme } from '../context/ThemeContext';
 import { getHealthNodeStyle } from '../utils/graphTheme';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
@@ -23,6 +23,9 @@ import OpsSubNav from '../components/ops/OpsSubNav';
 import OpsSectionContent from '../components/ops/OpsSectionContent';
 import OpsEntityDrawer from '../components/ops/OpsEntityDrawer';
 import type { OpsEntity } from '../types/ops';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { EMPTY_OVERVIEW, NO_DATA_MESSAGE } from '../utils/emptyState';
+import { cn } from '../lib/cn';
 
 type IncidentPreview = Overview['recent_incidents'][number];
 
@@ -40,9 +43,11 @@ export default function ServiceOperationsCenter() {
   const navigate = useNavigate();
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
   const [graphNodes, setGraphNodes] = useState<Node[]>([]);
   const [graphEdges, setGraphEdges] = useState<Edge[]>([]);
   const [rawGraphNodes, setRawGraphNodes] = useState<APIGraphNode[]>([]);
+  const [rawGraphEdges, setRawGraphEdges] = useState<APIGraphEdge[]>([]);
 
   const [drawer, setDrawer] = useState<OpsDrawer | null>(null);
   const [opsEntity, setOpsEntity] = useState<OpsEntity | null>(null);
@@ -63,6 +68,7 @@ export default function ServiceOperationsCenter() {
   } = useOpsDashboard('service-ops');
 
   useEffect(() => {
+    setPageLoading(true);
     Promise.all([
       getMonitoringDashboard(),
       getOverview(),
@@ -72,67 +78,74 @@ export default function ServiceOperationsCenter() {
         setMonitoring(m);
         setOverview(o);
         setRawGraphNodes(g.nodes);
-        const nodes: Node[] = g.nodes.slice(0, 12).map((n, i) => {
-          const angle = (i / Math.min(g.nodes.length, 12)) * 2 * Math.PI;
-          const r = 180;
-          return {
-            id: n.id,
-            data: { label: n.label },
-            position: { x: 250 + r * Math.cos(angle), y: 200 + r * Math.sin(angle) },
-            style: {
-              ...getHealthNodeStyle(n.health, theme),
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              borderWidth: '2px',
-              borderStyle: 'solid',
-              borderRadius: '8px',
-              padding: '8px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-            },
-          };
-        });
-        const nodeIds = new Set(nodes.map((n) => n.id));
-        const edges: Edge[] = g.edges
-          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .slice(0, 20)
-          .map((e) => ({
-            id: `${e.source}-${e.target}`,
-            source: e.source,
-            target: e.target,
-            animated: true,
-            style: { stroke: theme === 'dark' ? '#3B82F6' : '#2563EB', strokeWidth: 1.5 },
-          }));
-        setGraphNodes(nodes);
-        setGraphEdges(edges);
+        setRawGraphEdges(g.edges);
       })
-      .catch(console.error);
-  }, [theme]);
+      .catch(console.error)
+      .finally(() => setPageLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!rawGraphNodes.length) return;
+
+    const nodes: Node[] = rawGraphNodes.slice(0, 12).map((n, i) => {
+      const angle = (i / Math.min(rawGraphNodes.length, 12)) * 2 * Math.PI;
+      const r = 180;
+      return {
+        id: n.id,
+        data: { label: n.label },
+        position: { x: 250 + r * Math.cos(angle), y: 200 + r * Math.sin(angle) },
+        style: {
+          ...getHealthNodeStyle(n.health, theme),
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          borderWidth: '2px',
+          borderStyle: 'solid',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          fontSize: '12px',
+          fontWeight: 600,
+        },
+      };
+    });
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges: Edge[] = rawGraphEdges
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .slice(0, 20)
+      .map((e) => ({
+        id: `${e.source}-${e.target}`,
+        source: e.source,
+        target: e.target,
+        animated: true,
+        style: { stroke: theme === 'dark' ? '#3B82F6' : '#2563EB', strokeWidth: 1.5 },
+      }));
+    setGraphNodes(nodes);
+    setGraphEdges(edges);
+  }, [theme, rawGraphNodes, rawGraphEdges]);
 
   const services = monitoring?.service.services ?? [];
   const exec = monitoring?.executive;
+  const overviewData = overview ?? EMPTY_OVERVIEW;
 
-  const avgLatency = useMemo(
-    () => (services.length ? services.reduce((a, s) => a + s.latency_p99_ms, 0) / services.length : 0),
-    [services]
-  );
-  const avgError = useMemo(
-    () => (services.length ? services.reduce((a, s) => a + s.error_rate, 0) / services.length : 0),
-    [services]
-  );
+  const [latencyTrend, setLatencyTrend] = useState<{ name: string; value: number }[]>([]);
+  const [errorTrend, setErrorTrend] = useState<{ name: string; value: number }[]>([]);
 
-  const latencyTrend = useMemo(() => generateTrend(avgLatency, 12), [avgLatency]);
-  const errorTrend = useMemo(() => generateTrend(avgError, 12, 0.2), [avgError]);
+  useEffect(() => {
+    if (monitoring?.dataset_available === false) {
+      setLatencyTrend([]);
+      setErrorTrend([]);
+      return;
+    }
+    getTimeseries('latency_p99').then((res) =>
+      setLatencyTrend((res.points ?? []).map((p) => ({ name: String(p.t), value: p.v }))),
+    ).catch(() => setLatencyTrend([]));
+    getTimeseries('error_rate').then((res) =>
+      setErrorTrend((res.points ?? []).map((p) => ({ name: String(p.t), value: p.v }))),
+    ).catch(() => setErrorTrend([]));
+  }, [monitoring?.dataset_available]);
 
-  const topRisks = useMemo(() => {
-    return [...services]
-      .sort((a, b) => {
-        const score = (s: ServiceMetric) =>
-          (s.health === 'critical' ? 3 : s.health === 'warning' ? 2 : 1) * 100 + s.error_rate * 10 + s.latency_p99_ms * 0.1;
-        return score(b) - score(a);
-      })
-      .slice(0, 4);
-  }, [services]);
+  const topRisks = useMemo(() => services.filter((s) => s.health !== 'healthy').slice(0, 4), [services]);
+  const avgLatency = latencyTrend.at(-1)?.value ?? 0;
+  const avgError = errorTrend.at(-1)?.value ?? 0;
 
 
   const closeDrawer = () => setDrawer(null);
@@ -226,7 +239,7 @@ export default function ServiceOperationsCenter() {
   );
 
   const copilotContext = useMemo(() => {
-    if (!monitoring || !overview) return null;
+    if (!monitoring) return null;
     return {
       pageType: 'service' as const,
       selectedEntity: 'service-operations',
@@ -241,15 +254,15 @@ export default function ServiceOperationsCenter() {
         })),
         top_risks: topRisks.map((s) => s.id),
       },
-      relatedAlerts: overview.open_alerts_preview ?? [],
-      relatedIncidents: overview.recent_incidents ?? [],
+      relatedAlerts: overviewData.open_alerts_preview ?? [],
+      relatedIncidents: overviewData.recent_incidents ?? [],
       relatedMetrics: {
         avg_latency: avgLatency,
         avg_error_rate: avgError,
         active_incidents: exec?.active_incidents,
       },
     };
-  }, [monitoring, overview, services, topRisks, avgLatency, avgError, exec]);
+  }, [monitoring, overviewData, services, topRisks, avgLatency, avgError, exec]);
 
 
   const drawerRelatedResources = useMemo(() => {
@@ -275,7 +288,7 @@ export default function ServiceOperationsCenter() {
   }, [drawer]);
 
   const drawerMeta = useMemo(() => {
-    if (!drawer || !overview) return null;
+    if (!drawer) return null;
     switch (drawer.kind) {
       case 'service':
         return {
@@ -303,10 +316,10 @@ export default function ServiceOperationsCenter() {
           onBack: drawer.detection ? () => setDrawer({ kind: 'early-detection', detection: null }) : undefined,
         };
     }
-  }, [drawer, overview, services, exec, avgLatency, avgError]);
+  }, [drawer, overviewData, services, exec, avgLatency, avgError]);
 
   const drawerAI = useMemo((): DrawerAIAssistantProps | null => {
-    if (!drawer || !overview) return null;
+    if (!drawer) return null;
     switch (drawer.kind) {
       case 'service':
         return {
@@ -324,8 +337,8 @@ export default function ServiceOperationsCenter() {
             latency: drawer.node.metrics?.latency ?? 0,
             error_rate: drawer.node.metrics?.error_rate ?? 0,
           },
-          relatedAlerts: overview.open_alerts_preview?.filter((a: any) => a.entity_id === drawer.node.id || a.service === drawer.node.id) ?? [],
-          relatedIncidents: overview.recent_incidents?.filter((i: any) => i.service === drawer.node.id) ?? [],
+          relatedAlerts: overviewData.open_alerts_preview?.filter((a: any) => a.entity_id === drawer.node.id || a.service === drawer.node.id) ?? [],
+          relatedIncidents: overviewData.recent_incidents?.filter((i: any) => i.service === drawer.node.id) ?? [],
           suggestedQuestions: [
             `Why is ${drawer.node.label} in ${drawer.node.health} state?`,
             `Analyze CPU and memory usage for ${drawer.node.label}`,
@@ -351,8 +364,8 @@ export default function ServiceOperationsCenter() {
         return {
           pageType: 'incident',
           selectedEntity: 'Active Incidents',
-          entityData: { incidents: overview.recent_incidents, active_count: exec?.active_incidents },
-          relatedIncidents: overview.recent_incidents,
+          entityData: { incidents: overviewData.recent_incidents, active_count: exec?.active_incidents },
+          relatedIncidents: overviewData.recent_incidents,
           suggestedQuestions: [
             'Summarize all active incidents and their severity',
             'Which services are most impacted by current incidents?',
@@ -412,7 +425,7 @@ export default function ServiceOperationsCenter() {
         return {
           pageType: 'service',
           selectedEntity: 'AI Recommendations',
-          entityData: { predictions: overview.early_detections },
+          entityData: { predictions: overviewData.early_detections },
           suggestedQuestions: [
             'Summarize all early detection patterns',
             'Which predicted incidents are most urgent?',
@@ -422,14 +435,15 @@ export default function ServiceOperationsCenter() {
       default:
         return null;
     }
-  }, [drawer, services, overview, exec, avgLatency, avgError]);
+  }, [drawer, services, overviewData, exec, avgLatency, avgError]);
 
   useRegisterCopilotContext(copilotContext);
 
-  if (!monitoring || !overview) {
+  if (pageLoading || !monitoring) {
     return <p className="text-text-secondary text-sm">Loading service operations center...</p>;
   }
 
+  const noData = monitoring.dataset_available === false;
 
   return (
     <div>
@@ -438,15 +452,20 @@ export default function ServiceOperationsCenter() {
         description="Business services, applications, APIs, and user-facing systems — regardless of where they run."
       />
 
+      {noData && <DatasetUploadBanner />}
+
       <div className="flex gap-6 items-start">
         <OpsSubNav items={serviceNav} activeId={activeSection} onChange={setActiveSection} perspective="service" />
 
         <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card/30 p-4 sm:p-5 shadow-sm">
       {activeSection !== 'overview' && currentSection && (
         <OpsSectionContent
+          dashboardId="service-ops"
           section={currentSection}
           entities={opsEntities}
+          perspective="service"
           onEntityClick={setOpsEntity}
+          noData={noData}
         />
       )}
 
@@ -456,33 +475,33 @@ export default function ServiceOperationsCenter() {
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Services Monitored"
-            value={services.length}
-            sub={`${services.filter((s) => s.health === 'healthy').length} healthy`}
-            onClick={() => setDrawer({ kind: 'services-list' })}
+            value={noData ? 'N/A' : services.length}
+            sub={noData ? '—' : `${services.filter((s) => s.health === 'healthy').length} healthy`}
+            onClick={noData ? undefined : () => setDrawer({ kind: 'services-list' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Active Incidents"
-            value={exec!.active_incidents}
-            variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
-            onClick={() => setDrawer({ kind: 'incidents-list' })}
+            value={noData ? 'N/A' : exec!.active_incidents}
+            variant={noData ? 'default' : exec!.active_incidents > 0 ? 'critical' : 'success'}
+            onClick={noData ? undefined : () => setDrawer({ kind: 'incidents-list' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Avg P99 Latency"
-            value={`${avgLatency.toFixed(0)}ms`}
-            variant="warning"
-            onClick={() => setDrawer({ kind: 'latency' })}
+            value={noData ? 'N/A' : `${avgLatency.toFixed(0)}ms`}
+            variant={noData ? 'default' : 'warning'}
+            onClick={noData ? undefined : () => setDrawer({ kind: 'latency' })}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Avg Error Rate"
-            value={`${avgError.toFixed(2)}%`}
-            variant={avgError > 1.5 ? 'critical' : 'default'}
-            onClick={() => setDrawer({ kind: 'error' })}
+            value={noData ? 'N/A' : `${avgError.toFixed(2)}%`}
+            variant={noData ? 'default' : avgError > 1.5 ? 'critical' : 'default'}
+            onClick={noData ? undefined : () => setDrawer({ kind: 'error' })}
           />
         </div>
       </Grid12>
@@ -493,52 +512,56 @@ export default function ServiceOperationsCenter() {
           <div id="service-health-section">
             <CollapsibleSection title="Service Health Overview" defaultOpen>
               <Card padding={false}>
-                <DataTable
-                  compact
-                  data={services}
-                  onRowClick={(s) => handleServiceClick(s.id, s.name)}
-                  columns={[
-                    {
-                      key: 'name',
-                      header: 'Service',
-                      render: (s) => (
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-3.5 w-3.5 text-primary/60" />
-                          <span className="font-medium text-primary">{s.name}</span>
-                          <ChevronRight className="h-3 w-3 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      ),
-                    },
-                    { key: 'health', header: 'Status', render: (s) => <HealthBadge health={s.health} /> },
-                    {
-                      key: 'latency',
-                      header: 'P99 Latency',
-                      render: (s) => <span className="font-mono text-xs">{s.latency_p99_ms.toFixed(1)}ms</span>,
-                    },
-                    {
-                      key: 'error',
-                      header: 'Error Rate',
-                      render: (s) => <span className="font-mono text-xs">{s.error_rate.toFixed(2)}%</span>,
-                    },
-                    {
-                      key: 'avail',
-                      header: 'Availability',
-                      render: (s) => <span className="font-mono text-xs">{s.availability.toFixed(2)}%</span>,
-                    },
-                    {
-                      key: 'rps',
-                      header: 'Throughput',
-                      render: (s) => <span className="font-mono text-xs">{s.throughput_rps.toFixed(0)} rps</span>,
-                    },
-                    {
-                      key: 'action',
-                      header: '',
-                      render: () => (
-                        <ChevronRight className="h-4 w-4 text-text-secondary/50" />
-                      ),
-                    },
-                  ]}
-                />
+                {noData ? (
+                  <p className="text-sm text-text-secondary py-8 text-center">{NO_DATA_MESSAGE}</p>
+                ) : (
+                  <DataTable
+                    compact
+                    data={services}
+                    onRowClick={(s) => handleServiceClick(s.id, s.name)}
+                    columns={[
+                      {
+                        key: 'name',
+                        header: 'Service',
+                        render: (s) => (
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-3.5 w-3.5 text-primary/60" />
+                            <span className="font-medium text-primary">{s.name}</span>
+                            <ChevronRight className="h-3 w-3 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        ),
+                      },
+                      { key: 'health', header: 'Status', render: (s) => <HealthBadge health={s.health} /> },
+                      {
+                        key: 'latency',
+                        header: 'P99 Latency',
+                        render: (s) => <span className="font-mono text-xs">{s.latency_p99_ms.toFixed(1)}ms</span>,
+                      },
+                      {
+                        key: 'error',
+                        header: 'Error Rate',
+                        render: (s) => <span className="font-mono text-xs">{s.error_rate.toFixed(2)}%</span>,
+                      },
+                      {
+                        key: 'avail',
+                        header: 'Availability',
+                        render: (s) => <span className="font-mono text-xs">{s.availability.toFixed(2)}%</span>,
+                      },
+                      {
+                        key: 'rps',
+                        header: 'Throughput',
+                        render: (s) => <span className="font-mono text-xs">{s.throughput_rps.toFixed(0)} rps</span>,
+                      },
+                      {
+                        key: 'action',
+                        header: '',
+                        render: () => (
+                          <ChevronRight className="h-4 w-4 text-text-secondary/50" />
+                        ),
+                      },
+                    ]}
+                  />
+                )}
               </Card>
             </CollapsibleSection>
           </div>
@@ -546,44 +569,61 @@ export default function ServiceOperationsCenter() {
           {/* ─── Service Dependency Graph (clickable nodes) ─── */}
           <CollapsibleSection title="Service Dependency Graph" defaultOpen>
             <Card padding={false} className="overflow-hidden">
-              <div className="h-[320px] relative">
-                <ReactFlow
-                  nodes={graphNodes}
-                  edges={graphEdges}
-                  fitView
-                  nodesDraggable
-                  nodesConnectable={false}
-                  onNodeClick={onNodeClick}
-                  proOptions={{ hideAttribution: true }}
-                >
-                  <Background color={theme === 'dark' ? '#1F2937' : '#E2E8F0'} gap={16} />
-                  <Controls showInteractive={false} />
-                  <MiniMap
-                    nodeColor={() => (theme === 'dark' ? '#3B82F6' : '#2563EB')}
-                    maskColor={theme === 'dark' ? '#0B122080' : '#F8FAFC80'}
-                  />
-                </ReactFlow>
-                {/* Hint overlay */}
-                <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-[10px] text-text-secondary flex items-center gap-1.5 pointer-events-none">
-                  <Network className="h-3 w-3" />
-                  Click any node to investigate
+              {noData ? (
+                <p className="text-sm text-text-secondary py-16 text-center">{NO_DATA_MESSAGE}</p>
+              ) : (
+                <div className="h-[320px] relative">
+                  <ReactFlow
+                    nodes={graphNodes}
+                    edges={graphEdges}
+                    fitView
+                    nodesDraggable
+                    nodesConnectable={false}
+                    onNodeClick={onNodeClick}
+                    proOptions={{ hideAttribution: true }}
+                  >
+                    <Background color={theme === 'dark' ? '#1F2937' : '#E2E8F0'} gap={16} />
+                    <Controls showInteractive={false} />
+                    <MiniMap
+                      nodeColor={() => (theme === 'dark' ? '#3B82F6' : '#2563EB')}
+                      maskColor={theme === 'dark' ? '#0B122080' : '#F8FAFC80'}
+                    />
+                  </ReactFlow>
+                  <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-[10px] text-text-secondary flex items-center gap-1.5 pointer-events-none">
+                    <Network className="h-3 w-3" />
+                    Click any node to investigate
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
           </CollapsibleSection>
 
           {/* ─── Latency & Error Trend Charts ─── */}
           <Grid12>
             <div className="col-span-12 md:col-span-6" id="latency-trends-section">
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setDrawer({ kind: 'latency' })}>
+              <Card
+                className={cn(!noData && 'cursor-pointer hover:shadow-lg transition-shadow')}
+                onClick={noData ? undefined : () => setDrawer({ kind: 'latency' })}
+              >
                 <CardHeader><CardTitle>Latency Trends</CardTitle></CardHeader>
-                <TrendChart data={latencyTrend} height={120} color="#F59E0B" />
+                {noData ? (
+                  <p className="text-sm text-text-secondary py-8 text-center">{NO_DATA_MESSAGE}</p>
+                ) : (
+                  <TrendChart data={latencyTrend} height={120} color="#F59E0B" />
+                )}
               </Card>
             </div>
             <div className="col-span-12 md:col-span-6" id="error-trends-section">
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setDrawer({ kind: 'error' })}>
+              <Card
+                className={cn(!noData && 'cursor-pointer hover:shadow-lg transition-shadow')}
+                onClick={noData ? undefined : () => setDrawer({ kind: 'error' })}
+              >
                 <CardHeader><CardTitle>Error Rate Trends</CardTitle></CardHeader>
-                <TrendChart data={errorTrend} height={120} color="#EF4444" />
+                {noData ? (
+                  <p className="text-sm text-text-secondary py-8 text-center">{NO_DATA_MESSAGE}</p>
+                ) : (
+                  <TrendChart data={errorTrend} height={120} color="#EF4444" />
+                )}
               </Card>
             </div>
           </Grid12>
@@ -595,26 +635,35 @@ export default function ServiceOperationsCenter() {
           <Card>
             <CardHeader>
               <CardTitle>Active Incidents</CardTitle>
-              <button type="button" onClick={() => setDrawer({ kind: 'incidents-list' })} className="text-xs text-primary hover:underline">All →</button>
+              {!noData && (
+                <button type="button" onClick={() => setDrawer({ kind: 'incidents-list' })} className="text-xs text-primary hover:underline">All →</button>
+              )}
             </CardHeader>
-            <div className="space-y-2">
-              {overview.recent_incidents.slice(0, 5).map((inc) => (
-                <button
-                  key={inc.incident_id}
-                  type="button"
-                  onClick={() => openIncident(inc)}
-                  className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>
-                      {inc.severity}
-                    </Badge>
-                    <span className="text-[10px] text-text-secondary">{inc.service}</span>
-                  </div>
-                  <p className="text-xs text-text-primary line-clamp-2">{inc.title}</p>
-                </button>
-              ))}
-            </div>
+            {noData ? (
+              <p className="text-sm text-text-secondary py-4 text-center">{NO_DATA_MESSAGE}</p>
+            ) : (
+              <div className="space-y-2">
+                {overviewData.recent_incidents.slice(0, 5).map((inc) => (
+                  <button
+                    key={inc.incident_id}
+                    type="button"
+                    onClick={() => openIncident(inc)}
+                    className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:shadow-sm transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={inc.severity.startsWith('P1') || inc.severity === '1' ? 'critical' : 'warning'}>
+                        {inc.severity}
+                      </Badge>
+                      <span className="text-[10px] text-text-secondary">{inc.service}</span>
+                    </div>
+                    <p className="text-xs text-text-primary line-clamp-2">{inc.title}</p>
+                  </button>
+                ))}
+                {overviewData.recent_incidents.length === 0 && (
+                  <p className="text-xs text-text-secondary">No active incidents</p>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* ─── Top Risks (now clickable) ─── */}
@@ -625,26 +674,33 @@ export default function ServiceOperationsCenter() {
                 <CardTitle>Top Risks</CardTitle>
               </div>
             </CardHeader>
-            <div className="space-y-2">
-              {topRisks.map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => handleServiceClick(s.id, s.name)}
-                  className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border/50 bg-background hover:bg-card-hover hover:border-border hover:shadow-sm transition-all duration-200 group cursor-pointer text-left"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs text-text-primary truncate font-medium group-hover:text-primary transition-colors">{s.name}</p>
-                    <p className="text-[10px] text-text-secondary">
-                      {s.error_rate.toFixed(2)}% errors · {s.latency_p99_ms.toFixed(0)}ms
-                    </p>
+            {noData ? (
+              <p className="text-sm text-text-secondary py-4 text-center">{NO_DATA_MESSAGE}</p>
+            ) : (
+              <div className="space-y-2">
+                {topRisks.map((s) => (
+                  <div
+                    key={s.id}
+                    onClick={() => handleServiceClick(s.id, s.name)}
+                    className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border/50 bg-background hover:bg-card-hover hover:border-border hover:shadow-sm transition-all duration-200 group cursor-pointer text-left"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs text-text-primary truncate font-medium group-hover:text-primary transition-colors">{s.name}</p>
+                      <p className="text-[10px] text-text-secondary">
+                        {s.error_rate.toFixed(2)}% errors · {s.latency_p99_ms.toFixed(0)}ms
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <HealthBadge health={s.health} />
+                      <ChevronRight className="h-3 w-3 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <HealthBadge health={s.health} />
-                    <ChevronRight className="h-3 w-3 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+                {topRisks.length === 0 && (
+                  <p className="text-xs text-text-secondary">No services at risk</p>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* ─── AI Recommendations (now clickable) ─── */}
@@ -654,40 +710,50 @@ export default function ServiceOperationsCenter() {
                 <Sparkles className="h-4 w-4 text-primary" />
                 <CardTitle>AI Recommendations</CardTitle>
               </div>
-              <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">View all →</button>
-            </CardHeader>
-            <div className="space-y-2">
-              {overview.early_detections.slice(0, 3).map((d, i) => (
-                <button
-                  key={`${d.pattern_id}-${i}`}
-                  type="button"
-                  onClick={() => setDrawer({ kind: 'early-detection', detection: d })}
-                  className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:border-primary/30 hover:shadow-sm transition-all duration-200 group"
-                >
-                  <p className="text-xs text-text-primary group-hover:text-primary transition-colors">{d.recommended_actions[0] ?? 'Investigate anomaly pattern'}</p>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-[10px] text-text-secondary">
-                      {d.expected_impacted_service} · {d.confidence}% confidence
-                    </p>
-                  </div>
-                </button>
-              ))}
-              {overview.early_detections.length === 0 && (
-                <p className="text-xs text-text-secondary">No active recommendations</p>
+              {!noData && (
+                <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">View all →</button>
               )}
-            </div>
+            </CardHeader>
+            {noData ? (
+              <p className="text-sm text-text-secondary py-4 text-center">{NO_DATA_MESSAGE}</p>
+            ) : (
+              <div className="space-y-2">
+                {overviewData.early_detections.slice(0, 3).map((d, i) => (
+                  <button
+                    key={`${d.pattern_id}-${i}`}
+                    type="button"
+                    onClick={() => setDrawer({ kind: 'early-detection', detection: d })}
+                    className="w-full text-left block p-3 rounded-lg border border-border bg-background hover:bg-card-hover hover:border-primary/30 hover:shadow-sm transition-all duration-200 group"
+                  >
+                    <p className="text-xs text-text-primary group-hover:text-primary transition-colors">{d.recommended_actions[0] ?? 'Investigate anomaly pattern'}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-[10px] text-text-secondary">
+                        {d.expected_impacted_service} · {d.confidence}% confidence
+                      </p>
+                    </div>
+                  </button>
+                ))}
+                {overviewData.early_detections.length === 0 && (
+                  <p className="text-xs text-text-secondary">No active recommendations</p>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* ─── Predicted Incidents (now clickable) ─── */}
           <Card>
             <CardHeader>
               <CardTitle>Predicted Incidents</CardTitle>
-              <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">Analyze →</button>
+              {!noData && (
+                <button type="button" onClick={() => setDrawer({ kind: 'early-detection', detection: null })} className="text-xs text-primary hover:underline">Analyze →</button>
+              )}
             </CardHeader>
-            {overview.early_detections.length === 0 ? (
+            {noData ? (
+              <p className="text-sm text-text-secondary py-4 text-center">{NO_DATA_MESSAGE}</p>
+            ) : overviewData.early_detections.length === 0 ? (
               <p className="text-xs text-text-secondary">No predicted incidents in next 4 hours</p>
             ) : (
-              overview.early_detections.map((d, i) => (
+              overviewData.early_detections.map((d, i) => (
                 <button
                   key={`${d.pattern_id}-${i}`}
                   type="button"
@@ -698,7 +764,6 @@ export default function ServiceOperationsCenter() {
                     <span className="text-text-primary font-medium group-hover:text-primary transition-colors">{d.expected_impacted_service}</span>
                     <span className="text-critical font-mono font-semibold">{d.estimated_time_to_incident_minutes}m</span>
                   </div>
-                  <MiniLineChart data={generateTrend(d.confidence, 8)} height={40} color="#EF4444" />
                 </button>
               ))
             )}
@@ -709,37 +774,41 @@ export default function ServiceOperationsCenter() {
       {/* ─── Incident Timeline (clickable bars) ─── */}
       <CollapsibleSection title="Incident Timeline" className="mt-6" defaultOpen>
         <Card>
-          <div className="flex gap-1 overflow-x-auto pb-2">
-            {Array.from({ length: 24 }, (_, h) => {
-              const matchingIncident = overview.recent_incidents.find((_, i) => i === h % 4);
-              const hasIncident = !!matchingIncident;
-              return (
-                <div
-                  key={h}
-                  onClick={() => {
-                    if (matchingIncident) {
-                      openIncident(matchingIncident);
-                    } else {
-                      setDrawer({ kind: 'incidents-list' });
-                    }
-                  }}
-                  className="flex flex-col items-center gap-1 min-w-[32px] cursor-pointer group"
-                  title={matchingIncident ? `${h}:00 — Click to view ${matchingIncident.title}` : `${h}:00 — Click to view incidents`}
-                >
+          {noData ? (
+            <p className="text-sm text-text-secondary py-8 text-center">{NO_DATA_MESSAGE}</p>
+          ) : (
+            <div className="flex gap-1 overflow-x-auto pb-2">
+              {Array.from({ length: 24 }, (_, h) => {
+                const matchingIncident = overviewData.recent_incidents.find((_, i) => i === h % 4);
+                const hasIncident = !!matchingIncident;
+                return (
                   <div
-                    className={`h-8 w-full rounded-sm transition-all duration-200 group-hover:scale-y-110 group-hover:shadow-md ${
-                      hasIncident
-                        ? 'bg-critical/70 group-hover:bg-critical'
-                        : h >= 8 && h <= 18
-                        ? 'bg-success/40 group-hover:bg-success/60'
-                        : 'bg-success/20 group-hover:bg-success/40'
-                    }`}
-                  />
-                  <span className="text-[9px] text-text-secondary group-hover:text-text-primary transition-colors">{h}</span>
-                </div>
-              );
-            })}
-          </div>
+                    key={h}
+                    onClick={() => {
+                      if (matchingIncident) {
+                        openIncident(matchingIncident);
+                      } else {
+                        setDrawer({ kind: 'incidents-list' });
+                      }
+                    }}
+                    className="flex flex-col items-center gap-1 min-w-[32px] cursor-pointer group"
+                    title={matchingIncident ? `${h}:00 — Click to view ${matchingIncident.title}` : `${h}:00 — Click to view incidents`}
+                  >
+                    <div
+                      className={`h-8 w-full rounded-sm transition-all duration-200 group-hover:scale-y-110 group-hover:shadow-md ${
+                        hasIncident
+                          ? 'bg-critical/70 group-hover:bg-critical'
+                          : h >= 8 && h <= 18
+                          ? 'bg-success/40 group-hover:bg-success/60'
+                          : 'bg-success/20 group-hover:bg-success/40'
+                      }`}
+                    />
+                    <span className="text-[9px] text-text-secondary group-hover:text-text-primary transition-colors">{h}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
       </CollapsibleSection>
 
@@ -830,11 +899,11 @@ export default function ServiceOperationsCenter() {
 
         {drawer?.kind === 'incidents-list' && (
           <div className="space-y-2">
-            {overview.recent_incidents.length === 0 ? (
+            {overviewData.recent_incidents.length === 0 ? (
               <p className="text-sm text-text-secondary">No active incidents</p>
             ) : (
               <>
-                {overview.recent_incidents.slice(0, visibleIncidentsCount).map((inc) => (
+                {overviewData.recent_incidents.slice(0, visibleIncidentsCount).map((inc) => (
                   <button
                     key={inc.incident_id}
                     type="button"
@@ -848,7 +917,7 @@ export default function ServiceOperationsCenter() {
                     <p className="text-sm text-text-primary">{inc.title}</p>
                   </button>
                 ))}
-                {overview.recent_incidents.length > visibleIncidentsCount && (
+                {overviewData.recent_incidents.length > visibleIncidentsCount && (
                   <button
                     type="button"
                     onClick={() => setVisibleIncidentsCount((prev) => prev + 20)}
@@ -928,10 +997,10 @@ export default function ServiceOperationsCenter() {
 
         {drawer?.kind === 'early-detection' && !drawer.detection && (
           <div className="space-y-2">
-            {overview.early_detections.length === 0 ? (
+            {overviewData.early_detections.length === 0 ? (
               <p className="text-sm text-text-secondary">No active recommendations</p>
             ) : (
-              overview.early_detections.map((d, i) => (
+              overviewData.early_detections.map((d, i) => (
                 <button
                   key={`${d.pattern_id}-${i}`}
                   type="button"
@@ -970,7 +1039,6 @@ export default function ServiceOperationsCenter() {
                 ))}
               </ul>
             </div>
-            <MiniLineChart data={generateTrend(drawer.detection.confidence, 8)} height={60} color="#EF4444" />
           </div>
         )}
 

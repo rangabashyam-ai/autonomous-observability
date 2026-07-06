@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests, resolveIncident, getIncidentTelemetry, getIncidentRunbook, getIncidentSloBurn } from '../api/client';
+import { getIncidents, getIncident, getIncidentClickAnalysis, getIncidentChangeRequests, resolveIncident, getIncidentTelemetry, getIncidentRunbook, getIncidentSloBurn, getVmIncidents } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Incident, IncidentClickAnalysis, ComponentMetrics, IncidentTelemetry, IncidentRunbook, IncidentSloBurn } from '../types/intelligence';
 import { PageHeader, TagList, severityClass, inputClass, btnPrimary, StatCard } from '../components/ui';
@@ -11,6 +11,8 @@ import { Card } from '../components/ui/card';
 import RightDrawerShell, { RightDrawerBody } from '../components/drilldown/RightDrawerShell';
 import ResizableDrawerPanel from '../components/drilldown/ResizableDrawerPanel';
 import { ReportChat } from '../components/ReportChat';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE } from '../utils/emptyState';
 
 // ---------------------------------------------------------------------------
 // State badge
@@ -2191,6 +2193,7 @@ export function BankSentinelView() {
   const [searchParams] = useSearchParams();
   const [bankIncidents, setBankIncidents] = useState<BankIncident[]>([]);
   const [bankLoading, setBankLoading] = useState(true);
+  const [noData, setNoData] = useState(false);
   const [selectedInc, setSelectedInc] = useState<BankIncident | null>(null);
   const [filterSev, setFilterSev] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -2211,14 +2214,17 @@ export function BankSentinelView() {
   }, [searchParams, bankIncidents, bankLoading]);
 
   useEffect(() => {
-    fetch('/api/vm/incidents')
-      .then((r) => r.json())
-      .then((data: any) => {
-        const payload = Array.isArray(data) ? data : data.incidents || [];
-        setBankIncidents(payload);
+    getVmIncidents()
+      .then((data) => {
+        const available = data.dataset_available === true;
+        setNoData(!available);
+        setBankIncidents((data.incidents || []) as BankIncident[]);
         setBankLoading(false);
       })
-      .catch(() => setBankLoading(false));
+      .catch(() => {
+        setNoData(true);
+        setBankLoading(false);
+      });
   }, []);
 
   const sevCounts = useMemo(() => {
@@ -2241,7 +2247,21 @@ export function BankSentinelView() {
   const activeCount = bankIncidents.filter((i) => i.status === 'Active').length;
 
   if (bankLoading) {
-    return <p className="py-12 text-center text-slate-500 dark:text-slate-400">Loading Bank RCA incidents…</p>;
+    return <p className="py-12 text-center text-slate-500 dark:text-slate-400">Loading incidents…</p>;
+  }
+
+  if (noData) {
+    return (
+      <div className="flex flex-col gap-4">
+        <DatasetUploadBanner />
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-12 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{NO_DATA_MESSAGE}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+            Connect a data source to load incident history and alerts.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

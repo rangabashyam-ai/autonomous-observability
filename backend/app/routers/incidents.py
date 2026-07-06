@@ -9,6 +9,8 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 
 from app.data_store import DATA_DIR, read_json
+from app.minio_intel_store import MinioIntelUnavailable, fetch_router_incidents, find_raw_incident, find_router_incident, http_unavailable
+from app import parquet_store
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -16,12 +18,7 @@ router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 # CSV-backed incident store
 # ---------------------------------------------------------------------------
 
-_CSV_PATH = Path(
-    os.environ.get(
-        "INCIDENTS_CSV",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\incidents.csv",
-    )
-)
+_CSV_PATH = Path(os.environ["INCIDENTS_CSV"]) if os.environ.get("INCIDENTS_CSV") else None
 
 _csv_cache: list[dict] | None = None
 _csv_mtime: float = 0.0
@@ -30,27 +27,56 @@ _csv_mtime: float = 0.0
 # Bank-incident JSON store (openRCA_Bank/incidents/incident_INC-XXXX.json)
 # ---------------------------------------------------------------------------
 
-_BANK_INC_DIR = Path(
-    os.environ.get(
-        "BANK_INCIDENTS_DIR",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\incidents",
-    )
-)
+_BANK_INC_DIR = Path(os.environ["BANK_INCIDENTS_DIR"]) if os.environ.get("BANK_INCIDENTS_DIR") else None
 
 _BANK_INC_CACHE: dict[str, dict] = {}
 
 
+_incidents_cache: list[dict] | None = None
+
+
+def _load_minio_incidents() -> list[dict]:
+    global _incidents_cache
+    if _incidents_cache is not None:
+        return list(_incidents_cache)
+    try:
+        from app.data_availability import is_minio_intel_available
+        if not is_minio_intel_available():
+            from app import vm_data_store
+            pushed = vm_data_store.get("incidents")
+            if pushed:
+                _incidents_cache = pushed.get("incidents", [])
+                return list(_incidents_cache)
+            return []
+        _incidents_cache = fetch_router_incidents()
+    except MinioIntelUnavailable as exc:
+        raise http_unavailable(exc)
+    return list(_incidents_cache)
+
+
 def _load_bank_incident(incident_id: str) -> dict | None:
-    """Load a single bank incident JSON by ID (e.g. 'INC-0001'). Cached per process."""
     if incident_id in _BANK_INC_CACHE:
         return _BANK_INC_CACHE[incident_id]
-    path = _BANK_INC_DIR / f"incident_{incident_id}.json"
-    if not path.exists():
+    raw = find_raw_incident(incident_id)
+    if raw is None:
         return None
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    _BANK_INC_CACHE[incident_id] = data
-    return data
+    _BANK_INC_CACHE[incident_id] = raw
+    return raw
+
+
+def _load_csv_incidents() -> list[dict] | None:
+    return _load_minio_incidents()
+
+
+def _load_custom_incidents() -> list[dict]:
+    return []
+
+
+def _find_incident(incident_id: str) -> dict | None:
+    try:
+        return find_router_incident(incident_id)
+    except MinioIntelUnavailable as exc:
+        raise http_unavailable(exc)
 
 
 def resolve_bank_incident_meta(raw: dict) -> dict:
@@ -91,105 +117,6 @@ def resolve_bank_incident_meta(raw: dict) -> dict:
         "end_ts":              _parse_ts(tw.get("end", "")),
     }
 
-
-def _load_csv_incidents() -> list[dict] | None:
-    """Read incidents.csv, join with parquet supplementary data, cache by mtime."""
-    global _csv_cache, _csv_mtime
-
-    if not _CSV_PATH.exists():
-        return None
-
-    mtime = _CSV_PATH.stat().st_mtime
-    if _csv_cache is not None and mtime == _csv_mtime:
-        return list(_csv_cache)
-
-    with open(_CSV_PATH, "r", encoding="utf-8", newline="") as f:
-        csv_rows = list(csv.DictReader(f))
-
-    # Load parquet incidents for supplementary fields
-    base_data = read_json("incidents/service_now_incidents.json")
-    base_list = base_data.get("incidents", []) if isinstance(base_data, dict) else base_data
-    base_by_id: dict[str, dict] = {inc.get("incident_id", ""): inc for inc in base_list}
-
-    merged: list[dict] = []
-    for row in csv_rows:
-        orig_id = row.get("original_id", "")
-        base = dict(base_by_id.get(orig_id, {}))
-
-        # Preserve the parquet's original start_time for telemetry/SLO queries
-        # (the parquet timestamps are in the actual data range; CSV times are display-only)
-        base["parquet_start_time"] = base.get("start_time", "")
-        base["parquet_end_time"]   = base.get("end_time", "")
-
-        # Override display fields with CSV values
-        base["incident_id"]    = row["id"]
-        base["id"]             = row["id"]
-        base["original_id"]    = orig_id
-        base["title"]          = row["title"]
-        base["severity"]       = row["severity"]
-        base["fix"]            = row["fix"]
-        base["start_time"]     = row.get("time", base.get("start_time", ""))
-
-        # Hidden enrichment fields — in API response, never rendered by frontend
-        base["true_root_cause"] = row.get("true_root_cause", "")
-        base["component"]       = row.get("component", "")
-        base["incident_time"]   = row.get("time", "")
-        base["details"]         = row.get("details", "")
-
-        # Preserve parquet state (Open / In Progress) for active filtering
-        if not base.get("state"):
-            base["state"] = "Open"
-
-        merged.append(base)
-
-    _csv_cache = merged
-    _csv_mtime = mtime
-    return list(_csv_cache)
-
-
-def _load_custom_incidents() -> list[dict]:
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
-    path = project_root / "openRCA_Bank" / "incidents" / "all_incidents.json"
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data if isinstance(data, list) else []
-        except Exception:
-            pass
-    return []
-
-
-def _find_incident(incident_id: str) -> dict | None:
-    """Find an incident by IN-XXXX id, original INC-XXXX id, or hash id."""
-    custom = _load_custom_incidents()
-    for inc in custom:
-        if inc.get("incidentId") == incident_id:
-            inc["incident_id"] = inc.get("incidentId", "")
-            inc["id"] = inc.get("incidentId", "")
-            status = inc.get("status", "Open")
-            inc["state"] = "Open" if status in ("New", "Active") else status
-            tw = inc.get("timeWindow", {})
-            start_t = tw.get("start", "")
-            inc["start_time"] = inc.get("start_time", start_t)
-            inc["incident_time"] = inc.get("incident_time", start_t)
-            entities = inc.get("entities", [])
-            inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
-            inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
-            return dict(inc)
-
-    incidents = _load_csv_incidents()
-    if incidents is None:
-        data = read_json("incidents/service_now_incidents.json")
-        incidents = data.get("incidents", []) if isinstance(data, dict) else data
-    for inc in incidents:
-        if (
-            inc.get("incident_id") == incident_id
-            or inc.get("id") == incident_id
-            or inc.get("original_id") == incident_id
-        ):
-            return dict(inc)
-    return None
 
 # ---------------------------------------------------------------------------
 # In-process resolution overlay (file-backed for persistence across restarts)
@@ -298,26 +225,7 @@ def get_incidents(
     state: Optional[str] = None,
     active: Optional[bool] = None,
 ):
-    incidents = _load_csv_incidents()
-    if incidents is None:
-        data = read_json("incidents/service_now_incidents.json")
-        incidents = data.get("incidents", [])
-        
-    custom = _load_custom_incidents()
-    for inc in custom:
-        inc["incident_id"] = inc.get("incidentId", "")
-        inc["id"] = inc.get("incidentId", "")
-        status = inc.get("status", "Open")
-        inc["state"] = "Open" if status in ("New", "Active") else status
-        tw = inc.get("timeWindow", {})
-        start_t = tw.get("start", "")
-        inc["start_time"] = inc.get("start_time", start_t)
-        inc["incident_time"] = inc.get("incident_time", start_t)
-        entities = inc.get("entities", [])
-        inc["component"] = inc.get("component", ", ".join(entities) if isinstance(entities, list) else str(entities))
-        inc["true_root_cause"] = inc.get("true_root_cause", inc.get("root_cause", ""))
-            
-    incidents = custom + incidents
+    incidents = _load_minio_incidents()
     incidents = _apply_resolutions(incidents)
     incidents = _filter_incidents(incidents, severity, service, search, state, active)
     total = len(incidents)
@@ -326,6 +234,7 @@ def get_incidents(
         "total": total,
         "offset": offset,
         "limit": limit,
+        "dataset_available": is_ui_data_available(),
     }
 
 
@@ -456,11 +365,7 @@ def get_incident_runbook(incident_id: str):
         end_ts = start_ts + 7200
 
     # Find resolved incidents with the same root cause for proven-fix context
-    all_source = _load_csv_incidents()
-    if all_source is None:
-        _d = read_json("incidents/service_now_incidents.json")
-        all_source = _d.get("incidents", [])
-    all_incidents = _apply_resolutions(all_source)
+    all_incidents = _apply_resolutions(_load_minio_incidents())
     similar = [
         {
             "incident_id": i["incident_id"],

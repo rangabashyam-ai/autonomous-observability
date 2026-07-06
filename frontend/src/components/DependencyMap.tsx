@@ -17,13 +17,18 @@ import 'reactflow/dist/style.css';
 
 import DependencyNode from './DependencyNode';
 import NodeMetricsPanel from './NodeMetricsPanel';
+import { invalidateFetchCache } from '../api/fetchCache';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE } from '../utils/emptyState';
 import {
   getDependencyGraph,
   getDependencyPaths,
   deleteDependency,
+  updateDependency,
   addCustomNode,
   addDependency,
   listAllNodes,
+  getMonitoringDashboard,
 } from '../api/client';
 import type { DependencyGraph, DependencyPath, HeatmapMetric, ViewType } from '../types/api';
 import { heatmapColor, healthBadgeClass, layerLabel } from '../utils/colors';
@@ -415,6 +420,7 @@ export default function DependencyMap() {
   const [platformExpanded, setPlatformExpanded] = useState(false);
   const [heatmap, setHeatmap] = useState<HeatmapMetric>('errors');
   const [graph, setGraph] = useState<DependencyGraph | null>(null);
+  const [datasetAvailable, setDatasetAvailable] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [paths, setPaths] = useState<DependencyPath | null>(null);
   const [loading, setLoading] = useState(true);
@@ -490,7 +496,26 @@ export default function DependencyMap() {
     setLoading(true);
     setError(null);
     try {
+      const monitoring = await getMonitoringDashboard();
+      const monitoringAvailable = monitoring.dataset_available === true;
+      if (!monitoringAvailable) {
+        invalidateFetchCache('deps:graph:');
+        setDatasetAvailable(false);
+        setGraph(null);
+        setNodes([]);
+        setEdges([]);
+        return;
+      }
+
       const data = await getDependencyGraph(Array.from(selectedViews), heatmap, selectedNodeId);
+      const graphAvailable = data.dataset_available !== false && data.nodes.length > 0;
+      setDatasetAvailable(graphAvailable);
+      if (!graphAvailable) {
+        setGraph(null);
+        setNodes([]);
+        setEdges([]);
+        return;
+      }
       setGraph(data);
       const { nodes: rfNodes, edges: rfEdges } = buildFlow(data, selectedNodeId, highlightIds, selectedViews, handleNodeLongPress, handleNodeShortClick, handleNodeDoubleClick);
       setNodes(rfNodes);
@@ -699,11 +724,7 @@ export default function DependencyMap() {
   const handleEditEdge = async (source: string, target: string) => {
     const relationship = prompt('New relationship type:', 'calls');
     if (!relationship) return;
-    await fetch('/api/dependencies/edges', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, target, relationship }),
-    });
+    await updateDependency(source, target, relationship);
     loadGraph();
   };
 
@@ -711,8 +732,21 @@ export default function DependencyMap() {
   const searchMatchCount =
     searchTerm.trim().length >= 2 ? nodes.filter((n) => n.data.isSearchMatch).length : 0;
 
+  const noData = !datasetAvailable;
+
   return (
     <div className="space-y-4">
+      {noData && <DatasetUploadBanner />}
+
+      {noData ? (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-12 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{NO_DATA_MESSAGE}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+            Connect a data source to load the dependency topology map.
+          </p>
+        </div>
+      ) : (
+      <>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Dependency Mapping</h2>
@@ -1119,6 +1153,8 @@ export default function DependencyMap() {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { PageHeader, inputClass } from '../components/ui';
 import type { BankIncident, BankAlertItem } from './IncidentExplorer';
 import { BankRCAPanel } from './IncidentExplorer';
+import { getVmIncidents } from '../api/client';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE } from '../utils/emptyState';
 
 // ---------------------------------------------------------------------------
 // Shared constants (mirrored from IncidentExplorer)
@@ -288,23 +291,25 @@ export default function RCADashboard() {
   const [searchParams] = useSearchParams();
   const [incidents, setIncidents] = useState<BankIncident[]>([]);
   const [loading, setLoading] = useState(true);
+  const [noData, setNoData] = useState(false);
   const [selected, setSelected] = useState<BankIncident | null>(null);
   const [filterSev, setFilterSev] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/api/vm/incidents')
-      .then((r) => r.json())
-      .then((data: any) => {
-        const payload = Array.isArray(data) ? data : data.incidents || [];
+    getVmIncidents()
+      .then((data) => {
+        const payload = (data.incidents || []) as BankIncident[];
+        const available = data.dataset_available === true;
+        setNoData(!available);
         setIncidents(payload);
 
         const serviceParam = searchParams.get('service');
         if (serviceParam) {
           setSearch(serviceParam);
           const found = payload.find(
-            (i: BankIncident) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) ||
+            (i) => i.title?.toLowerCase().includes(serviceParam.toLowerCase()) ||
               i.description?.toLowerCase().includes(serviceParam.toLowerCase())
           );
           setSelected(found ?? payload[0] ?? null);
@@ -313,7 +318,10 @@ export default function RCADashboard() {
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setNoData(true);
+        setLoading(false);
+      });
   }, [searchParams]);
 
   const filtered = useMemo(() => {
@@ -338,6 +346,21 @@ export default function RCADashboard() {
       <div>
         <PageHeader title="Root Cause Analysis" description="Loading incidents…" />
         <p className="py-12 text-center text-slate-400 dark:text-slate-500">Loading…</p>
+      </div>
+    );
+  }
+
+  if (noData) {
+    return (
+      <div>
+        <PageHeader
+          title="Root Cause Analysis"
+          description="Select an incident to view full details and run root cause analysis"
+        />
+        <DatasetUploadBanner />
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-12 text-center mt-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{NO_DATA_MESSAGE}</p>
+        </div>
       </div>
     );
   }

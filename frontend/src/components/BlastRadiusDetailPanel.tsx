@@ -808,14 +808,8 @@ function NodeDetail({
           </p>
           <div className="bg-white dark:bg-slate-900/40 p-2.5 rounded border border-blue-100 dark:border-blue-900/30 text-[11px] leading-relaxed">
             <span className="font-bold text-slate-800 dark:text-slate-200 block mb-0.5">Recommended Actions:</span>
-            {d.id === 'payment-authorization' ? (
-              <span>• Database thread pool saturated. Restart container nodes and apply traffic throttling rules immediately.</span>
-            ) : d.id === 'settlement-processing' ? (
-              <span>• Message queue backlog detected. Scale up consumer listener count or clear dead-letter queue locks.</span>
-            ) : d.id === 'api-gateway-services' ? (
-              <span>• Upstream gateway timeouts. Check load balancer health and adjust route timeout parameters.</span>
-            ) : isCritical ? (
-              <span>• Microservice showing severe latency spikes ({metrics.latency}). Recommended restarting service nodes and verifying network link.</span>
+            {isCritical ? (
+              <span>• Component showing elevated risk ({metrics.latency ?? 'N/A'}). Review logs, traces, and recent deployments.</span>
             ) : (
               <span>• Component running within healthy parameters. No immediate local action required.</span>
             )}

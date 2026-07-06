@@ -87,34 +87,78 @@ export function UtilizationBar({
   );
 }
 
-/** Regional health map using precise SVG viewBox coordinates */
-const REGIONS = [
-  { id: 'us-east', label: 'US East', x: 200.00, y: 365.00, health: 'healthy' as const },
-  { id: 'us-west', label: 'US West', x: 85.00, y: 355.00, health: 'healthy' as const },
-  { id: 'eu-west', label: 'EU West', x: 400.02, y: 382.07, health: 'warning' as const },
-  { id: 'eu-central', label: 'EU Central', x: 428.73, y: 392.28, health: 'healthy' as const },
-  { id: 'ap-south', label: 'AP South', x: 600.18, y: 464.96, health: 'healthy' as const },
-  { id: 'ap-northeast', label: 'AP Northeast', x: 722.24, y: 403.69, health: 'critical' as const },
-  { id: 'sa-east', label: 'SA East', x: 268.20, y: 558.12, health: 'healthy' as const },
-];
+/** Static geography positions for known region IDs (no health data). */
+const REGION_POSITIONS: Record<string, { label: string; x: number; y: number }> = {
+  'us-east': { label: 'US East', x: 200.0, y: 365.0 },
+  'us-west': { label: 'US West', x: 85.0, y: 355.0 },
+  'eu-west': { label: 'EU West', x: 400.02, y: 382.07 },
+  'eu-central': { label: 'EU Central', x: 428.73, y: 392.28 },
+  'ap-south': { label: 'AP South', x: 600.18, y: 464.96 },
+  'ap-northeast': { label: 'AP Northeast', x: 722.24, y: 403.69 },
+  'sa-east': { label: 'SA East', x: 268.2, y: 558.12 },
+};
 
-const healthColor: Record<string, string> = {
-  healthy: '#10b981', // Emerald / success
-  warning: '#f59e0b', // Amber / warning
-  critical: '#ef4444', // Red / critical
+export type RegionalHealthStatus = 'healthy' | 'warning' | 'critical';
+
+export interface RegionalHealthPoint {
+  id: string;
+  label: string;
+  health: RegionalHealthStatus;
+  x?: number;
+  y?: number;
+}
+
+function resolveRegionPosition(regionId: string): { label: string; x: number; y: number } | null {
+  const direct = REGION_POSITIONS[regionId];
+  if (direct) return direct;
+  const normalized = regionId.toLowerCase().replace(/[_\s]/g, '-');
+  if (REGION_POSITIONS[normalized]) return REGION_POSITIONS[normalized];
+  const prefix = Object.keys(REGION_POSITIONS).find((key) => normalized.startsWith(key));
+  return prefix ? REGION_POSITIONS[prefix] : null;
+}
+
+function normalizeHealth(health: string): RegionalHealthStatus {
+  const h = health.toLowerCase();
+  if (h === 'critical' || h === 'down' || h === 'error') return 'critical';
+  if (h === 'warning' || h === 'degraded' || h === 'warn') return 'warning';
+  return 'healthy';
+}
+
+const healthColor: Record<RegionalHealthStatus, string> = {
+  healthy: '#10b981',
+  warning: '#f59e0b',
+  critical: '#ef4444',
 };
 
 export function RegionalHealthMap({
   className,
   onRegionClick,
+  noData = false,
+  regions = [],
 }: {
   className?: string;
-  onRegionClick?: (region: typeof REGIONS[0]) => void;
+  onRegionClick?: (region: RegionalHealthPoint & { x: number; y: number }) => void;
+  /** When true, show map without regional health indicators */
+  noData?: boolean;
+  /** Live regional health from connected data sources */
+  regions?: RegionalHealthPoint[];
 }) {
+  const plottedRegions = noData
+    ? []
+    : regions
+        .map((r) => {
+          const pos = r.x != null && r.y != null
+            ? { label: r.label, x: r.x, y: r.y }
+            : resolveRegionPosition(r.id);
+          if (!pos) return null;
+          return { ...r, label: r.label || pos.label, x: pos.x, y: pos.y, health: normalizeHealth(r.health) };
+        })
+        .filter((r): r is RegionalHealthPoint & { x: number; y: number } => r !== null);
+
   return (
     <div className={cn('relative w-full overflow-hidden', className)}>
       <WorldMapBackground className="w-full h-full">
-        {REGIONS.map((r) => {
+        {plottedRegions.map((r) => {
           const tooltipWidth = r.label.length * 15 + 24;
           return (
             <g

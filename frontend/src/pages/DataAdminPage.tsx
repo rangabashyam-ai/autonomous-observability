@@ -40,13 +40,13 @@ export default function DataAdminPage() {
     }
   };
 
-  // Form states for adding incidents (openRCA_Bank dataset format)
+  // Form states for adding incidents
   const [incidentId, setIncidentId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('Low');
   const [status, setStatus] = useState('New');
-  const [productName, setProductName] = useState('BankRCA');
+  const [productName, setProductName] = useState('');
   const [startTime, setStartTime] = useState(new Date().toISOString().slice(0, 16));
   const [endTime, setEndTime] = useState(new Date(Date.now() + 1800000).toISOString().slice(0, 16));
   const [entities, setEntities] = useState('');
@@ -105,7 +105,7 @@ export default function DataAdminPage() {
       setDescription('');
       setSeverity('Low');
       setStatus('New');
-      setProductName('BankRCA');
+      setProductName('');
       setStartTime(new Date().toISOString().slice(0, 16));
       setEndTime(new Date(Date.now() + 1800000).toISOString().slice(0, 16));
       setEntities('');
@@ -141,7 +141,7 @@ export default function DataAdminPage() {
     <div>
       <PageHeader
         title="Custom Data Upload"
-        description="Upload incident datasets and create custom incidents in openRCA_Bank format"
+        description="Upload incident data and create custom incidents"
       />
 
       {message && (
@@ -202,7 +202,7 @@ export default function DataAdminPage() {
       </div>
       <div className="mt-8 p-6 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-2xl shadow-sm">
         <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">Create Custom Incident Form</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">Create a single incident in the openRCA_Bank format directly into the dataset.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">Create a single incident directly from the admin panel.</p>
 
         <form onSubmit={handleAddIncident} className="space-y-6">
 
@@ -334,7 +334,7 @@ export default function DataAdminPage() {
               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">CMDB Entities (comma separated) *</label>
               <input
                 type="text"
-                placeholder="IG01, Tomcat01, ServiceTest3"
+                placeholder="host-01, service-a, database-01"
                 value={entities}
                 onChange={(e) => setEntities(e.target.value)}
                 className="w-full text-sm px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500"
@@ -424,7 +424,7 @@ export default function DataAdminPage() {
                       <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Alert Rule *</label>
                       <input
                         type="text"
-                        placeholder="BankRCA-Tomcat01-TRACE_SLOW"
+                        placeholder="alert-rule-name"
                         value={a.alertRule}
                         onChange={(e) => {
                           const updated = [...alerts];

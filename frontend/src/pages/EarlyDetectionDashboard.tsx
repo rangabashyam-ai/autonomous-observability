@@ -10,6 +10,8 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import DrilldownDrawer, { DrilldownSection } from '../components/drilldown/DrilldownDrawer';
 import { cn } from '../lib/cn';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE } from '../utils/emptyState';
 
 /* Extended API shapes (backend returns richer payload than base types) */
 interface MatchedAlertDetail {
@@ -92,6 +94,9 @@ interface ClearancePlan {
 }
 
 interface DetectionResponse {
+  dataset_available?: boolean;
+  analysis_ready?: boolean;
+  message?: string;
   current_conditions: string[];
   active_conditions?: ActiveCondition[];
   active_alerts_feed?: AlertFeedItem[];
@@ -261,12 +266,7 @@ function isServiceId(id: string, serviceRisksList?: ServiceRisk[]): boolean {
   if (clean.includes('service') || clean.includes('frontend') || /^servicetest\d+$/i.test(clean)) {
     return true;
   }
-  const known = [
-    'frontend', 'payment-service', 'ad-service', 'email-service', 'cart-service',
-    'shipping-service', 'recommendation-service', 'product-catalog-service',
-    'currency-service', 'checkout-service', 'payment-authorization', 'settlement-processing',
-    'api-gateway-services', 'account-service', 'user-service', 'auth-service'
-  ].map(s => s.toLowerCase().replace(/[\s-_]+/g, ''));
+  const known: string[] = [];
   return known.includes(clean);
 }
 
@@ -680,6 +680,7 @@ function PatternCoverageBar({ matched, total }: { matched: number; total: number
 export default function EarlyDetectionDashboard() {
   const [data, setData] = useState<DetectionResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [noData, setNoData] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drill, setDrill] = useState<DrillContext | null>(null);
@@ -792,6 +793,16 @@ export default function EarlyDetectionDashboard() {
     analyzeEarlyDetection()
       .then((r) => {
         const res = r as DetectionResponse;
+        const ready = res.analysis_ready === true || (res.dataset_available === true && (res.total_patterns_evaluated ?? 0) > 0);
+        if (!ready) {
+          setNoData(true);
+          setData(null);
+          setSelectedId(null);
+          if (res.message) setError(res.message);
+          return;
+        }
+        setNoData(false);
+        setError(null);
         setData(res);
         if (res.detections.length > 0) {
           setSelectedId((prev) =>
@@ -805,6 +816,7 @@ export default function EarlyDetectionDashboard() {
       })
       .catch((e) => {
         setData(null);
+        setNoData(true);
         setError(e instanceof Error ? e.message : 'Failed to load detections');
       })
       .finally(() => setLoading(false));
@@ -1165,8 +1177,17 @@ export default function EarlyDetectionDashboard() {
         </div>
       )}
 
+      {noData && (
+        <>
+          <DatasetUploadBanner />
+          <div className="rounded-xl border border-border bg-card p-12 text-center">
+            <p className="text-sm text-text-secondary">{NO_DATA_MESSAGE}</p>
+          </div>
+        </>
+      )}
+
       {/* Summary metrics */}
-      {hasData && (
+      {hasData && !noData && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <ClickableMetricCard
             label="Active alerts"
@@ -1203,7 +1224,7 @@ export default function EarlyDetectionDashboard() {
         </div>
       )}
 
-      {(loading || hasData) && !apiError && (
+      {(loading || hasData) && !apiError && !noData && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Detail Panel and Live Alert Conditions */}
           <div className="lg:col-span-7 space-y-6">

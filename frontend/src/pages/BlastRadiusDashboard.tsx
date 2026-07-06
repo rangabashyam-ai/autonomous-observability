@@ -29,140 +29,25 @@ import BlastRadiusEdge from '../components/BlastRadiusEdge';
 const nodeTypes = { blastRadius: BlastRadiusNode };
 const edgeTypes = { blastRadiusEdge: BlastRadiusEdge };
 
-const FALLBACK_SERVICES = [
-  'ServiceTest1', 'ServiceTest2', 'ServiceTest3', 'ServiceTest4', 'ServiceTest5',
-  'ServiceTest6', 'ServiceTest7', 'ServiceTest8', 'ServiceTest9', 'ServiceTest10', 'ServiceTest11',
-  'payment-authorization', 'settlement-processing', 'api-gateway-services',
-  'fraud-detection', 'merchant-services', 'partner-integrations'
-];
+type RegionStatus = 'Healthy' | 'Warning' | 'Critical';
+
+interface RegionData {
+  id: string;
+  name: string;
+  status: RegionStatus;
+  incidents: number;
+  resolved: number;
+  totalServices: number;
+  impacted: number;
+  failedPods: number;
+  affectedCustomers: number;
+  avgLatency: string;
+}
 
 type GraphSelection =
   | { type: 'node'; id: string }
   | { type: 'edge'; id: string }
   | null;
-
-const REGIONS_DATA = [
-  {
-    id: 'us-east',
-    name: 'us-east',
-    status: 'Critical' as const,
-    incidents: 1,
-    resolved: 0,
-    totalServices: 8,
-    impacted: 4,
-    failedPods: 3,
-    affectedCustomers: 2847,
-    avgLatency: '2340ms',
-  },
-  {
-    id: 'ap-east',
-    name: 'ap-east',
-    status: 'Critical' as const,
-    incidents: 2,
-    resolved: 1,
-    totalServices: 6,
-    impacted: 3,
-    failedPods: 2,
-    affectedCustomers: 671,
-    avgLatency: '1850ms',
-  },
-  {
-    id: 'eu-central',
-    name: 'eu-central',
-    status: 'Warning' as const,
-    incidents: 2,
-    resolved: 1,
-    totalServices: 6,
-    impacted: 2,
-    failedPods: 1,
-    affectedCustomers: 739,
-    avgLatency: '840ms',
-  },
-  {
-    id: 'ap-southeast',
-    name: 'ap-southeast',
-    status: 'Warning' as const,
-    incidents: 2,
-    resolved: 2,
-    totalServices: 5,
-    impacted: 2,
-    failedPods: 1,
-    affectedCustomers: 312,
-    avgLatency: '310ms',
-  },
-  {
-    id: 'me-south',
-    name: 'me-south',
-    status: 'Warning' as const,
-    incidents: 1,
-    resolved: 0,
-    totalServices: 4,
-    impacted: 1,
-    failedPods: 1,
-    affectedCustomers: 89,
-    avgLatency: '420ms',
-  },
-  {
-    id: 'us-west',
-    name: 'us-west',
-    status: 'Healthy' as const,
-    incidents: 0,
-    resolved: 0,
-    totalServices: 6,
-    impacted: 0,
-    failedPods: 0,
-    affectedCustomers: 0,
-    avgLatency: '45ms',
-  },
-  {
-    id: 'eu-west',
-    name: 'eu-west',
-    status: 'Healthy' as const,
-    incidents: 0,
-    resolved: 0,
-    totalServices: 4,
-    impacted: 0,
-    failedPods: 0,
-    affectedCustomers: 0,
-    avgLatency: '38ms',
-  },
-  {
-    id: 'sa-east',
-    name: 'sa-east',
-    status: 'Healthy' as const,
-    incidents: 0,
-    resolved: 0,
-    totalServices: 5,
-    impacted: 0,
-    failedPods: 0,
-    affectedCustomers: 0,
-    avgLatency: '60ms',
-  },
-  {
-    id: 'ap-south',
-    name: 'ap-south',
-    status: 'Healthy' as const,
-    incidents: 0,
-    resolved: 0,
-    totalServices: 4,
-    impacted: 0,
-    failedPods: 0,
-    affectedCustomers: 0,
-    avgLatency: '55ms',
-  },
-  {
-    id: 'au-southeast',
-    name: 'au-southeast',
-    status: 'Healthy' as const,
-    incidents: 0,
-    resolved: 0,
-    totalServices: 4,
-    impacted: 0,
-    failedPods: 0,
-    affectedCustomers: 0,
-    avgLatency: '75ms',
-  },
-];
 
 const regionCoords: Record<string, { top: string; left: string }> = {
   'us-west': { top: '34%', left: '19%' },
@@ -180,19 +65,19 @@ const regionCoords: Record<string, { top: string; left: string }> = {
 
 export default function BlastRadiusDashboard() {
   const { theme } = useTheme();
-  const [alerts] = useState(['CPU Saturation', 'API Error Spike']);
-  const [symptoms] = useState(['Latency Increase', 'Retry Storm']);
-  const [service, setService] = useState('ServiceTest1');
-  const [availableServices, setAvailableServices] = useState<string[]>(FALLBACK_SERVICES);
+  const [alerts] = useState<string[]>([]);
+  const [symptoms] = useState<string[]>([]);
+  const [service, setService] = useState('');
+  const [availableServices, setAvailableServices] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadServices() {
       try {
         const data = await getDependencyGraph(['microservice'], 'risk_score');
-        if (data?.nodes) {
-          const fetchedIds = data.nodes.map((n: any) => n.id);
-          const combined = Array.from(new Set([...fetchedIds, ...FALLBACK_SERVICES]));
-          setAvailableServices(combined);
+        if (data?.nodes?.length) {
+          const fetchedIds = data.nodes.map((n: { id: string }) => n.id);
+          setAvailableServices(fetchedIds);
+          setService((prev) => prev || fetchedIds[0] || '');
         }
       } catch (err) {
         console.error('Failed to load services:', err);
@@ -213,6 +98,41 @@ export default function BlastRadiusDashboard() {
   const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
   const [expandedPanel, setExpandedPanel] = useState<'dynamic' | 'component' | 'chat' | null>(null);
 
+  const regionsData = useMemo((): RegionData[] => {
+    if (!result?.impacted_regions?.length) return [];
+    const perRegionCustomers = Math.round(
+      (result.impacted_customers_estimate ?? 0) / Math.max(1, result.impacted_regions.length)
+    );
+    return result.impacted_regions.map((region) => ({
+      id: region,
+      name: region,
+      status: (result.issue_scope === 'systemic' ? 'Critical' : 'Warning') as RegionStatus,
+      incidents: 0,
+      resolved: 0,
+      totalServices: result.currently_impacted_services?.length ?? 0,
+      impacted: result.currently_impacted_services?.length ?? 0,
+      failedPods: 0,
+      affectedCustomers: perRegionCustomers,
+      avgLatency: 'N/A',
+    }));
+  }, [result]);
+
+  const regionLegend = useMemo(() => {
+    const groups: Record<RegionStatus, { regions: number; customers: number }> = {
+      Critical: { regions: 0, customers: 0 },
+      Warning: { regions: 0, customers: 0 },
+      Healthy: { regions: 0, customers: 0 },
+    };
+    for (const r of regionsData) {
+      groups[r.status].regions += 1;
+      groups[r.status].customers += r.affectedCustomers;
+    }
+    const totalCustomers = regionsData.reduce((sum, r) => sum + r.affectedCustomers, 0);
+    const estimatedTotal = result?.impacted_customers_estimate ?? totalCustomers;
+    const locatedPct = estimatedTotal > 0 ? Math.min(100, Math.round((totalCustomers / estimatedTotal) * 100)) : 0;
+    return { groups, totalCustomers, estimatedTotal, regionCount: regionsData.length, locatedPct };
+  }, [regionsData, result?.impacted_customers_estimate]);
+
 
 
 
@@ -229,13 +149,12 @@ export default function BlastRadiusDashboard() {
       const focusedNodeId = currentSelection?.type === 'node' ? currentSelection.id : null;
       const selectedEdgeId = currentSelection?.type === 'edge' ? currentSelection.id : null;
 
-      const regionServiceMap: Record<string, string[]> = {
-        'us-east': ['payment-authorization', 'auth-service', 'api-gateway-services', 'k8s-cluster-a Pod 01', 'External LB'],
-        'eu-central': ['settlement-processing', 'postgres-cluster', 'storage-cluster-1', 'internal-lb', 'merchant-services'],
-        'ap-southeast': ['fraud-detection', 'redis-cluster', 'partner-integrations', 'identity-service'],
-        'us-west': [],
-        'eu-west': [],
-      };
+      const regionServiceMap: Record<string, string[]> = {};
+      if (blast?.impacted_regions?.length) {
+        blast.impacted_regions.forEach((region) => {
+          regionServiceMap[region] = blast.currently_impacted_services ?? [];
+        });
+      }
 
       // Filter graph data if filterRegion is active!
       let nodesToRender = graphData.nodes;
@@ -450,33 +369,33 @@ export default function BlastRadiusDashboard() {
 
     const factors = [
       {
-        name: 'Service Criticality',
-        desc: 'Payment Authorization is P1 revenue-critical service',
-        score: 35,
-        max: 35,
+        name: 'Business Impact Score',
+        desc: `Overall impact score from analysis`,
+        score: result.business_impact_score ?? 0,
+        max: 100,
       },
       {
         name: 'Customer Impact',
-        desc: '5,000 of 5,000 total customers affected = 100%',
-        score: 30,
+        desc: `${(result.impacted_customers_estimate ?? 0).toLocaleString()} customers estimated affected`,
+        score: Math.min(30, Math.round((result.impacted_customers_estimate ?? 0) / 100)),
         max: 30,
       },
       {
         name: 'Propagation Depth',
-        desc: '11 services in chain, systemic scope',
-        score: 20,
+        desc: `${result.currently_impacted_services?.length ?? 0} services in impact chain`,
+        score: Math.min(20, (result.currently_impacted_services?.length ?? 0) * 2),
         max: 20,
       },
       {
         name: 'Infrastructure Risk',
-        desc: '6 infra components affected including DB + LB',
-        score: 10,
+        desc: `${result.impacted_infrastructure?.length ?? 0} infra components affected`,
+        score: Math.min(10, result.impacted_infrastructure?.length ?? 0),
         max: 10,
       },
       {
         name: 'Recovery Complexity',
-        desc: 'multiple root causes, cross-region impact',
-        score: 5,
+        desc: result.issue_scope ?? 'N/A',
+        score: result.issue_scope === 'systemic' ? 5 : 2,
         max: 5,
       },
     ];
@@ -511,7 +430,7 @@ export default function BlastRadiusDashboard() {
             <div className="flex items-center gap-3.5">
               <div className="flex items-center gap-1.5">
                 <div className="w-9 h-9 rounded-full bg-red-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                  100
+                  {result.business_impact_score ?? 0}
                 </div>
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">/100</span>
               </div>
@@ -577,16 +496,15 @@ export default function BlastRadiusDashboard() {
               </h4>
               <div className="space-y-2 p-3.5 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800 rounded-xl">
                 <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  <span>Total customer base: <span className="font-bold text-slate-800 dark:text-slate-200">5,000</span></span>
-                  <span>Currently affected: <span className="text-red-500 font-bold">5,000 (100%)</span></span>
+                  <span>Estimated affected customers: <span className="font-bold text-slate-800 dark:text-slate-200">{(result.impacted_customers_estimate ?? 0).toLocaleString()}</span></span>
                 </div>
                 <div className="w-full bg-slate-150 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                  <div className="h-full bg-red-500 rounded-full" style={{ width: '100%' }} />
+                  <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.min(100, result.business_impact_score ?? 0)}%` }} />
                 </div>
                 <div className="text-[9px] text-slate-400 dark:text-slate-500 flex justify-between font-mono">
                   <span>0</span>
-                  <span className="font-sans font-semibold">5,000/5,000 (100% Blast Coverage)</span>
-                  <span>5,000</span>
+                  <span className="font-sans font-semibold">{(result.impacted_customers_estimate ?? 0).toLocaleString()} customers</span>
+                  <span>{(result.impacted_customers_estimate ?? 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -685,18 +603,13 @@ export default function BlastRadiusDashboard() {
     if (!result) return null;
 
     const factors = [
-      { name: 'Revenue Impact', status: 'Critical', pct: 100, colorClass: 'bg-red-500' },
-      { name: 'Customer Scope', status: 'Critical', pct: 100, colorClass: 'bg-red-500' },
-      { name: 'Service Criticality', status: 'Critical', pct: 100, colorClass: 'bg-red-500' },
-      { name: 'Resolution Urgency', status: 'Immediate', pct: 100, colorClass: 'bg-red-500' },
+      { name: 'Business Impact', status: result.severity_recommendation ?? 'N/A', pct: result.business_impact_score ?? 0, colorClass: 'bg-red-500' },
+      { name: 'Customer Scope', status: `${result.impacted_customers_estimate ?? 0} affected`, pct: Math.min(100, (result.impacted_customers_estimate ?? 0) / 50), colorClass: 'bg-red-500' },
+      { name: 'Service Criticality', status: result.issue_scope ?? 'N/A', pct: Math.min(100, (result.currently_impacted_services?.length ?? 0) * 10), colorClass: 'bg-red-500' },
+      { name: 'Resolution Urgency', status: result.severity_recommendation ?? 'N/A', pct: result.business_impact_score ?? 0, colorClass: 'bg-red-500' },
     ];
 
-    const escalations = [
-      { name: 'On-call engineer', status: 'Notified ✓', done: true },
-      { name: 'Incident commander', status: 'Assigned ✓', done: true },
-      { name: 'Executive escalation', status: 'Triggered ✓', done: true },
-      { name: 'War room', status: 'Active ✓', done: true },
-    ];
+    const escalations: { name: string; status: string; done: boolean }[] = [];
 
     return (
       <div className="fixed inset-0 z-[9999] flex justify-end">
@@ -731,7 +644,7 @@ export default function BlastRadiusDashboard() {
                 Severity Analysis
               </h3>
               <p className="text-[10px] text-slate-400 dark:text-slate-505 font-semibold">
-                Priority 1 — Critical Incident
+                {result.severity_recommendation ?? 'N/A'}
               </p>
             </div>
             <div className="flex items-center gap-3.5">
@@ -826,7 +739,7 @@ export default function BlastRadiusDashboard() {
                 selectedEntity="Severity Analysis"
                 entityData={{
                   metric: 'severity',
-                  value: 'P1',
+                  value: result.severity_recommendation ?? 'N/A',
                   failure_source: service,
                   failure_source_label: rootLabel,
                   escalation_status: escalations,
@@ -868,10 +781,30 @@ export default function BlastRadiusDashboard() {
     if (!result) return null;
 
     const factors = [
-      { name: 'Services Affected', valText: '11 of 18 total', pct: 61, label: '61%' },
-      { name: 'Regions Affected', valText: '3 of 5 regions', pct: 60, label: '60%' },
-      { name: 'Infra Components', valText: '6 of 8 total', pct: 75, label: '75%' },
-      { name: 'Customer Impact', valText: '5,000 of 5,000', pct: 100, label: '100%' },
+      {
+        name: 'Services Affected',
+        valText: `${result.currently_impacted_services?.length ?? 0} impacted`,
+        pct: Math.min(100, (result.currently_impacted_services?.length ?? 0) * 10),
+        label: `${result.currently_impacted_services?.length ?? 0}`,
+      },
+      {
+        name: 'Regions Affected',
+        valText: `${result.impacted_regions?.length ?? 0} regions`,
+        pct: Math.min(100, (result.impacted_regions?.length ?? 0) * 20),
+        label: `${result.impacted_regions?.length ?? 0}`,
+      },
+      {
+        name: 'Infra Components',
+        valText: `${result.impacted_infrastructure?.length ?? 0} components`,
+        pct: Math.min(100, (result.impacted_infrastructure?.length ?? 0) * 15),
+        label: `${result.impacted_infrastructure?.length ?? 0}`,
+      },
+      {
+        name: 'Customer Impact',
+        valText: `${(result.impacted_customers_estimate ?? 0).toLocaleString()} customers`,
+        pct: Math.min(100, result.business_impact_score ?? 0),
+        label: `${result.business_impact_score ?? 0}%`,
+      },
     ];
 
     const getBarColor = (pct: number) => {
@@ -880,12 +813,7 @@ export default function BlastRadiusDashboard() {
       return 'bg-green-500';
     };
 
-    const timeline = [
-      { time: '14 min ago', state: 'Isolated', desc: '1 service' },
-      { time: '10 min ago', state: 'Partial', desc: '3 services' },
-      { time: '5 min ago', state: 'Widespread', desc: '7 services' },
-      { time: 'Now', state: 'Systemic', desc: '11 services', active: true },
-    ];
+    const timeline: { time: string; state: string; desc: string; active?: boolean }[] = [];
 
     return (
       <>
@@ -909,7 +837,7 @@ export default function BlastRadiusDashboard() {
             </div>
             <div className="flex items-center gap-3.5">
               <div className="px-2 py-0.5 rounded bg-red-500 text-white font-bold text-[10px] shadow-sm uppercase tracking-wider">
-                SYSTEMIC
+                {(result.issue_scope ?? 'N/A').toUpperCase()}
               </div>
               <button
                 onClick={() => setActiveModal(null)}
@@ -1051,25 +979,18 @@ export default function BlastRadiusDashboard() {
   const renderCustomersModal = () => {
     if (!result) return null;
 
-    const regions = [
-      { name: 'us-east', count: 2800, pct: 56, status: 'Critical', color: 'bg-red-500', textClass: 'text-red-500', dot: '🔴' },
-      { name: 'eu-central', count: 1400, pct: 28, status: 'Warning', color: 'bg-orange-500', textClass: 'text-orange-500', dot: '🟡' },
-      { name: 'ap-southeast', count: 800, pct: 16, status: 'Warning', color: 'bg-orange-500', textClass: 'text-orange-500', dot: '🟡' },
-      { name: 'us-west', count: 0, pct: 0, status: 'Healthy', color: 'bg-green-500', textClass: 'text-green-500', dot: '🟢' },
-      { name: 'eu-west', count: 0, pct: 0, status: 'Healthy', color: 'bg-green-500', textClass: 'text-green-500', dot: '🟢' },
-    ];
+    const regions = (result.impacted_regions ?? []).map((name) => ({
+      name,
+      count: Math.round((result.impacted_customers_estimate ?? 0) / Math.max(1, result.impacted_regions?.length ?? 1)),
+      pct: Math.round(100 / Math.max(1, result.impacted_regions?.length ?? 1)),
+      status: result.issue_scope === 'systemic' ? 'Critical' : 'Warning',
+      color: 'bg-red-500',
+      textClass: 'text-red-500',
+      dot: '🔴',
+    }));
 
-    const segments = [
-      { name: 'Enterprise customers', count: 1200 },
-      { name: 'Business customers', count: 2100 },
-      { name: 'Individual users', count: 1700 },
-    ];
-
-    const risks = [
-      { name: 'High risk (payment blocked)', count: 3200, colorClass: 'text-red-500' },
-      { name: 'Medium risk (degraded service)', count: 1800, colorClass: 'text-orange-500' },
-      { name: 'Low risk (minor latency)', count: 0, colorClass: 'text-green-500' },
-    ];
+    const segments: { name: string; count: number }[] = [];
+    const risks: { name: string; count: number; colorClass: string }[] = [];
 
     return (
       <>
@@ -1094,7 +1015,7 @@ export default function BlastRadiusDashboard() {
             <div className="flex items-center gap-3.5">
               <div className="flex items-center gap-1.5">
                 <div className="w-16 h-9 rounded bg-red-500 text-white flex items-center justify-center font-bold text-sm shadow-sm font-mono">
-                  5,000
+                  {(result.impacted_customers_estimate ?? 0).toLocaleString()}
                 </div>
               </div>
               <button
@@ -1142,7 +1063,7 @@ export default function BlastRadiusDashboard() {
                 <hr className="border-slate-200 dark:border-slate-800/80" />
                 <div className="flex justify-between items-center text-xs font-bold text-slate-900 dark:text-white pt-0.5">
                   <span>Total Base Impact:</span>
-                  <span>5,000 / 5,000 (100% of base)</span>
+                  <span>{(result.impacted_customers_estimate ?? 0).toLocaleString()} customers affected</span>
                 </div>
               </div>
             </div>
@@ -1182,9 +1103,7 @@ export default function BlastRadiusDashboard() {
               <div className="space-y-1">
                 <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Affected Customers Trend</div>
                 <div className="text-xs text-slate-655 dark:text-slate-350 flex flex-wrap gap-x-2 gap-y-0.5">
-                  <span>Started at: <span className="font-semibold font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">450</span></span>
-                  <span className="text-slate-300 dark:text-slate-700">|</span>
-                  <span>Peak: <span className="font-bold text-red-500 font-mono bg-red-55 dark:bg-red-955/20 px-1 py-0.2 rounded">5,000</span> (now)</span>
+                  <span>Current: <span className="font-bold text-red-500 font-mono bg-red-55 dark:bg-red-955/20 px-1 py-0.2 rounded">{(result.impacted_customers_estimate ?? 0).toLocaleString()}</span></span>
                 </div>
                 <div className="text-[10px] text-red-500 font-bold flex items-center gap-0.5 pt-0.5">
                   <span>↑ Still increasing</span>
@@ -1276,7 +1195,7 @@ export default function BlastRadiusDashboard() {
   const renderRegionModal = () => {
     if (!activeRegionModal || !result) return null;
     const rName = activeRegionModal;
-    const region = REGIONS_DATA.find(r => r.id === rName);
+    const region = regionsData.find(r => r.id === rName);
     if (!region) return null;
 
     const statusBadgeClass = {
@@ -1550,7 +1469,7 @@ export default function BlastRadiusDashboard() {
       />
 
       {(!result || result.dataset_available === false) && !loading && (
-        <DatasetUploadBanner onUploadSuccess={() => window.location.reload()} />
+        <DatasetUploadBanner />
       )}
 
       <div className="flex items-center gap-4 mb-4">
@@ -1756,7 +1675,7 @@ export default function BlastRadiusDashboard() {
                   className="w-full h-auto opacity-100 pointer-events-none select-none"
                 />
 
-                {REGIONS_DATA.map((r) => {
+                {regionsData.map((r) => {
                   const coords = regionCoords[r.id] || { top: '0%', left: '0%' };
                   const isSelected = activeRegionModal === r.id || selectedRegionHighlight === r.id || selectedRegionFilter === r.id;
 
@@ -1841,7 +1760,7 @@ export default function BlastRadiusDashboard() {
                   className="flex flex-col items-stretch bg-white border border-[#e5e7eb] rounded-[8px] text-[12px] text-[#1f2937] leading-normal"
                 >
                   {(() => {
-                    const r = REGIONS_DATA.find(reg => reg.id === hoveredRegionId);
+                    const r = regionsData.find(reg => reg.id === hoveredRegionId);
                     if (!r) return null;
                     return (
                       <>
@@ -1875,32 +1794,35 @@ export default function BlastRadiusDashboard() {
               <div className="flex flex-col gap-1 mt-3 text-[9px] font-bold text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/60 pt-2 shrink-0 select-none">
                 <div className="flex justify-between items-center px-1">
                   <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Critical</span>
-                  <span className="text-slate-400 dark:text-slate-500 font-medium">(2 regions · 3,518 customers)</span>
+                  <span className="text-slate-400 dark:text-slate-500 font-medium">
+                    ({regionLegend.groups.Critical.regions} regions · {regionLegend.groups.Critical.customers.toLocaleString()} customers)
+                  </span>
                 </div>
                 <div className="flex justify-between items-center px-1">
                   <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> Warning</span>
-                  <span className="text-slate-400 dark:text-slate-500 font-medium">(3 regions · 1,140 customers)</span>
+                  <span className="text-slate-400 dark:text-slate-500 font-medium">
+                    ({regionLegend.groups.Warning.regions} regions · {regionLegend.groups.Warning.customers.toLocaleString()} customers)
+                  </span>
                 </div>
                 <div className="flex justify-between items-center px-1">
                   <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Healthy</span>
-                  <span className="text-slate-400 dark:text-slate-500 font-medium">(5 regions · 0 customers)</span>
-                </div>
-                <div className="flex justify-between items-center px-1">
-                  <span className="flex items-center gap-1">📍 Pending</span>
-                  <span className="text-slate-400 dark:text-slate-500 font-medium">(342 customers · locating)</span>
+                  <span className="text-slate-400 dark:text-slate-500 font-medium">
+                    ({regionLegend.groups.Healthy.regions} regions · {regionLegend.groups.Healthy.customers.toLocaleString()} customers)
+                  </span>
                 </div>
               </div>
 
-              {/* Total Bar */}
+              {regionLegend.estimatedTotal > 0 && (
               <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/50 select-none">
                 <div className="flex justify-between text-[9px] font-bold text-slate-655 dark:text-slate-400 leading-normal mb-1">
-                  <span>4,658 of 5,000 customers located</span>
-                  <span className="text-slate-400">across 10 regions</span>
+                  <span>{regionLegend.totalCustomers.toLocaleString()} of {regionLegend.estimatedTotal.toLocaleString()} customers located</span>
+                  <span className="text-slate-400">across {regionLegend.regionCount} regions</span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-red-500 rounded-full" style={{ width: '93%' }} />
+                  <div className="h-full bg-red-500 rounded-full" style={{ width: `${regionLegend.locatedPct}%` }} />
                 </div>
               </div>
+              )}
             </div>
           </div>
 

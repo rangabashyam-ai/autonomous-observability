@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any, Optional
 
 from app.ops.models import OpsEntity
@@ -163,6 +164,7 @@ def _load_edges() -> list[dict]:
     return data.get("edges", [])
 
 
+@lru_cache(maxsize=1)
 def build_entity_registry() -> list[OpsEntity]:
     nodes = _load_nodes()
     edges = _load_edges()
@@ -256,25 +258,12 @@ def build_entity_registry() -> list[OpsEntity]:
                 )
             )
 
-    # Synthetic cloud accounts when platforms detected
-    platforms = {e.platform for e in entities if e.platform}
-    if not platforms:
-        platforms = {"AWS", "GCP"}
-    for idx, plat in enumerate(sorted(platforms)):
-        entities.append(
-            OpsEntity(
-                id=f"cloud-{plat.lower()}",
-                name=f"{plat} Production Account",
-                entity_type="cloud_account",
-                layer="cloud",
-                health="healthy",
-                platform=plat,
-                metrics={"monthly_spend_usd": 45000 if plat == "AWS" else 12000, "regions": 4},
-                metadata={"provider": plat},
-            )
-        )
-
+    # Synthetic cloud accounts when platforms detected — removed; only real entities from data sources
     return entities
+
+
+def clear_entity_registry_cache() -> None:
+    build_entity_registry.cache_clear()
 
 
 def get_entities(

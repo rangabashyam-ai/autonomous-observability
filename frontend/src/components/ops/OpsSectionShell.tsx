@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Layers } from 'lucide-react';
 import { Grid12 } from '../ui/layout-primitives';
 import { MetricCard } from '../ui/metric-card';
-import { generateTrend, MiniLineChart } from '../charts/charts';
 import type { OpsDashboardSection } from '../../types/ops';
 
 type Row = Record<string, unknown> & { id: string };
@@ -61,9 +60,10 @@ interface OpsSectionShellProps {
   rows: Row[];
   children: ReactNode;
   chartSeed?: number;
+  noData?: boolean;
 }
 
-export default function OpsSectionShell({ section, rows, children, chartSeed = 50 }: OpsSectionShellProps) {
+export default function OpsSectionShell({ section, rows, children, noData = false }: OpsSectionShellProps) {
   const stats = summarizeRows(rows);
   const description = section.description ?? SECTION_DESCRIPTIONS[section.id];
 
@@ -83,14 +83,16 @@ export default function OpsSectionShell({ section, rows, children, chartSeed = 5
             )}
           </div>
           <div className="hidden sm:flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-card border border-border">
-              <Activity className="h-3 w-3" /> {stats.total} entities
-            </span>
+            {!noData && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-card border border-border">
+                <Activity className="h-3 w-3" /> {stats.total} entities
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {rows.length > 0 && (
+      {!noData && rows.length > 0 && (
         <Grid12>
           <div className="col-span-12 sm:col-span-6 lg:col-span-3">
             <MetricCard label="Total" value={stats.total} sub={`In ${section.label.toLowerCase()}`} />
@@ -112,30 +114,27 @@ export default function OpsSectionShell({ section, rows, children, chartSeed = 5
         </Grid12>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-        <div className="xl:col-span-9">{children}</div>
-        <div className="xl:col-span-3 space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-xs font-semibold text-text-primary mb-2">Activity Trend</p>
-            <MiniLineChart data={generateTrend(chartSeed, 14)} height={72} color="var(--color-primary)" />
-            <p className="text-[10px] text-text-secondary mt-2">Rolling signal for this section</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-2">
-            <p className="text-xs font-semibold text-text-primary">Fleet Status</p>
-            <div className="flex items-center gap-2 text-xs text-text-secondary">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              <span>{stats.healthy} healthy</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-text-secondary">
-              <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-              <span>{stats.warning} need attention</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-text-secondary">
-              <AlertTriangle className="h-3.5 w-3.5 text-critical" />
-              <span>{stats.critical} critical</span>
+      <div className={noData ? '' : 'grid grid-cols-1 xl:grid-cols-12 gap-5'}>
+        <div className={noData ? '' : 'xl:col-span-9'}>{children}</div>
+        {!noData && (
+          <div className="xl:col-span-3 space-y-4">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-2">
+              <p className="text-xs font-semibold text-text-primary">Fleet Status</p>
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                <span>{stats.healthy} healthy</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                <span>{stats.warning} need attention</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <AlertTriangle className="h-3.5 w-3.5 text-critical" />
+                <span>{stats.critical} critical</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

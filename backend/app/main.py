@@ -1,4 +1,4 @@
-from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine
+from app.routers import dependencies, monitoring, incidents, intelligence, admin, copilot, integrations, otel, vm, rca_engine, vm_ingest
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -81,9 +81,11 @@ app.include_router(copilot.router)
 app.include_router(integrations.router)
 app.include_router(otel.router)
 app.include_router(vm.router, prefix="/api/vm", tags=["VM"])
+app.include_router(vm_ingest.router)
 app.include_router(rca_engine.router)
 
 
+# Trigger reload for custom dataset upload fix
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy", "service": "autonomous-observability-api"}

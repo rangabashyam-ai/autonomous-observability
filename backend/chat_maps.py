@@ -53,13 +53,17 @@ def load_dependency_edges() -> list[dict]:
 
 
 def load_alerts() -> list[dict]:
-    data = read_json("monitoring/alerts.json")
-    return data.get("alerts", [])
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from app.minio_intel_store import fetch_intelligence_alerts
+    return fetch_intelligence_alerts()
 
 
 def load_incidents() -> list[dict]:
-    data = read_json("incidents/service_now_incidents.json")
-    return data.get("incidents", [])
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from app.minio_intel_store import fetch_intelligence_incidents
+    return fetch_intelligence_incidents()
 
 
 def load_changes() -> list[dict]:

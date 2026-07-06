@@ -36,15 +36,17 @@ METRIC_THRESHOLDS: dict[str, float] = {
 
 
 def _load_incidents() -> list[dict]:
-    return read_json("incidents/service_now_incidents.json").get("incidents", [])
+    from app.services.intelligence import _load_incidents as load_incidents
+    return load_incidents()
+
+
+def _load_alerts() -> list[dict]:
+    from app.services.intelligence import _load_alerts as load_alerts
+    return load_alerts()
 
 
 def _load_dep_edges() -> list[dict]:
     return read_json("dependencies/dependency_graph.json").get("edges", [])
-
-
-def _load_alerts() -> list[dict]:
-    return read_json("monitoring/alerts.json").get("alerts", [])
 
 
 def _load_services() -> list[dict]:

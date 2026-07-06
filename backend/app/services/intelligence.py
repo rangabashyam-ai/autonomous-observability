@@ -5,159 +5,56 @@ from __future__ import annotations
 import csv
 import json
 import os
+import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.data_store import read_json
-
-# ---------------------------------------------------------------------------
-# Bank data paths (overridable via env vars)
-# ---------------------------------------------------------------------------
-_BANK_ROOT = Path(os.environ.get(
-    "BANK_ROOT",
-    str(Path(__file__).resolve().parent.parent.parent.parent / "openRCA_Bank"),
-))
-_BANK_INCIDENTS_DIR = Path(os.environ.get(
-    "BANK_INCIDENTS_DIR",
-    str(_BANK_ROOT / "incidents"),
-))
-_BANK_ALERTS_DIR = Path(os.environ.get(
-    "BANK_ALERTS_DIR",
-    str(_BANK_ROOT / "alerts"),
-))
-_BANK_INCIDENTS_CSV = Path(os.environ.get(
-    "INCIDENTS_CSV",
-    str(_BANK_ROOT / "incidents.csv"),
-))
+from app.minio_intel_store import (
+    MinioIntelUnavailable,
+    fetch_intelligence_alerts,
+    fetch_intelligence_incidents,
+)
+from app import parquet_store
+from app.data_availability import is_ui_data_available, is_early_detection_ready
 
 _bank_incidents_cache: list[dict] | None = None
 _bank_alerts_cache: list[dict] | None = None
+_overview_cache: dict | None = None
+_overview_cache_ts: float = 0.0
+_OVERVIEW_CACHE_TTL_SEC = 15.0
 
 
 def clear_intelligence_cache() -> None:
-    global _bank_incidents_cache, _bank_alerts_cache
+    global _bank_incidents_cache, _bank_alerts_cache, _overview_cache, _overview_cache_ts
     _bank_incidents_cache = None
     _bank_alerts_cache = None
+    _overview_cache = None
+    _overview_cache_ts = 0.0
 
 
 def _load_bank_incidents() -> list[dict]:
     global _bank_incidents_cache
     if _bank_incidents_cache is not None:
         return _bank_incidents_cache
-
-    csv_lookup: dict[str, dict] = {}
-    if _BANK_INCIDENTS_CSV.exists():
-        with open(_BANK_INCIDENTS_CSV, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                csv_lookup[row.get("original_id", "")] = row
-
-    # Prefer all_incidents.json (single read); fall back to scanning individual files
-    all_json = _BANK_INCIDENTS_DIR / "all_incidents.json"
-    raw: list[dict] = []
-    if all_json.exists():
-        with open(all_json, encoding="utf-8") as f:
-            raw = json.load(f)
-    elif _BANK_INCIDENTS_DIR.is_dir():
-        for entry in sorted(os.scandir(_BANK_INCIDENTS_DIR), key=lambda e: e.name):
-            if entry.name.startswith("incident_") and entry.name.endswith(".json"):
-                with open(entry.path, encoding="utf-8") as f:
-                    raw.append(json.load(f))
-
-    incidents: list[dict] = []
-    for inc in raw:
-        inc_id    = inc.get("incidentId", "")
-        csv_row   = csv_lookup.get(inc_id, {})
-        entities  = inc.get("entities", [])
-        alert_rules = [a.get("alertRule", "") for a in inc.get("alerts", {}).get("items", [])]
-        tactics   = inc.get("tactics", [])
-        root_cause = csv_row.get("true_root_cause", "") or "Unknown"
-        component  = csv_row.get("component", "")
-        service    = component or (entities[0] if entities else "")
-
-        incidents.append({
-            "incident_id":               csv_row.get("id", inc_id),
-            "original_id":               inc_id,
-            "title":                     inc.get("title", ""),
-            "severity":                  inc.get("severity", "Low"),
-            "state":                     inc.get("status", "Open"),
-            "alerts":                    alert_rules,
-            "symptoms":                  tactics,
-            "root_cause":                root_cause,
-            "component":                 component,
-            "fix":                       csv_row.get("fix", "Pending investigation"),
-            "impacted_components":       entities,
-            "impacted_services":         [e for e in entities if e.startswith("ServiceTest")],
-            "service":                   service,
-            "service_id":                service,
-            "region":                    "bank-dc1",
-            "environment":               "production",
-            "owner_team":                "bank-ops",
-            "start_time":                inc.get("timeWindow", {}).get("start", ""),
-            "end_time":                  inc.get("timeWindow", {}).get("end", ""),
-            "resolution_notes":          csv_row.get("details", ""),
-            "confidence_training_value": 0.9,
-        })
-
-    _bank_incidents_cache = incidents
-    return incidents
-
-
-def _parse_alert_file(path: str) -> dict | None:
     try:
-        with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
-        ess  = raw["data"]["essentials"]
-        ctx  = raw["data"]["alertContext"]["properties"]
-        rule = ess.get("alertRule", "")
-        parts  = rule.split("-")
-        entity = ctx.get("component", "") or (
-            parts[1] if len(parts) >= 3 and parts[0] == "BankRCA" else
-            (ess.get("configurationItems") or [""])[0]
-        )
-        status = "open" if ess.get("monitorCondition", "Fired") == "Fired" else "resolved"
-        return {
-            "id":            ess.get("alertId", os.path.basename(path)),
-            "alert_id":      ess.get("alertId", os.path.basename(path)),
-            "rule":          rule,
-            "title":         rule,
-            "severity":      ess.get("severity", "Sev2"),
-            "signal_type":   ess.get("signalType", "Metric"),
-            "resource_type": ess.get("resourceType", ""),
-            "entity_id":     entity,
-            "status":        status,
-            "rca_status":    ctx.get("rcaStatus", "Pending"),
-            "fired_at":      ess.get("firedDateTime", ""),
-            "window_start":  ctx.get("windowStart", ""),
-            "window_end":    ctx.get("windowEnd", ""),
-            "description":   ess.get("description", ""),
-        }
+        _bank_incidents_cache = fetch_intelligence_incidents()
     except Exception:
-        return None
+        _bank_incidents_cache = []
+    return _bank_incidents_cache
 
 
 def _load_bank_alerts() -> list[dict]:
-    """Load all alerts from BANK_ALERTS_DIR/alert_*.json using a thread pool."""
     global _bank_alerts_cache
     if _bank_alerts_cache is not None:
         return _bank_alerts_cache
-
-    alerts: list[dict] = []
-
-    if _BANK_ALERTS_DIR.is_dir():
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        paths = [
-            e.path for e in os.scandir(_BANK_ALERTS_DIR)
-            if e.name.startswith("alert_") and e.name.endswith(".json")
-        ]
-        with ThreadPoolExecutor(max_workers=16) as pool:
-            for result in pool.map(_parse_alert_file, paths):
-                if result is not None:
-                    alerts.append(result)
-
-    _bank_alerts_cache = alerts
-    return alerts
+    try:
+        _bank_alerts_cache = fetch_intelligence_alerts()
+    except Exception:
+        _bank_alerts_cache = []
+    return _bank_alerts_cache
 
 
 def _slug(text: str) -> str:
@@ -165,9 +62,6 @@ def _slug(text: str) -> str:
 
 
 def _load_incidents() -> list[dict]:
-    data = read_json("incidents/service_now_incidents.json")
-    if data:
-        return data.get("incidents", [])
     return _load_bank_incidents()
 
 
@@ -204,9 +98,6 @@ def _load_deployments() -> list[dict]:
 
 
 def _load_alerts() -> list[dict]:
-    data = read_json("monitoring/alerts.json")
-    if data:
-        return data.get("alerts", [])
     return _load_bank_alerts()
 
 
@@ -564,8 +455,40 @@ def _bfs_upstream(start: str, edges: list[dict], max_depth: int = 5) -> list[str
 
 def detect_early_failures(current_alerts: list[str] | None = None) -> dict:
     """Delegate to the advanced dependency-aware detection engine."""
+    from app import vm_data_store
+
+    pushed = vm_data_store.get("early-detection")
+    if pushed:
+        return {**pushed, "dataset_available": True, "analysis_ready": True, "source": "vm_push"}
+
+    if not is_early_detection_ready():
+        return {
+            "dataset_available": False,
+            "analysis_ready": False,
+            "source": "none",
+            "message": "Early detection requires RCA pattern library and dependency graph. Alerts alone are not sufficient.",
+            "current_conditions": [],
+            "detections": [],
+            "summary": {
+                "active_alerts": 0,
+                "critical_alerts": 0,
+                "patterns_matched": 0,
+                "imminent_threats": 0,
+                "soonest_eta_minutes": 0,
+            },
+            "service_risk_summary": [],
+            "active_conditions": [],
+            "active_alerts_feed": [],
+            "critical_alerts_feed": [],
+            "clearance_plan": None,
+            "total_patterns_evaluated": 0,
+        }
+
     from app.services.early_detection import detect_early_failures_v2
-    return detect_early_failures_v2(current_alerts)
+    result = detect_early_failures_v2(current_alerts)
+    result["dataset_available"] = True
+    result["analysis_ready"] = True
+    return result
 
 
 INVESTIGATION_STEPS = [
@@ -728,7 +651,7 @@ def copilot_query(question: str) -> dict:
         open_al = [a for a in _load_alerts() if a.get("status") == "open"][:3]
         if open_al:
             answer_parts.append(f"Active alerts: {', '.join(a['title'] for a in open_al[:3])}.")
-        sources.extend(["incidents/service_now_incidents.json", "monitoring/alerts.json"])
+        sources.extend(["minio://obs-intelligence/incidents.parquet", "minio://obs-intelligence/alerts.parquet"])
         actions.append("Check RCA Dashboard for ranked root causes")
         actions.append("Review dependency path to postgres-cluster")
 
@@ -786,7 +709,7 @@ def copilot_query(question: str) -> dict:
             f"Most successful fix for this service pattern: **{top_fix}** "
             f"(worked in {fixes[top_fix]} historical incidents)."
         )
-        sources.append("incidents/service_now_incidents.json")
+        sources.append("minio://obs-intelligence/incidents.parquet")
 
     elif any(w in q for w in ["check", "next", "should i"]):
         answer_parts.append("Recommended next checks:")
@@ -861,17 +784,50 @@ def _extract_service(q: str) -> str | None:
 
 
 def get_overview() -> dict:
+    global _overview_cache, _overview_cache_ts
+    now = time.monotonic()
+    dataset_available = is_ui_data_available()
+    if not dataset_available:
+        pushed = vm_data_store.get("overview")
+        if pushed:
+            return {**pushed, "dataset_available": True, "source": "vm_push"}
+        return {
+            "dataset_available": False,
+            "source": "none",
+            "summary": {
+                "total_incidents": 0,
+                "active_incidents": 0,
+                "open_alerts": 0,
+                "knowledge_graph_nodes": 0,
+                "knowledge_graph_edges": 0,
+                "early_warnings": 0,
+                "active_investigations": 0,
+                "p1_incidents_historical": 0,
+            },
+            "recent_incidents": [],
+            "top_root_causes": [],
+            "early_detections": [],
+            "open_alerts_preview": [],
+        }
+
+    if _overview_cache is not None and (now - _overview_cache_ts) < _OVERVIEW_CACHE_TTL_SEC:
+        return _overview_cache
+
     incidents = _load_incidents()
     alerts = _load_alerts()
     kg = _load_knowledge_graph()
     open_alerts = [a for a in alerts if a.get("status") in ("open", "acknowledged")]
-    early = detect_early_failures()
+    try:
+        early = detect_early_failures()
+    except Exception:
+        early = {"detections": []}
     p1_count = sum(1 for i in incidents if i.get("severity") == "P1")
 
     # Filter incidents to only active ones (Open or In Progress)
     active_incidents = [i for i in incidents if i.get("state") in ("Open", "In Progress")]
 
-    return {
+    result = {
+        "dataset_available": True,
         "summary": {
             "total_incidents": len(incidents),
             "active_incidents": len(active_incidents),
@@ -909,7 +865,9 @@ def get_overview() -> dict:
         ],
     }
 
-
+    _overview_cache = result
+    _overview_cache_ts = now
+    return result
 
 
 def _top_root_causes(incidents: list[dict], limit: int = 5) -> list[dict]:

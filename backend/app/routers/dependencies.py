@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from app.data_store import read_json, write_json, DATA_DIR
 from app.models import DependencyEdgeCreate, DependencyUploadJSON, NodeCreate
+from app import parquet_store
+from app import vm_data_store
 
 router = APIRouter(prefix="/api/dependencies", tags=["dependencies"])
 
@@ -94,13 +96,21 @@ def _get_edges() -> list[dict]:
     return data.get("edges", [])
 
 
-def _init_and_sync_db():
+def _init_and_sync_db(force: bool = False):
     """Builds the SQLite index and persists the parquet graph dataset to local SQL storage."""
+    if force:
+        _get_all_nodes.cache_clear()
+        _get_edges.cache_clear()
+
     with _get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT count(*) FROM nodes")
-        if cursor.fetchone()[0] > 0:
-            return  # Already populated and indexed
+        if force:
+            cursor.execute("DELETE FROM nodes")
+            cursor.execute("DELETE FROM edges")
+        else:
+            cursor.execute("SELECT count(*) FROM nodes")
+            if cursor.fetchone()[0] > 0:
+                return  # Already populated and indexed
         
         # Load from base dataset (acting as initial ingest/migration)
         nodes_map = _get_all_nodes()
@@ -144,6 +154,34 @@ def get_dependency_graph(
     focus_node: Optional[str] = None,
     heatmap: str = "cpu",
 ):
+    dataset_available = parquet_store.is_dataset_available()
+    if not dataset_available:
+        pushed = vm_data_store.get("dependencies/graph")
+        if pushed:
+            nodes = pushed.get("nodes", [])
+            edges = pushed.get("edges", [])
+            return {
+                "view": view,
+                "heatmap": heatmap,
+                "focus_node": focus_node,
+                "nodes": nodes,
+                "edges": edges,
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "dataset_available": True,
+                "source": "vm_push",
+            }
+        return {
+            "view": view,
+            "heatmap": heatmap,
+            "focus_node": focus_node,
+            "nodes": [],
+            "edges": [],
+            "node_count": 0,
+            "edge_count": 0,
+            "dataset_available": False,
+        }
+
     # Ensure the Graph database persistence layer is initialized
     _init_and_sync_db()
 
@@ -245,6 +283,7 @@ def get_dependency_graph(
         "edges": filtered_edges,
         "node_count": len(graph_nodes),
         "edge_count": len(filtered_edges),
+        "dataset_available": True,
     }
 
 

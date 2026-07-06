@@ -3,152 +3,135 @@ from typing import Optional
 import os
 import requests
 import logging
-import json
-from pathlib import Path
+
+from app.minio_intel_store import MinioIntelUnavailable
+from app.minio_intel_store import fetch_alerts as fetch_minio_alerts
+from app.minio_intel_store import fetch_incidents as fetch_minio_incidents
+from app.minio_intel_store import incidents_parquet_available, alerts_parquet_available
+from app.minio_intel_store import http_unavailable
+from app import vm_data_store
+from app.data_availability import is_ui_data_available
 
 log = logging.getLogger("api")
 
 router = APIRouter()
 
-# The VM IP and port where api.py is running
 VM_API_URL = os.getenv("VM_API_URL", "http://127.0.0.1:8080")
 
-def _find_bank_root() -> Path:
-    env_root = os.environ.get("BANK_ROOT")
-    if env_root:
-        return Path(env_root)
-        
-    local_path = Path(__file__).resolve().parent.parent.parent.parent / "openRCA_Bank"
-    if (local_path / "incidents").is_dir():
-        return local_path
-        
-    pictures_path = Path(r"C:\Users\GKDSSPSairam\Pictures\openRCA_Bank")
-    if (pictures_path / "incidents").is_dir():
-        return pictures_path
-        
-    return local_path
 
-_BANK_ROOT = _find_bank_root()
+def _fetch_incidents_from_vm_api(
+    status: Optional[str],
+    cmdb_id: Optional[str],
+    limit: int,
+) -> list[dict]:
+    """Fallback: proxy to the external VM service on :8080."""
+    try:
+        params: dict = {"limit": limit}
+        if status:
+            params["status"] = status
+        if cmdb_id:
+            params["cmdb_id"] = cmdb_id
+        for path in ("/api/incidents", "/incidents"):
+            res = requests.get(f"{VM_API_URL}{path}", params=params, timeout=8)
+            if res.status_code != 200:
+                continue
+            data = res.json()
+            if isinstance(data, list):
+                return data[:limit]
+            incidents = data.get("incidents", [])
+            if incidents:
+                return incidents[:limit]
+    except requests.exceptions.RequestException as exc:
+        log.warning("VM API incidents fallback failed: %s", exc)
+    return []
 
 
-def _get_local_bank_incidents(limit: int) -> list:
-    incidents_dir = _BANK_ROOT / "incidents"
-    incidents = []
-    if incidents_dir.is_dir():
-        for entry in sorted(os.scandir(incidents_dir), key=lambda e: e.name):
-            if entry.name.startswith("incident_") and entry.name.endswith(".json"):
-                try:
-                    with open(entry.path, "r", encoding="utf-8") as f:
-                        incidents.append(json.load(f))
-                        if len(incidents) >= limit:
-                            break
-                except Exception:
-                    pass
-    return incidents
+def _resolve_incidents(
+    status: Optional[str],
+    cmdb_id: Optional[str],
+    limit: int,
+) -> tuple[list[dict], str]:
+    # 1. MinIO — primary store the VM pushes into
+    try:
+        incidents = fetch_minio_incidents(status=status, cmdb_id=cmdb_id, limit=limit)
+        if incidents:
+            return incidents, "minio_parquet"
+    except MinioIntelUnavailable:
+        pass
 
-def _get_local_bank_alerts(limit: int) -> list:
-    alerts_dir = _BANK_ROOT / "alerts"
-    alerts = []
-    if alerts_dir.is_dir():
-        for entry in sorted(os.scandir(alerts_dir), key=lambda e: e.name):
-            if entry.name.startswith("alert_") and entry.name.endswith(".json"):
-                try:
-                    with open(entry.path, "r", encoding="utf-8") as f:
-                        raw = json.load(f)
-                        data = raw.get("data", {})
-                        ess = data.get("essentials", {})
-                        ctx = data.get("alertContext", {}).get("properties", {})
-                        
-                        alt_id = ess.get("alertId", f"ALT-{len(alerts)+1}")
-                        rule = ess.get("alertRule", "ObservabilityAlert")
-                        sev = ess.get("severity", "warning")
-                        comp = ctx.get("component", "SystemHost")
-                        desc = ess.get("description", "")
-                        fired = ess.get("firedDateTime", "")
-                        
-                        alerts.append({
-                            "id": alt_id,
-                            "alertId": alt_id,
-                            "alert_id": alt_id,
-                            "alertname": rule,
-                            "title": rule,
-                            "severity": sev,
-                            "status": "firing",
-                            "state": "firing",
-                            "component": comp,
-                            "cmdb_id": comp,
-                            "description": desc,
-                            "activeAt": fired,
-                            "firedDateTime": fired,
-                            "labels": {
-                                "alertname": rule,
-                                "cmdb_id": comp,
-                                "severity": sev,
-                                "instance": comp
-                            },
-                            "annotations": {
-                                "summary": rule,
-                                "description": desc
-                            }
-                        })
-                        if len(alerts) >= limit:
-                            break
-                except Exception:
-                    pass
-    return alerts
+    # 2. Local VM ingest buffer
+    pushed = vm_data_store.get("incidents")
+    if pushed:
+        incidents = pushed.get("incidents", [])
+        if incidents:
+            return incidents[:limit], "vm_push"
+
+    # 3. Direct VM API proxy
+    incidents = _fetch_incidents_from_vm_api(status, cmdb_id, limit)
+    if incidents:
+        return incidents, "vm_api"
+
+    return [], "none"
+
+
+def _resolve_alerts(state: Optional[str], limit: int) -> tuple[list[dict], str]:
+    try:
+        alerts = fetch_minio_alerts(limit=limit)
+        if alerts:
+            if state:
+                alerts = [a for a in alerts if a.get("status") == state or a.get("state") == state]
+            return alerts[:limit], "minio_parquet"
+    except MinioIntelUnavailable:
+        pass
+
+    pushed = vm_data_store.get("alerts")
+    if pushed:
+        alerts = pushed.get("alerts", [])
+        if alerts:
+            return alerts[:limit], "vm_push"
+
+    return [], "none"
+
 
 @router.get("/incidents")
 def get_vm_incidents(
     cmdb_id: Optional[str] = Query(None, description="Filter by component name"),
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(200, description="Limit records"),
-    raw: bool = Query(False, description="Return raw array directly")
+    raw: bool = Query(False, description="Return raw array directly"),
 ):
-    try:
-        url = f"{VM_API_URL}/incidents"
-        params = {"limit": limit, "raw": raw}
-        if cmdb_id: params["cmdb_id"] = cmdb_id
-        if status: params["status"] = status
-        
-        log.info(f"Proxying request to VM: {url}")
-        res = requests.get(url, params=params, timeout=2)
-        res.raise_for_status()
-        return res.json()
-    except requests.exceptions.RequestException as e:
-        log.warning(f"Failed to fetch from VM API ({e}). Falling back to local data.")
-        local_data = _get_local_bank_incidents(limit)
-        return {
-            "status": "success",
-            "source": "local_fallback",
-            "count": len(local_data),
-            "incidents": local_data,
-        }
+    incidents, source = _resolve_incidents(status, cmdb_id, limit)
+    available = len(incidents) > 0 or incidents_parquet_available()
+
+    if raw:
+        return incidents
+    return {
+        "status": "success",
+        "source": source,
+        "count": len(incidents),
+        "incidents": incidents,
+        "dataset_available": available,
+    }
 
 
 @router.get("/alerts")
 def get_vm_alerts(
     state: Optional[str] = Query(None, description="Filter state"),
     limit: int = Query(500, description="Limit records"),
-    raw: bool = Query(False, description="Return raw array directly")
+    raw: bool = Query(False, description="Return raw array directly"),
 ):
-    try:
-        url = f"{VM_API_URL}/alerts"
-        params = {"limit": limit, "raw": raw}
-        if state: params["state"] = state
-        
-        log.info(f"Proxying request to VM: {url}")
-        res = requests.get(url, params=params, timeout=2)
-        res.raise_for_status()
-        return res.json()
-    except requests.exceptions.RequestException as e:
-        log.warning(f"Failed to fetch from VM API ({e}). Falling back to local alerts data.")
-        local_data = _get_local_bank_alerts(limit)
-        return {
-            "status": "success",
-            "source": "local_fallback",
-            "count": len(local_data),
-            "alerts": local_data,
-        }
+    alerts, source = _resolve_alerts(state, limit)
+    available = len(alerts) > 0 or alerts_parquet_available()
+
+    if raw:
+        return alerts
+    return {
+        "status": "success",
+        "source": source,
+        "count": len(alerts),
+        "alerts": alerts,
+        "dataset_available": available,
+    }
 
 
 @router.get("/traces/get_trace_by_id")
@@ -156,11 +139,50 @@ def get_vm_trace_by_id(trace_id: str = Query(..., description="The trace ID to f
     try:
         url = f"{VM_API_URL}/traces/get_trace_by_id"
         params = {"trace_id": trace_id}
-        log.info(f"Proxying trace request to VM: {url} with ID: {trace_id}")
-        res = requests.get(url, params=params, timeout=5)
+        log.info("Proxying trace request to VM: %s with ID: %s", url, trace_id)
+        res = requests.get(url, params=params, timeout=10)
         res.raise_for_status()
         return res.json()
     except requests.exceptions.RequestException as e:
-        log.warning(f"Failed to fetch trace from VM API ({e}).")
+        log.warning("Failed to fetch trace from VM API (%s).", e)
         raise HTTPException(status_code=502, detail=f"Failed to fetch trace from VM: {e}")
 
+
+@router.get("/traces/spans")
+def get_vm_trace_spans(trace_id: str = Query(..., description="The trace ID to fetch")):
+    """Return flat span list — frontend displays without OTLP parsing."""
+    from app.trace_parser import parse_otlp_trace
+
+    try:
+        url = f"{VM_API_URL}/traces/get_trace_by_id"
+        res = requests.get(url, params={"trace_id": trace_id}, timeout=15)
+        res.raise_for_status()
+        payload = res.json()
+    except requests.exceptions.RequestException as e:
+        log.warning("Failed to fetch trace from VM API (%s).", e)
+        raise HTTPException(status_code=502, detail=f"Failed to fetch trace from VM: {e}")
+
+    spans = parse_otlp_trace(payload)
+    return {
+        "trace_id": trace_id,
+        "spans": spans,
+        "span_count": len(spans),
+        "source": "vm",
+        "dataset_available": len(spans) > 0,
+    }
+
+
+@router.get("/status")
+def vm_service_status():
+    from app import parquet_store
+
+    incidents, inc_source = _resolve_incidents(None, None, 1)
+    return {
+        "parquet_available": parquet_store.is_dataset_available(),
+        "minio_incidents_available": incidents_parquet_available(),
+        "minio_alerts_available": alerts_parquet_available(),
+        "ui_data_available": is_ui_data_available(),
+        "incidents_source": inc_source,
+        "incidents_count_preview": len(incidents),
+        **vm_data_store.status(),
+    }

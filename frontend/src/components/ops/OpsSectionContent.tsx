@@ -1,44 +1,20 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Card, CardHeader, CardTitle } from '../ui/card';
 import { DataTable, HealthBadge } from '../ui/data-table';
 import OpsSectionShell from './OpsSectionShell';
 import type { OpsDashboardSection, OpsEntity } from '../../types/ops';
-import {
-  deriveAIServices,
-  deriveAPIs,
-  deriveApplications,
-  deriveBatchJobs,
-  deriveBusinessServices,
-  deriveCapacityForecasts,
-  deriveCloudAccounts,
-  deriveComputeHosts,
-  deriveCosts,
-  deriveDataPlatforms,
-  deriveDataPipelines,
-  deriveDatabases,
-  deriveDeployments,
-  deriveInventory,
-  deriveK8sPods,
-  deriveMessaging,
-  deriveNetworking,
-  derivePlatformCost,
-  derivePlatformSecurity,
-  deriveRuntime,
-  deriveSecurityFindings,
-  deriveServerless,
-  deriveSLOs,
-  deriveStorageVolumes,
-  deriveTraces,
-  deriveTransactions,
-  deriveVirtHosts,
-  deriveWorkers,
-} from '../../utils/mockOpsData';
+import { NO_DATA_MESSAGE } from '../../utils/emptyState';
+import { getOpsSectionData } from '../../api/client';
 
 interface OpsSectionContentProps {
+  dashboardId: string;
   section: OpsDashboardSection;
   entities: OpsEntity[];
+  perspective?: 'service' | 'platform';
   onEntityClick?: (entity: OpsEntity) => void;
+  noData?: boolean;
 }
 
 type Row = any;
@@ -64,21 +40,25 @@ function EntityTable({
   columns,
   entities,
   onEntityClick,
+  noData = false,
 }: {
   section: OpsDashboardSection;
   rows: Row[];
   columns: { key: string; header: string; render?: (row: Row) => ReactNode }[];
   entities: OpsEntity[];
   onEntityClick?: (entity: OpsEntity) => void;
+  noData?: boolean;
 }) {
   const tableTitle = section.widgets[0]?.title ?? section.label;
 
-  if (rows.length === 0) {
+  if (rows.length === 0 || noData) {
     return (
-      <OpsSectionShell section={section} rows={rows}>
+      <OpsSectionShell section={section} rows={[]} noData={noData}>
         <Card>
           <CardHeader><CardTitle>{tableTitle}</CardTitle></CardHeader>
-          <p className="px-5 pb-5 text-sm text-text-secondary">No entities in this category yet. Connect integrations to populate inventory.</p>
+          <p className="px-5 pb-5 text-sm text-text-secondary">
+            {noData ? NO_DATA_MESSAGE : 'No entities in this category yet. Connect integrations to populate inventory.'}
+          </p>
         </Card>
       </OpsSectionShell>
     );
@@ -116,9 +96,38 @@ function EntityTable({
   );
 }
 
-export default function OpsSectionContent({ section, entities, onEntityClick }: OpsSectionContentProps) {
+export default function OpsSectionContent({
+  dashboardId,
+  section,
+  entities,
+  perspective,
+  onEntityClick,
+  noData = false,
+}: OpsSectionContentProps) {
   const widget = section.widgets[0];
   const key = widget?.derive_key ?? section.id;
+  const [apiRows, setApiRows] = useState<Row[]>([]);
+
+  useEffect(() => {
+    if (noData || section.id === 'dependencies' || section.id === 'incidents') {
+      setApiRows([]);
+      return;
+    }
+    getOpsSectionData(dashboardId, key, perspective)
+      .then((res) => setApiRows((res.rows ?? []) as Row[]))
+      .catch(() => setApiRows([]));
+  }, [dashboardId, key, perspective, noData, section.id]);
+
+  if (noData || !entities.length) {
+    return (
+      <OpsSectionShell section={section} rows={[]} noData={noData}>
+        <Card className="shadow-sm">
+          <CardHeader><CardTitle>{section.label}</CardTitle></CardHeader>
+          <p className="px-5 pb-5 text-sm text-text-secondary">{NO_DATA_MESSAGE}</p>
+        </Card>
+      </OpsSectionShell>
+    );
+  }
 
   if (section.id === 'dependencies') {
     const rows = entities.map((e) => ({ id: e.id, health: e.health }));
@@ -172,7 +181,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
 
   switch (key) {
     case 'business_services': {
-      const rows = deriveBusinessServices(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows}
           entities={entities}
@@ -189,7 +198,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'applications': {
-      const rows = deriveApplications(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows}
           entities={entities}
@@ -206,7 +215,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'apis': {
-      const rows = deriveAPIs(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows}
           entities={entities}
@@ -222,7 +231,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'workers': {
-      const rows = deriveWorkers(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Worker' }, { key: 'msgRate', header: 'Msg/s' }, { key: 'consumerLag', header: 'Lag' }, statusCol,
@@ -230,7 +239,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'batch_jobs': {
-      const rows = deriveBatchJobs(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Job' }, { key: 'schedule', header: 'Schedule' }, { key: 'lastRun', header: 'Last Run' }, { key: 'status', header: 'Status' },
@@ -238,7 +247,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'pipelines': {
-      const rows = deriveDataPipelines(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Pipeline' }, { key: 'type', header: 'Type' }, { key: 'throughput', header: 'Throughput' }, statusCol,
@@ -246,7 +255,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'ai_services': {
-      const rows = deriveAIServices(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Service' }, { key: 'model', header: 'Model' }, { key: 'latencyMs', header: 'Latency' }, statusCol,
@@ -254,7 +263,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'transactions': {
-      const rows = deriveTransactions(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Transaction' }, { key: 'volume', header: 'Volume' }, { key: 'completionRate', header: 'Completion %' }, statusCol,
@@ -262,7 +271,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'traces': {
-      const rows = deriveTraces(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'rootPath', header: 'Operation' }, { key: 'service', header: 'Service' }, { key: 'durationMs', header: 'Duration' }, { key: 'status', header: 'Status' },
@@ -270,7 +279,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'slos': {
-      const rows = deriveSLOs(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'SLO' }, { key: 'target', header: 'Target' }, { key: 'current', header: 'Current' }, { key: 'burnRate', header: 'Burn Rate' }, { key: 'status', header: 'Status' },
@@ -278,7 +287,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'deployments': {
-      const rows = deriveDeployments(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'service', header: 'Service' }, { key: 'version', header: 'Version' }, { key: 'timestamp', header: 'When' }, { key: 'status', header: 'Status' },
@@ -286,7 +295,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'security': {
-      const rows = deriveSecurityFindings(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'cve', header: 'CVE' }, { key: 'service', header: 'Service' }, { key: 'severity', header: 'Severity' }, { key: 'status', header: 'Status' },
@@ -294,7 +303,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'costs': {
-      const rows = deriveCosts(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'service', header: 'Service' }, { key: 'monthlyCostUSD', header: 'Monthly $' }, { key: 'idleWastedUSD', header: 'Idle Waste' },
@@ -302,7 +311,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'inventory': {
-      const rows = deriveInventory(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Resource' }, { key: 'type', header: 'Type' }, { key: 'platform', header: 'Platform' }, { key: 'region', header: 'Region' }, healthCol,
@@ -310,7 +319,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'compute_hosts': {
-      const rows = deriveComputeHosts(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Host' }, { key: 'provider', header: 'Provider' }, { key: 'cpuUsagePct', header: 'CPU %' }, { key: 'memoryUsagePct', header: 'Memory %' }, healthCol,
@@ -318,7 +327,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'k8s_pods': {
-      const rows = deriveK8sPods(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Pod' }, { key: 'namespace', header: 'Namespace' }, { key: 'node', header: 'Node' }, { key: 'status', header: 'Status' }, healthCol,
@@ -326,7 +335,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'cloud_accounts': {
-      const rows = deriveCloudAccounts(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'accountName', header: 'Account' }, { key: 'provider', header: 'Provider' }, { key: 'regionsActive', header: 'Regions' }, { key: 'monthlySpendUSD', header: 'Spend/mo' },
@@ -334,7 +343,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'virtualization': {
-      const rows = deriveVirtHosts(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Hypervisor' }, { key: 'hypervisor', header: 'Platform' }, { key: 'vmsCount', header: 'VMs' }, statusCol,
@@ -342,7 +351,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'networking': {
-      const rows = deriveNetworking(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Resource' }, { key: 'type', header: 'Type' }, { key: 'latencyMs', header: 'Latency' }, statusCol,
@@ -350,7 +359,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'storage': {
-      const rows = deriveStorageVolumes(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Volume' }, { key: 'type', header: 'Type' }, { key: 'capacityUsedPct', header: 'Used %' }, healthCol,
@@ -358,7 +367,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'runtime': {
-      const rows = deriveRuntime(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Runtime' }, { key: 'heapPct', header: 'Heap %' }, { key: 'threads', header: 'Threads' }, { key: 'gcPauseMs', header: 'GC Pause' }, healthCol,
@@ -366,7 +375,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'databases': {
-      const rows = deriveDatabases(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Database' }, { key: 'engine', header: 'Engine' }, { key: 'connectionsActive', header: 'Connections' }, { key: 'avgQueryTimeMs', header: 'Query ms' }, healthCol,
@@ -374,7 +383,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'messaging': {
-      const rows = deriveMessaging(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Broker' }, { key: 'type', header: 'Type' }, { key: 'consumerLag', header: 'Lag' }, healthCol,
@@ -382,7 +391,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'data_platforms': {
-      const rows = deriveDataPlatforms(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Platform' }, { key: 'platform', header: 'Technology' }, { key: 'throughput', header: 'Throughput' }, statusCol,
@@ -390,7 +399,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'serverless': {
-      const rows = deriveServerless(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'name', header: 'Function' }, { key: 'provider', header: 'Provider' }, { key: 'invocations', header: 'Invocations' }, healthCol,
@@ -398,7 +407,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'platform_security': {
-      const rows = derivePlatformSecurity(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'cve', header: 'Finding' }, { key: 'category', header: 'Category' }, { key: 'severity', header: 'Severity' }, { key: 'status', header: 'Status' },
@@ -406,7 +415,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
       );
     }
     case 'platform_cost': {
-      const rows = derivePlatformCost(entities);
+      const rows = apiRows;
       return (
         <EntityTable section={section} rows={rows} entities={entities} onEntityClick={onEntityClick} columns={[
           { key: 'account', header: 'Account' }, { key: 'provider', header: 'Provider' }, { key: 'monthlySpendUSD', header: 'Spend' }, { key: 'forecastUSD', header: 'Forecast' },
@@ -415,7 +424,7 @@ export default function OpsSectionContent({ section, entities, onEntityClick }: 
     }
     case 'capacity_charts':
     case 'platform_score': {
-      const forecasts = deriveCapacityForecasts(entities);
+      const forecasts = apiRows;
       return (
         <EntityTable section={section} rows={forecasts}
           entities={entities}

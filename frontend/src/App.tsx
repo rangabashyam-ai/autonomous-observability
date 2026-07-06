@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import Layout from './components/Layout';
-import ExecutiveCommandCenter from './pages/ExecutiveCommandCenter';
-import ServiceOperationsCenter from './pages/ServiceOperationsCenter';
-import TechnicalPlatformView from './pages/TechnicalPlatformView';
+
+const ExecutiveCommandCenter = lazy(() => import('./pages/ExecutiveCommandCenter'));
+const ServiceOperationsCenter = lazy(() => import('./pages/ServiceOperationsCenter'));
+const TechnicalPlatformView = lazy(() => import('./pages/TechnicalPlatformView'));
 import AIOperationsCopilot from './pages/AIOperationsCopilot';
 import DependencyMapPage from './pages/DependencyMapPage';
 import IncidentExplorer from './pages/IncidentExplorer';
@@ -22,9 +24,30 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<ExecutiveCommandCenter />} />
-          <Route path="operations" element={<ServiceOperationsCenter />} />
-          <Route path="platform" element={<TechnicalPlatformView />} />
+          <Route
+            index
+            element={
+              <Suspense fallback={<p className="text-text-secondary text-sm">Loading executive command center...</p>}>
+                <ExecutiveCommandCenter />
+              </Suspense>
+            }
+          />
+          <Route
+            path="operations"
+            element={
+              <Suspense fallback={<p className="text-text-secondary text-sm">Loading service operations center...</p>}>
+                <ServiceOperationsCenter />
+              </Suspense>
+            }
+          />
+          <Route
+            path="platform"
+            element={
+              <Suspense fallback={<p className="text-text-secondary text-sm">Loading platform operations view...</p>}>
+                <TechnicalPlatformView />
+              </Suspense>
+            }
+          />
           <Route path="copilot" element={<AIOperationsCopilot />} />
           {/* Drilldown routes */}
           <Route path="services/:serviceId" element={<ServiceDetailPage />} />

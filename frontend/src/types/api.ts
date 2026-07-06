@@ -37,6 +37,7 @@ export interface DependencyGraph {
   edges: GraphEdge[];
   node_count: number;
   edge_count: number;
+  dataset_available?: boolean;
 }
 
 export interface DependencyPath {

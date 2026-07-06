@@ -19,15 +19,15 @@ import {
   executeInvestigation,
   getDependencyGraph,
 } from '../api/client';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
 import type { CopilotContextPayload, CopilotResponse } from '../ai/types';
 import type { Investigation, InvestigationStep } from '../types/intelligence';
 
-/* ─── Preset scenarios ──────────────────────────────────────────────────── */
-const PRESETS = [
+/* ─── Preset scenarios (populated from live services when available) ─── */
+const PRESET_TEMPLATES = [
   {
     alerts: ['CPU Saturation', 'API Error Spike'],
     symptoms: ['Latency Increase', 'Retry Storm'],
-    service: 'payment-authorization',
     icon: '💳',
     color: 'from-violet-500 to-purple-700',
     glowColor: 'shadow-violet-500/25',
@@ -35,7 +35,6 @@ const PRESETS = [
   {
     alerts: ['Queue Buildup Alert', 'CPU Saturation'],
     symptoms: ['Queue Buildup', 'Latency Increase'],
-    service: 'settlement-processing',
     icon: '⚙️',
     color: 'from-blue-500 to-cyan-600',
     glowColor: 'shadow-blue-500/25',
@@ -43,7 +42,6 @@ const PRESETS = [
   {
     alerts: ['Packet Loss'],
     symptoms: ['Timeout Increase', 'Connection Refused'],
-    service: 'api-gateway-services',
     icon: '🌐',
     color: 'from-emerald-500 to-teal-600',
     glowColor: 'shadow-emerald-500/25',
@@ -231,8 +229,8 @@ export default function InvestigationWorkflow() {
   }, []);
 
   const dynamicPresets = useMemo(() => {
-    if (services.length === 0) return PRESETS;
-    return PRESETS.map((p, idx) => {
+    if (services.length === 0) return [];
+    return PRESET_TEMPLATES.map((p, idx) => {
       const svc = services[idx % services.length];
       return { ...p, service: svc };
     });
@@ -442,8 +440,13 @@ export default function InvestigationWorkflow() {
         </p>
       </div>
 
+      {services.length === 0 && <DatasetUploadBanner />}
+
       {/* ── Preset cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {dynamicPresets.length === 0 && (
+          <p className="col-span-full text-sm text-text-secondary">Please Connect your Data Source to load investigation presets.</p>
+        )}
         {dynamicPresets.map((p, i) => (
           <motion.button
             key={i}

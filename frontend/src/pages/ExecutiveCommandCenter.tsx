@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMonitoringDashboard, getOverview } from '../api/client';
+import { getMonitoringDashboard, getOverview, getDependencyGraph, getTimeseries } from '../api/client';
 import { useRegisterCopilotContext } from '../ai/context/CopilotProvider';
 import type { Overview } from '../types/intelligence';
 import type { MonitoringDashboard } from '../types/api';
@@ -8,46 +8,82 @@ import { PageHeader, Grid12, CollapsibleSection } from '../components/ui/layout-
 import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge, HealthBadge } from '../components/ui/badge';
-import { generateDualTrend, TrendChart } from '../components/charts/charts';
-import { RegionalHealthMap, UtilizationBar } from '../components/dashboard/visualizations';
+import { TrendChart } from '../components/charts/charts';
+import { RegionalHealthMap, UtilizationBar, type RegionalHealthPoint } from '../components/dashboard/visualizations';
 import { Sparkles, Activity, ShieldAlert, TrendingUp, Users, Zap, ExternalLink, ChevronRight } from 'lucide-react';
 import DrilldownDrawer, { DrilldownSection, DrilldownMetricCard, DrilldownButton } from '../components/drilldown/DrilldownDrawer';
 import InlineCopilot from '../components/copilot/InlineCopilot';
 import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE, EMPTY_OVERVIEW } from '../utils/emptyState';
+import { cn } from '../lib/cn';
 
 export default function ExecutiveCommandCenter() {
   const navigate = useNavigate();
   const [monitoring, setMonitoring] = useState<MonitoringDashboard | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeDrawer, setActiveDrawer] = useState<'health' | 'revenue' | 'incidents' | 'sla' | 'customers' | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<{ id: string; label: string; x: number; y: number; health: 'healthy' | 'warning' | 'critical' } | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionalHealthPoint & { x: number; y: number } | null>(null);
+  const [regionalHealth, setRegionalHealth] = useState<RegionalHealthPoint[]>([]);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([getMonitoringDashboard(), getOverview()])
       .then(([m, o]) => {
         setMonitoring(m);
         setOverview(o);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const exec = monitoring?.executive;
   const services = monitoring?.service?.services ?? [];
+  const overviewData = overview ?? EMPTY_OVERVIEW;
 
   const regionServiceMap = useMemo(() => {
-    const map: Record<string, string[]> = {
-      'ap-northeast': [],
-      'eu-west': [],
-      'us-east': [],
-      'us-west': [],
-    };
-    services.forEach((s: any, idx: number) => {
-      const regions = ['ap-northeast', 'eu-west', 'us-east', 'us-west'];
-      const r = regions[idx % regions.length];
-      map[r].push(s.id);
+    const map: Record<string, string[]> = {};
+    services.forEach((s: { id: string; region?: string }) => {
+      const region = s.region;
+      if (!region) return;
+      if (!map[region]) map[region] = [];
+      map[region].push(s.id);
     });
     return map;
   }, [services]);
+
+  useEffect(() => {
+    if (monitoring?.dataset_available === false) {
+      setRegionalHealth([]);
+      return;
+    }
+    getDependencyGraph(['microservice', 'aws', 'gcp', 'azure'], 'risk_score')
+      .then((graph) => {
+        if (graph.dataset_available === false || !graph.nodes.length) {
+          setRegionalHealth([]);
+          return;
+        }
+        const byRegion = new Map<string, { health: 'healthy' | 'warning' | 'critical'; label: string }>();
+        const rank = (h: string) => (h === 'critical' ? 3 : h === 'warning' ? 2 : 1);
+        for (const node of graph.nodes) {
+          const regionId = node.region;
+          if (!regionId) continue;
+          const health = (node.health === 'critical' || node.health === 'warning' ? node.health : 'healthy') as 'healthy' | 'warning' | 'critical';
+          const existing = byRegion.get(regionId);
+          if (!existing || rank(health) > rank(existing.health)) {
+            byRegion.set(regionId, { health, label: regionId });
+          }
+        }
+        setRegionalHealth(
+          Array.from(byRegion.entries()).map(([id, data]) => ({
+            id,
+            label: data.label,
+            health: data.health,
+          }))
+        );
+      })
+      .catch(() => setRegionalHealth([]));
+  }, [monitoring?.dataset_available]);
 
   const businessHealth = useMemo(() => {
     if (!exec) return 0;
@@ -61,9 +97,10 @@ export default function ExecutiveCommandCenter() {
   }, [exec]);
 
   const aiSummary = useMemo(() => {
+    if (monitoring?.dataset_available === false) return NO_DATA_MESSAGE;
     if (!exec || !overview) return '';
     const atRisk = exec.services_at_risk;
-    const warnings = overview.summary.early_warnings;
+    const warnings = overviewData.summary.early_warnings;
     if (atRisk > 0 && warnings > 0) {
       return `Service performance is stable overall; ${atRisk} service${atRisk > 1 ? 's' : ''} at risk with ${warnings} early warning${warnings > 1 ? 's' : ''} active. Revenue exposure has decreased following recent DB migration.`;
     }
@@ -71,14 +108,29 @@ export default function ExecutiveCommandCenter() {
       return `${atRisk} business-critical service${atRisk > 1 ? 's' : ''} require attention. SLA compliance remains within target at ${exec.sla_compliance.toFixed(1)}%.`;
     }
     return 'All business services operating within SLA targets. No critical revenue impact detected in the last 24 hours.';
-  }, [exec, overview]);
-  const kpiTrend = useMemo(
-    () => generateDualTrend(exec?.service_availability ?? 99, exec?.transaction_success_rate ?? 98),
-    [exec?.service_availability, exec?.transaction_success_rate]
-  );
+  }, [exec, overview, overviewData, monitoring?.dataset_available]);
+  const [kpiTrend, setKpiTrend] = useState<{ name: string; value: number; value2?: number }[]>([]);
+
+  useEffect(() => {
+    if (monitoring?.dataset_available === false) {
+      setKpiTrend([]);
+      return;
+    }
+    getTimeseries('business_kpi')
+      .then((res) => {
+        setKpiTrend(
+          (res.points ?? []).map((p) => ({
+            name: String(p.t),
+            value: p.v,
+            value2: (p as { v2?: number }).v2,
+          })),
+        );
+      })
+      .catch(() => setKpiTrend([]));
+  }, [monitoring?.dataset_available]);
 
   const copilotContext = useMemo(() => {
-    if (!monitoring || !overview) return null;
+    if (!monitoring) return null;
     const execData = monitoring.executive;
     return {
       pageType: 'executive' as const,
@@ -91,21 +143,24 @@ export default function ExecutiveCommandCenter() {
         customer_impact: execData?.customer_impact_count,
         service_health: services.map((s) => ({ id: s.id, name: s.name, health: s.health, availability: s.availability })),
       },
-      relatedAlerts: overview.open_alerts_preview ?? [],
-      relatedIncidents: overview.recent_incidents ?? [],
+      relatedAlerts: overviewData.open_alerts_preview ?? [],
+      relatedIncidents: overviewData.recent_incidents ?? [],
       relatedMetrics: {
         business_health: businessHealth,
         transaction_success_rate: execData?.transaction_success_rate,
         service_availability: execData?.service_availability,
       },
     };
-  }, [monitoring, overview, services, businessHealth]);
+  }, [monitoring, overviewData, services, businessHealth]);
 
   useRegisterCopilotContext(copilotContext);
 
-  if (!monitoring || !overview || !exec) {
+  if (loading) {
     return <p className="text-text-secondary text-sm">Loading executive command center...</p>;
   }
+
+  const monitoringData = monitoring!;
+  const noData = monitoringData.dataset_available === false;
 
   return (
     <div>
@@ -114,47 +169,45 @@ export default function ExecutiveCommandCenter() {
         description="Business visibility across service health, revenue risk, and customer impact"
       />
 
-      {monitoring.dataset_available === false && (
-        <DatasetUploadBanner onUploadSuccess={() => window.location.reload()} />
-      )}
+      {noData && <DatasetUploadBanner />}
 
       <Grid12 className="mb-4">
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Business Health Score"
-            value={`${businessHealth}%`}
-            variant={businessHealth >= 95 ? 'success' : businessHealth >= 85 ? 'warning' : 'critical'}
+            value={noData ? 'N/A' : `${businessHealth}%`}
+            variant={noData ? 'default' : businessHealth >= 95 ? 'success' : businessHealth >= 85 ? 'warning' : 'critical'}
             sub="Composite SLA + availability"
-            trend={1.2}
-            onClick={() => setActiveDrawer('health')}
+            trend={noData ? undefined : 1.2}
+            onClick={noData ? undefined : () => setActiveDrawer('health')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Active Incidents"
-            value={exec!.active_incidents}
-            variant={exec!.active_incidents > 0 ? 'critical' : 'success'}
-            sub={`${overview.summary.open_alerts} open alerts`}
-            onClick={() => setActiveDrawer('incidents')}
+            value={noData ? 'N/A' : exec!.active_incidents}
+            variant={noData ? 'default' : exec!.active_incidents > 0 ? 'critical' : 'success'}
+            sub={noData ? '—' : `${overviewData.summary.open_alerts} open alerts`}
+            onClick={noData ? undefined : () => setActiveDrawer('incidents')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="SLA Compliance"
-            value={`${exec!.sla_compliance.toFixed(2)}%`}
-            variant="success"
+            value={noData ? 'N/A' : `${exec!.sla_compliance.toFixed(2)}%`}
+            variant={noData ? 'default' : 'success'}
             sub="Rolling 30-day window"
-            trend={0.08}
-            onClick={() => setActiveDrawer('sla')}
+            trend={noData ? undefined : 0.08}
+            onClick={noData ? undefined : () => setActiveDrawer('sla')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 lg:col-span-3">
           <MetricCard
             label="Customers Impacted"
-            value={exec!.customer_impact_count.toLocaleString()}
-            variant={exec!.customer_impact_count > 50 ? 'warning' : 'default'}
+            value={noData ? 'N/A' : exec!.customer_impact_count.toLocaleString()}
+            variant={noData ? 'default' : exec!.customer_impact_count > 50 ? 'warning' : 'default'}
             sub="Across all active incidents"
-            onClick={() => setActiveDrawer('customers')}
+            onClick={noData ? undefined : () => setActiveDrawer('customers')}
           />
         </div>
       </Grid12>
@@ -186,15 +239,21 @@ export default function ExecutiveCommandCenter() {
               <CardHeader>
                 <CardTitle>Business Impact Trends</CardTitle>
               </CardHeader>
-              <TrendChart data={kpiTrend} height={140} color="#3B82F6" color2="#10B981" />
-              <div className="flex gap-4 mt-2 text-[10px] text-text-secondary">
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-primary" /> Availability
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-success" /> Success Rate
-                </span>
-              </div>
+              {noData ? (
+                <p className="text-sm text-text-secondary py-8 text-center">{NO_DATA_MESSAGE}</p>
+              ) : (
+                <>
+                  <TrendChart data={kpiTrend} height={140} color="#3B82F6" color2="#10B981" />
+                  <div className="flex gap-4 mt-2 text-[10px] text-text-secondary">
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-primary" /> Availability
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-success" /> Success Rate
+                    </span>
+                  </div>
+                </>
+              )}
             </Card>
           </div>
         </Grid12>
@@ -216,22 +275,28 @@ export default function ExecutiveCommandCenter() {
                   </Link>
                 </CardHeader>
                 <div className="space-y-1">
-                  {services.slice(0, 6).map((svc) => (
-                    <Link
-                      key={svc.id}
-                      to={`/services/${svc.id}`}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-card-hover transition-all duration-200 cursor-pointer group"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-text-primary group-hover:text-primary transition-colors truncate">{svc.name}</p>
-                        <UtilizationBar label="" value={svc.availability} max={100} variant="availability" />
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <HealthBadge health={svc.health} />
-                        <ChevronRight className="h-3.5 w-3.5 text-text-secondary/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </Link>
-                  ))}
+                  {noData ? (
+                    <p className="text-sm text-text-secondary py-6 text-center">{NO_DATA_MESSAGE}</p>
+                  ) : services.length === 0 ? (
+                    <p className="text-sm text-text-secondary py-6 text-center">No services available</p>
+                  ) : (
+                    services.slice(0, 6).map((svc) => (
+                      <Link
+                        key={svc.id}
+                        to={`/services/${svc.id}`}
+                        className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-card-hover transition-all duration-200 cursor-pointer group"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-text-primary group-hover:text-primary transition-colors truncate">{svc.name}</p>
+                          <UtilizationBar label="" value={svc.availability} max={100} variant="availability" />
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <HealthBadge health={svc.health} />
+                          <ChevronRight className="h-3.5 w-3.5 text-text-secondary/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </Link>
+                    ))
+                  )}
                 </div>
               </Card>
             </div>
@@ -242,19 +307,27 @@ export default function ExecutiveCommandCenter() {
                 </CardHeader>
                 <RegionalHealthMap
                   className="h-[180px]"
-                  onRegionClick={(r) => setSelectedRegion(r)}
+                  noData={noData}
+                  regions={regionalHealth}
+                  onRegionClick={noData ? undefined : (r) => setSelectedRegion(r)}
                 />
-                <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-success" /> Healthy
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-warning" /> Warning
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-critical" /> Critical
-                  </span>
-                </div>
+                {noData ? (
+                  <p className="text-sm text-text-secondary mt-3 text-center">{NO_DATA_MESSAGE}</p>
+                ) : regionalHealth.length === 0 ? (
+                  <p className="text-sm text-text-secondary mt-3 text-center">No regional health data available</p>
+                ) : (
+                  <div className="flex gap-3 mt-3 text-[10px] text-text-secondary">
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-success" /> Healthy
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-warning" /> Warning
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-critical" /> Critical
+                    </span>
+                  </div>
+                )}
               </Card>
             </div>
             <div className="col-span-12 lg:col-span-4">
@@ -266,31 +339,34 @@ export default function ExecutiveCommandCenter() {
                   {[
                     {
                       label: 'Transaction Volume',
-                      value: services.reduce((a, s) => a + s.transaction_volume, 0),
-                      onClick: () => setActiveDrawer('health')
+                      value: noData ? 'N/A' : services.reduce((a, s) => a + s.transaction_volume, 0),
+                      onClick: noData ? undefined : () => setActiveDrawer('health')
                     },
                     {
                       label: 'Success Rate',
-                      value: `${exec!.transaction_success_rate.toFixed(1)}%`,
-                      onClick: () => setActiveDrawer('health')
+                      value: noData ? 'N/A' : `${exec!.transaction_success_rate.toFixed(1)}%`,
+                      onClick: noData ? undefined : () => setActiveDrawer('health')
                     },
                     {
                       label: 'Services at Risk',
-                      value: exec!.services_at_risk,
-                      alert: true,
-                      onClick: () => setActiveDrawer('health')
+                      value: noData ? 'N/A' : exec!.services_at_risk,
+                      alert: !noData,
+                      onClick: noData ? undefined : () => setActiveDrawer('health')
                     },
                     {
                       label: 'Early Warnings',
-                      value: overview.summary.early_warnings,
-                      alert: overview.summary.early_warnings > 0,
-                      onClick: () => navigate('/early-detection')
+                      value: noData ? 'N/A' : overviewData.summary.early_warnings,
+                      alert: !noData && overviewData.summary.early_warnings > 0,
+                      onClick: noData ? undefined : () => navigate('/early-detection')
                     },
                   ].map((kpi) => (
                     <div
                       key={kpi.label}
                       onClick={kpi.onClick}
-                      className="rounded-lg border border-border bg-background p-3 transition-all duration-200 hover:bg-card-hover hover:border-primary/30 hover:shadow-sm cursor-pointer"
+                      className={cn(
+                        'rounded-lg border border-border bg-background p-3 transition-all duration-200',
+                        kpi.onClick && 'hover:bg-card-hover hover:border-primary/30 hover:shadow-sm cursor-pointer'
+                      )}
                     >
                       <p className="text-[10px] text-text-secondary">{kpi.label}</p>
                       <p className={`text-lg font-semibold mt-1 ${kpi.alert ? 'text-critical' : 'text-text-primary'}`}>
@@ -514,8 +590,8 @@ export default function ExecutiveCommandCenter() {
               />
               <DrilldownMetricCard
                 label="Open Alerts"
-                value={overview.summary.open_alerts}
-                status={overview.summary.open_alerts > 0 ? 'warning' : 'good'}
+                value={overviewData.summary.open_alerts}
+                status={overviewData.summary.open_alerts > 0 ? 'warning' : 'good'}
                 onClick={() => {
                   document.getElementById('active-incidents-list-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -524,11 +600,11 @@ export default function ExecutiveCommandCenter() {
 
             <div id="active-incidents-list-section">
               <DrilldownSection title="Active Incidents List" icon={<ShieldAlert className="w-4 h-4" />}>
-                {overview.recent_incidents.slice(0, exec!.active_incidents).length === 0 ? (
+                {overviewData.recent_incidents.slice(0, exec!.active_incidents).length === 0 ? (
                   <p className="text-xs text-text-secondary">No active incidents found.</p>
                 ) : (
                   <div className="space-y-3">
-                    {overview.recent_incidents.slice(0, exec!.active_incidents).map(inc => (
+                    {overviewData.recent_incidents.slice(0, exec!.active_incidents).map(inc => (
                       <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-critical/30 bg-critical/10 text-critical`}>
@@ -559,9 +635,9 @@ export default function ExecutiveCommandCenter() {
                 selectedEntity="Active Incidents"
                 entityData={{
                   active_incidents_count: exec!.active_incidents,
-                  incidents: overview.recent_incidents.slice(0, exec!.active_incidents),
+                  incidents: overviewData.recent_incidents.slice(0, exec!.active_incidents),
                 }}
-                relatedIncidents={overview.recent_incidents.slice(0, exec!.active_incidents)}
+                relatedIncidents={overviewData.recent_incidents.slice(0, exec!.active_incidents)}
                 suggestedQuestions={[
                   "Can you explain the root cause of these active incidents?",
                   "What is the estimated time to resolution?",
@@ -658,7 +734,7 @@ export default function ExecutiveCommandCenter() {
             <div id="customer-impact-breakdown-section">
               <DrilldownSection title="Impact Breakdown per Incident" icon={<Users className="w-4 h-4" />}>
                 {(() => {
-                  const activeIncidents = overview.recent_incidents.slice(0, exec!.active_incidents);
+                  const activeIncidents = overviewData.recent_incidents.slice(0, exec!.active_incidents);
                   const totalImpact = exec!.customer_impact_count;
                   return activeIncidents.length === 0 ? (
                     <p className="text-xs text-text-secondary">No active incident impact detected.</p>
@@ -701,8 +777,8 @@ export default function ExecutiveCommandCenter() {
                 entityData={{
                   total_customer_impact: exec!.customer_impact_count,
                   active_incidents_count: exec!.active_incidents,
-                  breakdown: overview.recent_incidents.slice(0, exec!.active_incidents).map((inc, index) => {
-                    const activeIncidents = overview.recent_incidents.slice(0, exec!.active_incidents);
+                  breakdown: overviewData.recent_incidents.slice(0, exec!.active_incidents).map((inc, index) => {
+                    const activeIncidents = overviewData.recent_incidents.slice(0, exec!.active_incidents);
                     const totalImpact = exec!.customer_impact_count;
                     const allocated = activeIncidents.length === 1 ? totalImpact : index === 0 ? Math.round(totalImpact * 0.63) : totalImpact - Math.round(totalImpact * 0.63);
                     return {
@@ -714,7 +790,7 @@ export default function ExecutiveCommandCenter() {
                     };
                   })
                 }}
-                relatedIncidents={overview.recent_incidents.slice(0, exec!.active_incidents)}
+                relatedIncidents={overviewData.recent_incidents.slice(0, exec!.active_incidents)}
                 suggestedQuestions={[
                   "Which incident affects the largest number of users?",
                   "How is user impact calculated?",
@@ -738,76 +814,40 @@ export default function ExecutiveCommandCenter() {
         {selectedRegion && (
           <div>
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <DrilldownMetricCard
-                label="Regional SLA / Availability"
-                value={selectedRegion.health === 'critical' ? '98.54%' : selectedRegion.health === 'warning' ? '99.41%' : '99.98%'}
-                status={selectedRegion.health === 'critical' ? 'critical' : selectedRegion.health === 'warning' ? 'warning' : 'good'}
-              />
-              <DrilldownMetricCard
-                label="Average P99 Latency"
-                value={selectedRegion.health === 'critical' ? '242.5ms' : selectedRegion.health === 'warning' ? '184.2ms' : '88.1ms'}
-                status={selectedRegion.health === 'critical' ? 'critical' : selectedRegion.health === 'warning' ? 'warning' : 'good'}
-              />
+              {(() => {
+                const regionalServices = services.filter((s) => regionServiceMap[selectedRegion.id]?.includes(s.id));
+                const avgAvail = regionalServices.length
+                  ? regionalServices.reduce((a, s) => a + s.availability, 0) / regionalServices.length
+                  : null;
+                const avgLatency = regionalServices.length
+                  ? regionalServices.reduce((a, s) => a + s.latency_p99_ms, 0) / regionalServices.length
+                  : null;
+                return (
+                  <>
+                    <DrilldownMetricCard
+                      label="Regional SLA / Availability"
+                      value={avgAvail != null ? `${avgAvail.toFixed(2)}%` : 'N/A'}
+                      status={avgAvail == null ? undefined : avgAvail >= 99.9 ? 'good' : avgAvail >= 99 ? 'warning' : 'critical'}
+                    />
+                    <DrilldownMetricCard
+                      label="Average P99 Latency"
+                      value={avgLatency != null ? `${avgLatency.toFixed(1)}ms` : 'N/A'}
+                      status={avgLatency == null ? undefined : avgLatency <= 100 ? 'good' : avgLatency <= 200 ? 'warning' : 'critical'}
+                    />
+                  </>
+                );
+              })()}
             </div>
 
             <DrilldownSection title="Active Incidents in Region" icon={<ShieldAlert className="w-4 h-4" />}>
-              {selectedRegion.health === 'healthy' ? (
-                <p className="text-xs text-text-secondary">No active incidents in this region.</p>
-              ) : (
-                <div className="space-y-3">
-                  {overview.recent_incidents
-                    .filter(inc => {
-                      if (selectedRegion.id === 'ap-northeast') {
-                        return inc.service.includes('Settlement') || inc.service.includes('Partner');
-                      }
-                      if (selectedRegion.id === 'eu-west') {
-                        return inc.service.includes('Payment') || inc.service.includes('Merchant');
-                      }
-                      return false;
-                    })
-                    .slice(0, 1)
-                    .map(inc => (
-                      <div key={inc.incident_id} className="p-3 rounded-lg border border-border bg-background">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-critical/30 bg-critical/10 text-critical">
-                            {inc.severity}
-                          </span>
-                          <span className="text-[10px] text-text-secondary">{inc.service}</span>
-                        </div>
-                        <p className="text-xs font-semibold text-text-primary mb-1">{inc.title}</p>
-                        <p className="text-[10px] text-text-secondary mb-3"><span className="font-medium">Root Cause:</span> {inc.root_cause}</p>
-                        <div className="flex gap-2">
-                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/rca?id=${inc.incident_id}`); }} variant="primary">
-                            View RCA
-                          </DrilldownButton>
-                          <DrilldownButton onClick={() => { setSelectedRegion(null); navigate(`/blast-radius?id=${inc.incident_id}`); }} variant="secondary">
-                            Blast Radius
-                          </DrilldownButton>
-                        </div>
-                      </div>
-                    ))}
-                  {overview.recent_incidents.filter(inc => {
-                    if (selectedRegion.id === 'ap-northeast') return inc.service.includes('Settlement') || inc.service.includes('Partner');
-                    if (selectedRegion.id === 'eu-west') return inc.service.includes('Payment') || inc.service.includes('Merchant');
-                    return false;
-                  }).length === 0 && (
-                      <p className="text-xs text-text-secondary">Incident details currently compiling. Review overall incidents explorer.</p>
-                    )}
-                </div>
-              )}
+              <p className="text-xs text-text-secondary">No regional incident data available for this zone.</p>
             </DrilldownSection>
 
             <DrilldownSection title="Regional Services Status" icon={<Activity className="w-4 h-4" />}>
               <div className="space-y-3">
                 {services
-                  .filter(s => {
-                    if (selectedRegion.id === 'ap-northeast') return regionServiceMap['ap-northeast'].includes(s.id);
-                    if (selectedRegion.id === 'eu-west') return regionServiceMap['eu-west'].includes(s.id);
-                    if (selectedRegion.id === 'us-east') return regionServiceMap['us-east'].includes(s.id);
-                    if (selectedRegion.id === 'us-west') return regionServiceMap['us-west'].includes(s.id);
-                    return s.health !== 'healthy';
-                  })
-                  .map(s => (
+                  .filter((s) => regionServiceMap[selectedRegion.id]?.includes(s.id))
+                  .map((s) => (
                     <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
                       <div>
                         <p className="text-sm font-semibold text-text-primary">{s.name}</p>
@@ -821,14 +861,8 @@ export default function ExecutiveCommandCenter() {
                       </div>
                     </div>
                   ))}
-                {services.filter(s => {
-                  if (selectedRegion.id === 'ap-northeast') return regionServiceMap['ap-northeast'].includes(s.id);
-                  if (selectedRegion.id === 'eu-west') return regionServiceMap['eu-west'].includes(s.id);
-                  if (selectedRegion.id === 'us-east') return regionServiceMap['us-east'].includes(s.id);
-                  if (selectedRegion.id === 'us-west') return regionServiceMap['us-west'].includes(s.id);
-                  return s.health !== 'healthy';
-                }).length === 0 && (
-                    <p className="text-xs text-text-secondary">No regional microservice constraints active. Standard gateway routing healthy.</p>
+                {services.filter((s) => regionServiceMap[selectedRegion.id]?.includes(s.id)).length === 0 && (
+                    <p className="text-xs text-text-secondary">No services mapped to this region.</p>
                   )}
               </div>
             </DrilldownSection>
@@ -841,11 +875,9 @@ export default function ExecutiveCommandCenter() {
                   region_id: selectedRegion.id,
                   region_name: selectedRegion.label,
                   health: selectedRegion.health,
-                  incidents: overview.recent_incidents.filter(inc => {
-                    if (selectedRegion.id === 'ap-northeast') return inc.service.includes('Settlement') || inc.service.includes('Partner');
-                    if (selectedRegion.id === 'eu-west') return inc.service.includes('Payment') || inc.service.includes('Merchant');
-                    return false;
-                  })
+                  incidents: overviewData.recent_incidents.filter((inc) =>
+                    regionServiceMap[selectedRegion.id]?.some((sid) => inc.service.includes(sid))
+                  ),
                 }}
                 suggestedQuestions={[
                   `Why is the ${selectedRegion.label} region in a ${selectedRegion.health} state?`,

@@ -24,16 +24,39 @@ import type {
   OpsEntitiesResponse,
   OpsEntity,
 } from '../types/ops';
+import { cachedFetch } from './fetchCache';
+import { EMPTY_OVERVIEW } from '../utils/emptyState';
+
+// Re-export service-layer clients (VM, monitoring, ops)
+export {
+  getVmIncidents,
+  getVmAlerts,
+  getVmTraceSpans,
+  getVmStatus,
+} from './services/vm';
+export { getTimeseries } from './services/monitoring';
+export { getOpsSectionData } from './services/ops';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err || `API error: ${res.status}`);
+async function fetchJson<T>(url: string, options?: RequestInit, timeoutMs = 20_000): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || `API error: ${res.status}`);
+    }
+    return res.json();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 // --- Dependencies ---
@@ -44,12 +67,24 @@ export async function getDependencyGraph(
 ): Promise<DependencyGraph> {
   const params = new URLSearchParams({ view: views.join(','), heatmap });
   if (focusNode) params.set('focus_node', focusNode);
+  const cacheKey = `deps:graph:${params}`;
 
   try {
-    const result = await fetchJson<DependencyGraph>(`${BASE}/dependencies/graph?${params}`);
+    const result = await cachedFetch(cacheKey, () =>
+      fetchJson<DependencyGraph>(`${BASE}/dependencies/graph?${params}`)
+    );
     return result;
   } catch (err) {
-    return { view: views.join(','), heatmap, focus_node: focusNode ?? null, nodes: [], edges: [], node_count: 0, edge_count: 0 };
+    return {
+      view: views.join(','),
+      heatmap,
+      focus_node: focusNode ?? null,
+      nodes: [],
+      edges: [],
+      node_count: 0,
+      edge_count: 0,
+      dataset_available: false,
+    };
   }
 }
 
@@ -95,6 +130,14 @@ export async function deleteDependency(source: string, target: string) {
   await fetchJson(`${BASE}/dependencies/edges?${params}`, { method: 'DELETE' });
 }
 
+export async function updateDependency(source: string, target: string, relationship: string) {
+  await fetchJson(`${BASE}/dependencies/edges`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, target, relationship }),
+  });
+}
+
 export async function uploadCsvDependencies(file: File) {
   const form = new FormData();
   form.append('file', file);
@@ -113,7 +156,30 @@ export async function uploadJsonDependency(source: string, target: string, relat
 
 // --- Monitoring ---
 export async function getMonitoringDashboard(): Promise<MonitoringDashboard> {
-  return fetchJson(`${BASE}/monitoring/dashboard`);
+  try {
+    return await cachedFetch('monitoring:dashboard', () =>
+      fetchJson<MonitoringDashboard>(`${BASE}/monitoring/dashboard`)
+    );
+  } catch {
+    return {
+      dataset_available: false,
+      executive: {
+        service_availability: 0,
+        transaction_success_rate: 0,
+        sla_compliance: 0,
+        revenue_impact_usd: 0,
+        customer_impact_count: 0,
+        services_at_risk: 0,
+        active_incidents: 0,
+      },
+      service: { services: [] },
+      technical: { containers: [], apis: [], databases: [], queues: [], jvm: [] },
+      infrastructure: {
+        summary: { avg_cpu: 0, avg_memory: 0, avg_storage: 0, avg_network: 0, avg_io: 0 },
+        servers: [],
+      },
+    };
+  }
 }
 
 export async function getAlerts(limit = 20) {
@@ -122,7 +188,13 @@ export async function getAlerts(limit = 20) {
 
 // --- Intelligence ---
 export async function getOverview(): Promise<Overview> {
-  return fetchJson(`${BASE}/overview`, { method: 'POST' });
+  try {
+    return await cachedFetch('intelligence:overview', () =>
+      fetchJson<Overview>(`${BASE}/overview`, { method: 'POST' })
+    );
+  } catch {
+    return EMPTY_OVERVIEW;
+  }
 }
 
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
@@ -592,11 +664,13 @@ export async function getIntegrationTraces(params?: {
 
 // --- Enterprise Operations ---
 export async function getOpsCatalog(): Promise<OpsCatalog> {
-  return fetchJson(`${BASE}/ops/catalog`);
+  return cachedFetch('ops:catalog', () => fetchJson<OpsCatalog>(`${BASE}/ops/catalog`));
 }
 
 export async function getOpsDashboard(dashboardId: OpsDashboardId): Promise<OpsDashboardDefinition> {
-  return fetchJson(`${BASE}/ops/dashboards/${dashboardId}`);
+  return cachedFetch(`ops:dashboard:${dashboardId}`, () =>
+    fetchJson<OpsDashboardDefinition>(`${BASE}/ops/dashboards/${dashboardId}`)
+  );
 }
 
 export async function getOpsEntities(params?: {
@@ -609,7 +683,9 @@ export async function getOpsEntities(params?: {
   if (params?.perspective) q.set('perspective', params.perspective);
   if (params?.health) q.set('health', params.health);
   const suffix = q.toString() ? `?${q}` : '';
-  return fetchJson(`${BASE}/ops/entities${suffix}`);
+  return cachedFetch(`ops:entities${suffix}`, () =>
+    fetchJson<OpsEntitiesResponse>(`${BASE}/ops/entities${suffix}`)
+  );
 }
 
 export async function getOpsEntity(entityId: string): Promise<OpsEntity> {

@@ -4,8 +4,8 @@ Queries bank telemetry parquet files and returns data shaped identically
 to the JSON files they replace.  Called by data_store.read_json() when
 the corresponding JSON file does not exist on disk.
 
-Default parquet directory: C:\\Users\\Infobell\\Desktop\\RCA_CORR\\openRCA_Bank\\parquet
-Override with the PARQUET_DIR environment variable.
+Parquet directory is configured via the PARQUET_DIR environment variable.
+When unset, data is read from <project>/data/parquet (empty until a source is connected).
 
 Parquet files consumed:
   metric_app.parquet       — per-service request metrics (rr, sr, cnt, mrt)
@@ -28,16 +28,7 @@ def _find_parquet_dir() -> Path:
     env_dir = os.environ.get("PARQUET_DIR")
     if env_dir:
         return Path(env_dir)
-        
-    local_path = Path(__file__).resolve().parent.parent.parent / "openRCA_Bank" / "parquet"
-    if (local_path / "service_host_map.parquet").exists():
-        return local_path
-        
-    pictures_path = Path(r"C:\Users\GKDSSPSairam\Pictures\openRCA_Bank\parquet")
-    if (pictures_path / "service_host_map.parquet").exists():
-        return pictures_path
-        
-    return local_path
+    return Path(__file__).resolve().parent.parent.parent / "data" / "parquet"
 
 PARQUET_DIR = _find_parquet_dir()
 
@@ -106,8 +97,43 @@ def _load(name: str, **kw) -> pd.DataFrame:
     return _cache[name]
 
 
+def _load_custom_mappings() -> list[dict]:
+    import json
+    path = PARQUET_DIR.parent / "incidents" / "all_incidents.json"
+    mappings = []
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for inc in data:
+                        entities = inc.get("entities", [])
+                        services = [e for e in entities if "service" in e.lower() or e.startswith("ServiceTest")]
+                        components = [e for e in entities if not ("service" in e.lower() or e.startswith("ServiceTest"))]
+                        if not services and entities:
+                            services = [entities[0]]
+                            components = entities[1:] if len(entities) > 1 else [entities[0]]
+                        if not components and services:
+                            components = services
+                        for svc in services:
+                            for comp in components:
+                                mappings.append({
+                                    "service": svc,
+                                    "cmdb_id": comp,
+                                    "co_occurrence_count": 1
+                                })
+        except Exception:
+            pass
+    return mappings
+
+
 def _svc_host_map() -> pd.DataFrame:
-    return _load("service_host_map.parquet")
+    base = _load("service_host_map.parquet")
+    custom = _load_custom_mappings()
+    if custom:
+        df_custom = pd.DataFrame(custom)
+        base = pd.concat([base, df_custom]).drop_duplicates(subset=["service", "cmdb_id"]).reset_index(drop=True)
+    return base
 
 
 def _metric_app() -> pd.DataFrame:
@@ -148,9 +174,9 @@ def _host_type_layer(cid: str) -> tuple[str, str]:
         return "server", "server"
     if u.startswith("DOCKER"):
         return "container", "server"
-    if u.startswith("MYSQL"):
+    if u.startswith("MYSQL") or u.startswith("POSTGRES") or "DB" in u:
         return "database", "server"
-    if u.startswith("REDIS"):
+    if u.startswith("REDIS") or "CACHE" in u:
         return "cache", "server"
     if u.startswith("APACHE"):
         return "web_server", "server"
@@ -686,6 +712,19 @@ def _q_dep_graph() -> dict:
     for d in ("dockerB1", "dockerB2"):
         edges.append({"source": d, "target": "Mysql01",
                       "relationship": "uses_db", "type": "infra_dependency"})
+
+    # Custom incident dependency edges
+    custom_maps = _load_custom_mappings()
+    for m in custom_maps:
+        svc = m["service"]
+        cid = m["cmdb_id"]
+        if svc != cid:
+            edges.append({
+                "source": svc,
+                "target": cid,
+                "relationship": "depends_on",
+                "type": "infra_dependency",
+            })
 
     return {"edges": edges}
 

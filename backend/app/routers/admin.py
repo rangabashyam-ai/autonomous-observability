@@ -138,13 +138,13 @@ async def upload_dataset(file: UploadFile = File(...)):
             )
             
         # 5. Define target directories in workspace
-        openrca_bank_dir = project_root / "openRCA_Bank"
+        data_dir = project_root / "data"
         
         # Create directories if they do not exist
-        openrca_bank_dir.mkdir(parents=True, exist_ok=True)
-        dest_parquet_dir = openrca_bank_dir / "parquet"
-        dest_alerts_dir = openrca_bank_dir / "alerts"
-        dest_incidents_dir = openrca_bank_dir / "incidents"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        dest_parquet_dir = data_dir / "parquet"
+        dest_alerts_dir = data_dir / "alerts"
+        dest_incidents_dir = data_dir / "incidents"
         
         # Clean existing destination folders to avoid merging conflicts/stale files
         if dest_parquet_dir.exists():
@@ -177,14 +177,14 @@ async def upload_dataset(file: UploadFile = File(...)):
         if target_parquet_dir != tmp_path:
             parent_dir = target_parquet_dir.parent
             for f in parent_dir.glob("*.csv"):
-                shutil.copy(str(f), str(openrca_bank_dir / f.name))
+                shutil.copy(str(f), str(data_dir / f.name))
             for f in parent_dir.glob("*.md"):
-                shutil.copy(str(f), str(openrca_bank_dir / f.name))
+                shutil.copy(str(f), str(data_dir / f.name))
         else:
             for f in tmp_path.glob("*.csv"):
-                shutil.copy(str(f), str(openrca_bank_dir / f.name))
+                shutil.copy(str(f), str(data_dir / f.name))
             for f in tmp_path.glob("*.md"):
-                shutil.copy(str(f), str(openrca_bank_dir / f.name))
+                shutil.copy(str(f), str(data_dir / f.name))
                 
     # 6. Clear backend caches so that the app immediately reads the new files
     from app import parquet_store
@@ -193,6 +193,8 @@ async def upload_dataset(file: UploadFile = File(...)):
     # 7. Clear intelligence service cache
     from app.services import intelligence as intel
     intel.clear_intelligence_cache()
+    from app.ops.entity_registry import clear_entity_registry_cache
+    clear_entity_registry_cache()
     
     # 8. Clear routers incidents/alerts caches
     from app.routers import incidents as inc_router
@@ -230,12 +232,12 @@ async def upload_dataset_json(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Incident list cannot be empty.")
         
     # 4. Validate schema
-    # Required keys based on openRCA_Bank format
+    # Required incident schema keys
     required_keys = ["incidentId", "title", "description", "severity", "status", "timeWindow", "alerts", "entities"]
     for idx, inc in enumerate(incidents):
         for key in required_keys:
             if key not in inc:
-                raise HTTPException(status_code=400, detail=f"Incident {idx} missing required field '{key}' of openRCA_Bank format.")
+                raise HTTPException(status_code=400, detail=f"Incident {idx} missing required field '{key}'.")
         
         tw = inc.get("timeWindow")
         if not isinstance(tw, dict) or "start" not in tw or "end" not in tw:
@@ -250,8 +252,8 @@ async def upload_dataset_json(file: UploadFile = File(...)):
 
     # 5. Define openrca_bank/incidents folder and save
     project_root = Path(__file__).resolve().parent.parent.parent.parent
-    openrca_bank_dir = project_root / "openRCA_Bank"
-    dest_incidents_dir = openrca_bank_dir / "incidents"
+    data_dir = project_root / "data"
+    dest_incidents_dir = data_dir / "incidents"
     dest_incidents_dir.mkdir(parents=True, exist_ok=True)
     
     # Read existing custom incidents
@@ -295,9 +297,13 @@ async def upload_dataset_json(file: UploadFile = File(...)):
     parquet_store.clear_cache()
     from app.services import intelligence as intel
     intel.clear_intelligence_cache()
+    from app.ops.entity_registry import clear_entity_registry_cache
+    clear_entity_registry_cache()
     from app.routers import incidents as inc_router
     inc_router._csv_cache = None
     inc_router._csv_mtime = 0.0
+    from app.routers.dependencies import _init_and_sync_db
+    _init_and_sync_db(force=True)
 
     return {"status": "success", "message": f"Successfully uploaded and activated {len(incidents)} incidents."}
 
@@ -311,7 +317,7 @@ async def add_incident(incident: dict):
     required_keys = ["incidentId", "title", "description", "severity", "status", "timeWindow", "alerts", "entities"]
     for key in required_keys:
         if key not in incident:
-            raise HTTPException(status_code=400, detail=f"Missing required field '{key}' of openRCA_Bank format.")
+            raise HTTPException(status_code=400, detail=f"Missing required field '{key}'.")
             
     tw = incident.get("timeWindow")
     if not isinstance(tw, dict) or "start" not in tw or "end" not in tw:
@@ -324,10 +330,10 @@ async def add_incident(incident: dict):
     if not isinstance(incident.get("entities"), list):
         raise HTTPException(status_code=400, detail="entities must be a list of strings.")
 
-    # 2. Load existing incidents from openRCA_Bank/incidents/all_incidents.json
+    # 2. Load existing incidents from data/incidents/all_incidents.json
     project_root = Path(__file__).resolve().parent.parent.parent.parent
-    openrca_bank_dir = project_root / "openRCA_Bank"
-    dest_incidents_dir = openrca_bank_dir / "incidents"
+    data_dir = project_root / "data"
+    dest_incidents_dir = data_dir / "incidents"
     dest_incidents_dir.mkdir(parents=True, exist_ok=True)
     all_json_path = dest_incidents_dir / "all_incidents.json"
     
@@ -368,9 +374,13 @@ async def add_incident(incident: dict):
     parquet_store.clear_cache()
     from app.services import intelligence as intel
     intel.clear_intelligence_cache()
+    from app.ops.entity_registry import clear_entity_registry_cache
+    clear_entity_registry_cache()
     from app.routers import incidents as inc_router
     inc_router._csv_cache = None
     inc_router._csv_mtime = 0.0
+    from app.routers.dependencies import _init_and_sync_db
+    _init_and_sync_db(force=True)
 
     return {"status": "success", "message": f"Incident {incident.get('incidentId')} saved successfully."}
 

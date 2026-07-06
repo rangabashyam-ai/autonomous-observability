@@ -61,7 +61,8 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
     blast_radius_nodes = blast.get("blast_radius_nodes", [service])
 
     # 2. Gather active alerts on the blast radius nodes
-    all_alerts = read_json("monitoring/alerts.json").get("alerts", [])
+    from app.services.intelligence import _load_alerts, _load_incidents
+    all_alerts = _load_alerts()
     active_alerts = [
         {
             "id": a["id"],
@@ -75,7 +76,7 @@ def chat_blast_radius_query(service: str, question: str, history: list[dict] = N
     ]
 
     # 3. Gather recent incidents affecting blast radius nodes
-    all_incidents = read_json("incidents/service_now_incidents.json").get("incidents", [])
+    all_incidents = _load_incidents()
     relevant_incidents = [
         {
             "incident_id": inc["incident_id"],

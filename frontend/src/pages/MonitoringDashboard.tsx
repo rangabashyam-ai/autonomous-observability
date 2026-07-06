@@ -4,6 +4,7 @@ import type { MonitoringDashboard } from '../types/api';
 import ExecutiveView, { ServiceViewTable } from '../components/monitoring/ExecutiveView';
 import TechnicalView from '../components/monitoring/TechnicalView';
 import InfrastructureView from '../components/monitoring/InfrastructureView';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
 
 type Tab = 'executive' | 'service' | 'technical' | 'infrastructure';
 
@@ -56,13 +57,15 @@ export default function MonitoringDashboardPage() {
       {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
 
       {data && !loading && (
-        <div className="p-4 bg-slate-100 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-xl">
+        <>
+          {data.dataset_available === false && <DatasetUploadBanner />}
+          <div className="p-4 bg-slate-100 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-xl">
           {tab === 'executive' && <ExecutiveView data={data.executive} />}
           {tab === 'service' && <ServiceViewTable services={data.service.services} />}
           {tab === 'technical' && <TechnicalView data={data.technical} />}
           {tab === 'infrastructure' && <InfrastructureView data={data.infrastructure} />}
-        </div>
-      )}
-    </div>
+          </div>
+        </>
+      )}    </div>
   );
 }

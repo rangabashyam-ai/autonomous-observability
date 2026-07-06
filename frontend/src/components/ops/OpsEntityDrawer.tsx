@@ -6,10 +6,8 @@ import { getOpsEntityTelemetry } from '../../api/client';
 import type { Incident } from '../../types/intelligence';import {
   deriveEntityEvents,
   deriveEntityRunbook,
-  deriveFallbackLogs,
   filterDeploymentsForEntity,
   filterSecurityForEntity,
-  filterTracesForEntity,
 } from '../../utils/mockOpsData';
 import EntityLogTerminal from './EntityLogTerminal';
 import EntityIncidentsPanel from './EntityIncidentsPanel';
@@ -46,16 +44,9 @@ export default function OpsEntityDrawer({ entity, onClose, relatedEntities = [] 
     entity.entity_type === 'api' ? 'api' : entity.entity_type.includes('incident') ? 'incident' : 'service';
 
   const parquetLogs = telemetry?.logs ?? [];
-  const logs = parquetLogs.length > 0 ? parquetLogs : deriveFallbackLogs(entity);
+  const logs = parquetLogs;
   const parquetTraces = telemetry?.traces ?? [];
-  const derivedTraces = filterTracesForEntity(relatedEntities.length ? relatedEntities : [entity], entity);
-  const traces = parquetTraces.length > 0 ? parquetTraces : derivedTraces.map((t) => ({
-    trace_id: t.id,
-    service: t.service,
-    host: entity.name,
-    timestamp: t.timestamp,
-    has_parent: false,
-  }));
+  const traces = parquetTraces;
   const deployments = filterDeploymentsForEntity(relatedEntities.length ? relatedEntities : [entity], entity);
   const security = filterSecurityForEntity(relatedEntities.length ? relatedEntities : [entity], entity);
   const events = deriveEntityEvents(entity);
@@ -126,10 +117,13 @@ export default function OpsEntityDrawer({ entity, onClose, relatedEntities = [] 
       </div>
 
       {telemetryLoading && tab !== 'logs' && (
-        <p className="text-xs text-text-secondary mb-3">Loading telemetry from dataset…</p>
+        <p className="text-xs text-text-secondary mb-3">Loading telemetry…</p>
       )}
       {telemetryError && tab !== 'logs' && (
-        <p className="text-xs text-warning mb-3">Telemetry: {telemetryError} — showing derived data where available.</p>
+        <p className="text-xs text-warning mb-3">Telemetry unavailable: {telemetryError}</p>
+      )}
+      {!telemetryLoading && !telemetryError && logs.length === 0 && traces.length === 0 && tab === 'logs' && (
+        <p className="text-xs text-text-secondary mb-3">Please Connect your Data Source</p>
       )}
 
       {tab === 'overview' && (
@@ -282,15 +276,19 @@ export default function OpsEntityDrawer({ entity, onClose, relatedEntities = [] 
 
       {tab === 'events' && (
         <div className="space-y-2">
-          {events.map((ev) => (
-            <div key={ev.id} className="p-3 rounded-lg border border-border bg-card-hover">
-              <div className="flex justify-between text-[10px] text-text-secondary mb-1">
-                <span className="font-semibold uppercase">{ev.type}</span>
-                <span>{ev.time}</span>
+          {events.length === 0 ? (
+            <p className="text-sm text-text-secondary">No events available. Connect a data source to populate event history.</p>
+          ) : (
+            events.map((ev) => (
+              <div key={ev.id} className="p-3 rounded-lg border border-border bg-card-hover">
+                <div className="flex justify-between text-[10px] text-text-secondary mb-1">
+                  <span className="font-semibold uppercase">{ev.type}</span>
+                  <span>{ev.time}</span>
+                </div>
+                <p className="text-sm text-text-primary">{ev.message}</p>
               </div>
-              <p className="text-sm text-text-primary">{ev.message}</p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
@@ -356,19 +354,23 @@ export default function OpsEntityDrawer({ entity, onClose, relatedEntities = [] 
       )}
 
       {tab === 'runbook' && (
-        <ol className="space-y-3">
-          {runbook.map((step, idx) => (
-            <li key={step.id} className="flex gap-3">
-              <span className="h-6 w-6 shrink-0 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
-                {idx + 1}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-text-primary">{step.title}</p>
-                <p className="text-xs text-text-secondary mt-0.5">{step.detail}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        runbook.length === 0 ? (
+          <p className="text-sm text-text-secondary">No runbook steps available. Connect a data source to populate runbooks.</p>
+        ) : (
+          <ol className="space-y-3">
+            {runbook.map((step, idx) => (
+              <li key={step.id} className="flex gap-3">
+                <span className="h-6 w-6 shrink-0 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
+                  {idx + 1}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">{step.title}</p>
+                  <p className="text-xs text-text-secondary mt-0.5">{step.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )
       )}
 
     </DrilldownDrawer>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getOverview } from '../api/client';
+import { getOverview, askCopilot } from '../api/client';
 import type { Overview } from '../types/intelligence';
 import { PageHeader, Grid12 } from '../components/ui/layout-primitives';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
@@ -105,18 +105,9 @@ export default function AIOperationsCopilot() {
     setInput('');
     setLoading(true);
 
-    // Build history from current messages (exclude system welcome message if empty exchange)
-    const history = messages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role, content: m.content }));
-
+    // Context for copilot — backend handles history in future API versions.
     try {
-      const res = await fetch('http://localhost:8000/api/copilot/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, history }),
-      });
-      const data = await res.json();
+      const data = await askCopilot(question);
       setMessages((m) => [
         ...m,
         {

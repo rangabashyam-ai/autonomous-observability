@@ -50,7 +50,23 @@ ALERT_CANONICAL: dict[str, str] = {
     "certificate-expiry": "certificate-expiry",
 }
 
-SEVERITY_WEIGHT = {"critical": 1.0, "warning": 0.75, "info": 0.5}
+SEVERITY_WEIGHT = {"critical": 1.0, "warning": 0.75, "info": 0.5, "sev1": 1.0, "sev2": 0.75, "sev3": 0.5}
+
+
+def _normalize_severity(severity: str | None) -> str:
+    """Map bank/VM severities (Sev1/Sev2/Sev3) to engine levels."""
+    s = (severity or "").lower().strip()
+    if s in ("sev1", "high", "critical", "p1"):
+        return "critical"
+    if s in ("sev2", "medium", "warning", "p2"):
+        return "warning"
+    if s in ("sev3", "low", "info", "informational", "p3", "p4"):
+        return "info"
+    return s or "info"
+
+
+def _is_critical_severity(severity: str | None) -> bool:
+    return _normalize_severity(severity) == "critical"
 
 REMEDIATION_HINTS: dict[str, list[str]] = {
     "api-error-spike": [
@@ -532,7 +548,7 @@ def _service_risk_summary(
             dep_alerts = [a for a in active_alerts if a.get("entity_id") in deps]
 
             if svc_alerts:
-                crit = sum(1 for a in svc_alerts if a.get("severity") == "critical")
+                crit = sum(1 for a in svc_alerts if _is_critical_severity(a.get("severity")))
                 max_conf = min(48, 30 + crit * 6 + len(svc_alerts) * 2)
                 risk = "Medium" if max_conf >= 40 else "Low"
                 active_threats = len(svc_alerts)
@@ -717,7 +733,8 @@ def _active_conditions(active_alerts: list[dict]) -> list[dict]:
 
 def analyze_early_detection(current_alerts: list[str] | None = None) -> dict[str, Any]:
     kg = read_json("rca/knowledge_graph.json") or {"nodes": [], "edges": [], "pattern_library": []}
-    open_alerts = read_json("monitoring/alerts.json").get("alerts", [])
+    from app.services.intelligence import _load_alerts
+    open_alerts = _load_alerts()
     dep_edges = (read_json("dependencies/dependency_graph.json") or {}).get("edges", [])
     patterns = kg.get("pattern_library", [])
 
@@ -742,7 +759,7 @@ def analyze_early_detection(current_alerts: list[str] | None = None) -> dict[str
     service_risk_summary = _service_risk_summary(detections, active_alerts, dep_edges)
     conditions = _active_conditions(active_alerts)
 
-    critical_alerts = sum(1 for a in active_alerts if a.get("severity") == "critical")
+    critical_alerts = sum(1 for a in active_alerts if _is_critical_severity(a.get("severity")))
     imminent = sum(1 for d in detections if d.get("progression_stage") == "imminent")
 
     alerts_feed = _build_alerts_feed(active_alerts, detections)

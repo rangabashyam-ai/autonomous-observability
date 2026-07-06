@@ -6,7 +6,7 @@ import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import AIInsightsPanel from '../components/drilldown/AIInsightsPanel';
 import { IncidentContextPanel } from '../components/drilldown/RelatedResourcesPanel';
 import { DrilldownMetricCard } from '../components/drilldown/DrilldownDrawer';
-import { getMonitoringDashboard, getOverview, getDependencyGraph } from '../api/client';
+import { getMonitoringDashboard, getOverview, getDependencyGraph, getTimeseries } from '../api/client';
 import type { ServiceMetric } from '../types/api';
 import type { Overview } from '../types/intelligence';
 
@@ -17,6 +17,9 @@ export default function ServiceDetailPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [relatedServices, setRelatedServices] = useState<ServiceMetric[]>([]);
+  const [latencyTrend, setLatencyTrend] = useState<{ time: string; value: number }[]>([]);
+  const [errorTrend, setErrorTrend] = useState<{ time: string; value: number }[]>([]);
+  const [trafficTrend, setTrafficTrend] = useState<{ time: string; value: number }[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -33,16 +36,15 @@ export default function ServiceDetailPage() {
         if (found) {
           setService(found);
         } else {
-          // Fallback to a constructed object if service not found by exact ID
           setService({
             id: serviceId || 'unknown',
             name: serviceId?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Service',
-            health: 'warning',
-            latency_p99_ms: 103.9,
-            error_rate: 1.836,
-            throughput_rps: 4706,
-            transaction_volume: 28913,
-            availability: 99.837,
+            health: 'unknown',
+            latency_p99_ms: 0,
+            error_rate: 0,
+            throughput_rps: 0,
+            transaction_volume: 0,
+            availability: 0,
           });
         }
 
@@ -58,6 +60,19 @@ export default function ServiceDetailPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, [serviceId]);
+
+  useEffect(() => {
+    if (!serviceId) return;
+    getTimeseries('latency_p99', serviceId).then((res) =>
+      setLatencyTrend((res.points ?? []).map((p) => ({ time: String(p.t), value: p.v }))),
+    ).catch(() => setLatencyTrend([]));
+    getTimeseries('error_rate', serviceId).then((res) =>
+      setErrorTrend((res.points ?? []).map((p) => ({ time: String(p.t), value: p.v }))),
+    ).catch(() => setErrorTrend([]));
+    getTimeseries('throughput_rps', serviceId).then((res) =>
+      setTrafficTrend((res.points ?? []).map((p) => ({ time: String(p.t), value: p.v }))),
+    ).catch(() => setTrafficTrend([]));
   }, [serviceId]);
 
   const copilotContext = useMemo(() => {
@@ -76,14 +91,9 @@ export default function ServiceDetailPage() {
         },
         upstream: relatedServices.filter((_, i) => i % 2 === 0).map((s) => s.id),
         downstream: relatedServices.filter((_, i) => i % 2 !== 0).map((s) => s.id),
-        recent_deployments: [
-          { version: 'v2.4.1 → v2.4.2', time: '2 hours ago', status: 'SUCCESS' },
-        ],
+        recent_deployments: [],
       },
-      relatedAlerts: [
-        { title: 'CPU utilization above 75%', severity: 'P3' },
-        { title: 'Error rate spike detected', severity: 'P2' },
-      ],
+      relatedAlerts: [],
       relatedIncidents: overview?.recent_incidents?.filter((inc) =>
         inc.service?.toLowerCase().includes(serviceId?.toLowerCase() ?? '')
       ).slice(0, 3) ?? [],
@@ -118,21 +128,7 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // Generate trend data based on real service metrics
-  const latencyTrend = Array.from({ length: 24 }, (_, i) => ({
-    time: `${i}:00`,
-    value: service.latency_p99_ms * (0.7 + Math.random() * 0.6),
-  }));
-
-  const errorTrend = Array.from({ length: 24 }, (_, i) => ({
-    time: `${i}:00`,
-    value: service.error_rate * (0.5 + Math.random() * 1.0),
-  }));
-
-  const trafficTrend = Array.from({ length: 24 }, (_, i) => ({
-    time: `${i}:00`,
-    value: service.throughput_rps * (0.7 + Math.random() * 0.6),
-  }));
+  // Trend charts use VM-pushed time-series via API (no client-side synthesis).
 
   // Build related resources from real dependency data
   /*
@@ -162,36 +158,9 @@ export default function ServiceDetailPage() {
       type: 'incident' as const,
     })) ?? [];
 
-  // If no matching incidents, show generic ones
-  const incidents = serviceIncidents.length > 0 ? serviceIncidents : [
-    {
-      id: 'INC-1234',
-      title: `High latency on ${service.name}`,
-      severity: 'P2' as const,
-      status: 'acknowledged' as const,
-      timestamp: '2 hours ago',
-      type: 'incident' as const,
-    },
-  ];
+  const incidents = serviceIncidents;
 
-  const alerts = [
-    {
-      id: 'ALT-5678',
-      title: `CPU utilization above 75% on ${service.name}`,
-      severity: 'P3' as const,
-      status: 'open' as const,
-      timestamp: '15 minutes ago',
-      type: 'alert' as const,
-    },
-    {
-      id: 'ALT-5679',
-      title: `Error rate spike detected on ${service.name}`,
-      severity: service.error_rate > 1.5 ? 'P2' as const : 'P3' as const,
-      status: 'acknowledged' as const,
-      timestamp: '1 hour ago',
-      type: 'alert' as const,
-    },
-  ];
+  const alerts: { id: string; title: string; severity: 'P1' | 'P2' | 'P3' | 'P4'; status: 'open' | 'acknowledged'; timestamp: string; type: 'alert' }[] = [];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">

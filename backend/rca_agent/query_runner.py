@@ -30,19 +30,9 @@ from rca_agent.engine import RCAEngine, RCAResult
 
 log = logging.getLogger(__name__)
 
-QUERY_CSV = Path(
-    os.environ.get(
-        "QUERY_CSV",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\query.csv",
-    )
-)
+QUERY_CSV = Path(os.environ["QUERY_CSV"]) if os.environ.get("QUERY_CSV") else None
 
-OUTPUT_CSV = Path(
-    os.environ.get(
-        "RCA_OUTPUT_CSV",
-        r"C:\Users\Infobell\Desktop\RCA_CORR\openRCA_Bank\rca_results.csv",
-    )
-)
+OUTPUT_CSV = Path(os.environ["RCA_OUTPUT_CSV"]) if os.environ.get("RCA_OUTPUT_CSV") else None
 
 # UTC+8 timezone (Asia/Shanghai — the timezone of the data)
 TZ_UTC8 = timezone(timedelta(hours=8))

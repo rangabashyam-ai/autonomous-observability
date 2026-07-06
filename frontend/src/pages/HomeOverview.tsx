@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getOverview, getIncidentClickAnalysis, getIncidentChangeRequests } from '../api/client';
+import { getOverview, getIncidentClickAnalysis, getIncidentChangeRequests, getMonitoringDashboard } from '../api/client';
 import type { Overview, Incident, IncidentClickAnalysis } from '../types/intelligence';
 import { PageHeader, StatCard, severityClass } from '../components/ui';
 import { IncidentPopup } from './IncidentExplorer';
 import DrilldownDrawer, { DrilldownSection } from '../components/drilldown/DrilldownDrawer';
 import { Card } from '../components/ui/card';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { EMPTY_OVERVIEW, NO_DATA_MESSAGE } from '../utils/emptyState';
 
 export default function HomeOverview() {
   const [data, setData] = useState<Overview | null>(null);
+  const [noData, setNoData] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [analysis, setAnalysis] = useState<IncidentClickAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -17,7 +20,16 @@ export default function HomeOverview() {
   const [selectedWarning, setSelectedWarning] = useState<any | null>(null);
 
   useEffect(() => {
-    getOverview().then(setData).catch(console.error);
+    getMonitoringDashboard()
+      .then((monitoring) => {
+        if (monitoring.dataset_available !== true) {
+          setNoData(true);
+          setData(EMPTY_OVERVIEW);
+          return;
+        }
+        return getOverview().then(setData).catch(console.error);
+      })
+      .catch(console.error);
   }, []);
 
   const handleIncidentClick = (inc: any) => {
@@ -65,6 +77,14 @@ export default function HomeOverview() {
         description="Unified view of incidents, alerts, knowledge graph intelligence, and early warnings"
       />
 
+      {noData && <DatasetUploadBanner />}
+
+      {noData ? (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-12 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{NO_DATA_MESSAGE}</p>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <StatCard label="Resolved Incidents" value={s.total_incidents} sub="Historical knowledge" />
         <StatCard label="Open Alerts" value={s.open_alerts} alert={s.open_alerts > 10} />
@@ -149,6 +169,8 @@ export default function HomeOverview() {
           </div>
         </section>
       </div>
+      </>
+      )}
 
       {/* Incident Detail Drawer */}
       {selectedIncident && (

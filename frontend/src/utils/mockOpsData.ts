@@ -1,7 +1,16 @@
-// mockOpsData.ts
-// Helper utilities to derive and format operations telemetry dynamically from real backend entities
+// Telemetry derivation utilities — maps backend entity data only; no fabricated fallbacks.
 
 import type { OpsEntity } from '../types/ops';
+
+function num(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function str(value: unknown, fallback = 'N/A'): string {
+  if (value === null || value === undefined || value === '') return fallback;
+  return String(value);
+}
 
 export interface BusinessService {
   id: string;
@@ -18,27 +27,21 @@ export interface BusinessService {
 }
 
 export function deriveBusinessServices(entities: OpsEntity[]): BusinessService[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.map(s => {
-    const avail = Number(s.metrics.availability ?? 100.0);
-    const lat = Number(s.metrics.latency_p95 ?? 45.0);
-    const err = Number(s.metrics.error_rate ?? 0.0);
-    const tput = Number(s.metrics.throughput ?? 12.0);
-
-    return {
-      id: s.id,
-      name: s.name,
-      health: s.health as any,
-      availability: Number(avail.toFixed(2)),
-      latency_ms: Math.round(lat),
-      throughput_rps: Number(tput.toFixed(1)),
-      error_rate_pct: Number(err.toFixed(2)),
-      owner: s.owner || 'Platform Team',
-      alertsCount: s.health === 'critical' ? 2 : s.health === 'warning' ? 1 : 0,
-      lastDeployment: 'Synced 1h ago',
-      description: s.metadata.description as string || `Business microservice component responsible for handling ${s.name.toLowerCase()} routines.`,
-    };
-  });
+  if (!entities.length) return [];
+  const svcs = entities.filter((e) => e.entity_type === 'microservice' || e.entity_type === 'service');
+  return svcs.map((s) => ({
+    id: s.id,
+    name: s.name,
+    health: s.health as BusinessService['health'],
+    availability: num(s.metrics.availability, 0),
+    latency_ms: Math.round(num(s.metrics.latency_p95, 0)),
+    throughput_rps: num(s.metrics.throughput, 0),
+    error_rate_pct: num(s.metrics.error_rate, 0),
+    owner: str(s.owner, 'N/A'),
+    alertsCount: 0,
+    lastDeployment: 'N/A',
+    description: str(s.metadata.description, 'N/A'),
+  }));
 }
 
 export interface ApplicationInfo {
@@ -53,25 +56,18 @@ export interface ApplicationInfo {
 }
 
 export function deriveApplications(entities: OpsEntity[]): ApplicationInfo[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  const appTypes = ['REST API', 'gRPC', 'BFF', 'Worker', 'Serverless', 'AI Model'];
-  const languages = ['Go', 'Java', 'NodeJS', 'Python', 'Rust'];
-
-  return svcs.map((s, idx) => {
-    const lat = Number(s.metrics.latency_p95 ?? 45.0);
-    const err = Number(s.metrics.error_rate ?? 0.0);
-    
-    return {
-      id: `app-${s.id}`,
-      name: `${s.name} Process`,
-      type: appTypes[idx % appTypes.length],
-      language: languages[idx % languages.length],
-      instances: s.health === 'critical' ? 2 : 4,
-      health: s.health as any,
-      latency_p95: Math.round(lat),
-      error_rate: Number(err.toFixed(2)),
-    };
-  });
+  if (!entities.length) return [];
+  const svcs = entities.filter((e) => e.entity_type === 'microservice' || e.entity_type === 'service');
+  return svcs.map((s) => ({
+    id: `app-${s.id}`,
+    name: s.name,
+    type: str(s.metadata.app_type, 'N/A'),
+    language: str(s.metadata.language, 'N/A'),
+    instances: num(s.metrics.instances, 0),
+    health: s.health as ApplicationInfo['health'],
+    latency_p95: Math.round(num(s.metrics.latency_p95, 0)),
+    error_rate: num(s.metrics.error_rate, 0),
+  }));
 }
 
 export interface APIEndpoint {
@@ -86,25 +82,18 @@ export interface APIEndpoint {
 }
 
 export function deriveAPIs(entities: OpsEntity[]): APIEndpoint[] {
-  const apis = entities.filter(e => e.entity_type === 'api');
-  const methods: ('GET' | 'POST' | 'PUT' | 'DELETE')[] = ['GET', 'POST', 'PUT', 'DELETE'];
-
-  return apis.map((a, idx) => {
-    const lat = Number(a.metrics.latency_p95 ?? 50.0);
-    const err = Number(a.metrics.error_rate ?? 0.0);
-    const tput = Number(a.metrics.throughput ?? 25.0);
-
-    return {
-      id: a.id,
-      path: a.id.startsWith('api:') ? `/${a.id.replace('api:', '').replace(/-/g, '/')}/v1` : `/api/v1/${a.id}`,
-      method: methods[idx % methods.length],
-      service: a.parent_id || 'unknown-service',
-      rps: Number(tput.toFixed(1)),
-      p95_latency: Math.round(lat),
-      error_rate: Number(err.toFixed(2)),
-      status: a.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const apis = entities.filter((e) => e.entity_type === 'api');
+  return apis.map((a) => ({
+    id: a.id,
+    path: str(a.metadata.path, 'N/A'),
+    method: (str(a.metadata.method, 'GET') as APIEndpoint['method']),
+    service: str(a.parent_id, 'N/A'),
+    rps: num(a.metrics.throughput, 0),
+    p95_latency: Math.round(num(a.metrics.latency_p95, 0)),
+    error_rate: num(a.metrics.error_rate, 0),
+    status: a.health as APIEndpoint['status'],
+  }));
 }
 
 export interface WorkerMetric {
@@ -119,21 +108,18 @@ export interface WorkerMetric {
 }
 
 export function deriveWorkers(entities: OpsEntity[]): WorkerMetric[] {
-  // Derive worker nodes from queues or microservices
-  const queues = entities.filter(e => e.entity_type === 'queue');
-  return queues.map((q) => {
-    const depth = Number(q.metrics.queue_depth ?? 0);
-    return {
-      id: `w-${q.id}`,
-      name: `${q.name}-consumer`,
-      service: q.id,
-      status: q.health as any,
-      msgRate: Math.round(Math.random() * 80 + 20),
-      consumerLag: Math.round(depth * 0.1),
-      errorRate: q.health === 'critical' ? 3.4 : 0.0,
-      retries: q.health === 'critical' ? 24 : 0,
-    };
-  });
+  if (!entities.length) return [];
+  const queues = entities.filter((e) => e.entity_type === 'queue');
+  return queues.map((q) => ({
+    id: `w-${q.id}`,
+    name: q.name,
+    service: str(q.parent_id, 'N/A'),
+    status: q.health as WorkerMetric['status'],
+    msgRate: num(q.metrics.throughput_msg_s, 0),
+    consumerLag: num(q.metrics.consumer_lag ?? q.metrics.queue_depth, 0),
+    errorRate: num(q.metrics.error_rate, 0),
+    retries: num(q.metrics.retries, 0),
+  }));
 }
 
 export interface BatchJob {
@@ -147,19 +133,17 @@ export interface BatchJob {
 }
 
 export function deriveBatchJobs(entities: OpsEntity[]): BatchJob[] {
-  const containers = entities.filter(e => e.entity_type === 'pod');
-  return containers.slice(0, 4).map((c, idx) => {
-    const schedules = ['0 0 * * *', '0 */4 * * *', '*/15 * * * *', '0 2 * * *'];
-    return {
-      id: `job-${c.id}`,
-      name: `${c.name.split('-')[0]}-cleanup-cron`,
-      schedule: schedules[idx % schedules.length],
-      lastRun: '15m ago',
-      durationSec: idx === 1 ? 420 : 15,
-      status: c.health === 'critical' ? 'failed' : 'success',
-      successRate: c.health === 'critical' ? 92.4 : 100.0,
-    };
-  });
+  if (!entities.length) return [];
+  const jobs = entities.filter((e) => e.entity_type === 'batch_job' || e.entity_type === 'cronjob');
+  return jobs.map((j) => ({
+    id: j.id,
+    name: j.name,
+    schedule: str(j.metadata.schedule, 'N/A'),
+    lastRun: str(j.metadata.last_run, 'N/A'),
+    durationSec: num(j.metrics.duration_sec, 0),
+    status: (str(j.metadata.status, 'success') as BatchJob['status']),
+    successRate: num(j.metrics.success_rate, 0),
+  }));
 }
 
 export interface DataPipeline {
@@ -173,28 +157,16 @@ export interface DataPipeline {
 }
 
 export function deriveDataPipelines(entities: OpsEntity[]): DataPipeline[] {
-  const pipelines = entities.filter(e => e.entity_type === 'pipeline');
-  if (pipelines.length === 0) {
-    // Dynamically fallback based on active services
-    const svcs = entities.filter(e => e.entity_type === 'microservice');
-    return svcs.slice(0, 2).map((s, idx) => ({
-      id: `pipe-${s.id}`,
-      name: `${s.name}-ingest-pipeline`,
-      type: idx === 0 ? 'Streaming' : 'ETL',
-      throughput: Math.round(Number(s.metrics.throughput ?? 10) * 150),
-      lagMs: s.health === 'critical' ? 14500 : 45,
-      processingTimeMs: s.health === 'critical' ? 1200 : 8,
-      status: s.health as any,
-    }));
-  }
-  return pipelines.map(p => ({
+  if (!entities.length) return [];
+  const pipelines = entities.filter((e) => e.entity_type === 'pipeline');
+  return pipelines.map((p) => ({
     id: p.id,
     name: p.name,
-    type: 'Streaming',
-    throughput: Number(p.metrics.throughput ?? 1500),
-    lagMs: Number(p.metrics.latency_p95 ?? 12),
-    processingTimeMs: 25,
-    status: p.health as any,
+    type: (str(p.metadata.type, 'Batch') as DataPipeline['type']),
+    throughput: num(p.metrics.throughput, 0),
+    lagMs: num(p.metrics.latency_p95, 0),
+    processingTimeMs: num(p.metrics.processing_time_ms, 0),
+    status: p.health as DataPipeline['status'],
   }));
 }
 
@@ -210,16 +182,17 @@ export interface AIService {
 }
 
 export function deriveAIServices(entities: OpsEntity[]): AIService[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice');
-  return svcs.slice(0, 2).map((s) => ({
-    id: `ai-${s.id}`,
-    name: `${s.name}-inference-engine`,
-    model: 'Gemini 2.5 Flash',
-    latencyMs: s.health === 'critical' ? 1850 : 120,
-    tokensPerSec: 85,
-    cacheHitPct: 45.2,
-    accuracyScore: 97.2,
-    status: s.health as any,
+  if (!entities.length) return [];
+  const svcs = entities.filter((e) => e.entity_type === 'ai_service' || e.entity_type === 'model');
+  return svcs.map((s) => ({
+    id: s.id,
+    name: s.name,
+    model: str(s.metadata.model, 'N/A'),
+    latencyMs: num(s.metrics.latency_p95, 0),
+    tokensPerSec: num(s.metrics.tokens_per_sec, 0),
+    cacheHitPct: num(s.metrics.cache_hit_pct, 0),
+    accuracyScore: num(s.metrics.accuracy_score, 0),
+    status: s.health as AIService['status'],
   }));
 }
 
@@ -234,22 +207,17 @@ export interface BusinessTransaction {
 }
 
 export function deriveTransactions(entities: OpsEntity[]): BusinessTransaction[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.slice(0, 3).map((s) => {
-    const avail = Number(s.metrics.availability ?? 100.0);
-    const lat = Number(s.metrics.latency_p95 ?? 45.0);
-    const tput = Number(s.metrics.throughput ?? 10.0);
-    
-    return {
-      id: `tx-${s.id}`,
-      name: `${s.name} Core Journey`,
-      volume: Math.round(tput * 3600 * 24),
-      completionRate: Number(avail.toFixed(2)),
-      avgLatencyMs: Math.round(lat),
-      dropOffRate: Number((100.0 - avail).toFixed(2)),
-      status: s.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const txs = entities.filter((e) => e.entity_type === 'transaction');
+  return txs.map((t) => ({
+    id: t.id,
+    name: t.name,
+    volume: num(t.metrics.volume, 0),
+    completionRate: num(t.metrics.availability, 0),
+    avgLatencyMs: Math.round(num(t.metrics.latency_p95, 0)),
+    dropOffRate: num(t.metrics.drop_off_rate, 0),
+    status: t.health as BusinessTransaction['status'],
+  }));
 }
 
 export interface SLO {
@@ -263,24 +231,29 @@ export interface SLO {
 }
 
 export function deriveSLOs(entities: OpsEntity[]): SLO[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.map(s => {
-    const avail = Number(s.metrics.availability ?? 99.9);
-    const errRate = Number(s.metrics.error_rate ?? 0.05);
-    const target = 99.5;
-    const isCompliant = avail >= target;
-    const isCritical = s.health === 'critical';
-
-    return {
-      id: `slo-${s.id}`,
-      name: `Availability SLO: ${s.name}`,
-      target: `${target}%`,
-      current: Number(avail.toFixed(3)),
-      errorBudgetRemaining: Number((100.0 - (100.0 - avail) / (100.0 - target) * 100.0).toFixed(2)),
-      burnRate: isCritical ? 4.2 : errRate > 0.5 ? 2.1 : 0.4,
-      status: isCritical ? 'breached' : isCompliant ? 'compliant' : 'warning',
-    };
-  });
+  if (!entities.length) return [];
+  const slos = entities.filter((e) => e.entity_type === 'slo');
+  if (slos.length) {
+    return slos.map((s) => ({
+      id: s.id,
+      name: s.name,
+      target: str(s.metadata.target, 'N/A'),
+      current: num(s.metrics.current, 0),
+      errorBudgetRemaining: num(s.metrics.error_budget_remaining, 0),
+      burnRate: num(s.metrics.burn_rate, 0),
+      status: (str(s.metadata.status, 'compliant') as SLO['status']),
+    }));
+  }
+  const svcs = entities.filter((e) => e.entity_type === 'microservice' || e.entity_type === 'service');
+  return svcs.map((s) => ({
+    id: `slo-${s.id}`,
+    name: `Availability SLO: ${s.name}`,
+    target: 'N/A',
+    current: num(s.metrics.availability, 0),
+    errorBudgetRemaining: 0,
+    burnRate: num(s.metrics.error_rate, 0),
+    status: s.health === 'critical' ? 'breached' : s.health === 'warning' ? 'warning' : 'compliant',
+  }));
 }
 
 export interface DeploymentEvent {
@@ -294,21 +267,17 @@ export interface DeploymentEvent {
 }
 
 export function deriveDeployments(entities: OpsEntity[]): DeploymentEvent[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.map((s, idx) => {
-    const isCrit = s.health === 'critical';
-    return {
-      id: `dep-${idx}`,
-      version: `v1.2.${idx}-${s.id}`,
-      service: s.name,
-      timestamp: 'Synced 2 hours ago',
-      deployedBy: 'CI/CD pipeline',
-      status: isCrit ? 'rollback' : 'success',
-      changeImpact: isCrit 
-        ? 'LDAP pool leak detected post-release. Auto-rollback executed successfully.' 
-        : 'Stable release. Latency and resource overhead are within expected bounds.',
-    };
-  });
+  if (!entities.length) return [];
+  const deps = entities.filter((e) => e.entity_type === 'deployment');
+  return deps.map((d) => ({
+    id: d.id,
+    version: str(d.metadata.version, 'N/A'),
+    service: str(d.metadata.service ?? d.parent_id, 'N/A'),
+    timestamp: str(d.metadata.timestamp, 'N/A'),
+    deployedBy: str(d.metadata.deployed_by, 'N/A'),
+    status: (str(d.metadata.status, 'success') as DeploymentEvent['status']),
+    changeImpact: str(d.metadata.change_impact, 'N/A'),
+  }));
 }
 
 export interface SecurityFinding {
@@ -322,19 +291,17 @@ export interface SecurityFinding {
 }
 
 export function deriveSecurityFindings(entities: OpsEntity[]): SecurityFinding[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.filter(s => s.health !== 'healthy').map((s, idx) => {
-    const isCrit = s.health === 'critical';
-    return {
-      id: `sec-${idx}`,
-      cve: `CVE-2026-${14000 + idx}`,
-      service: s.name,
-      severity: isCrit ? 'critical' : 'high',
-      component: 'jsonwebtoken',
-      status: 'open',
-      description: `Remote code execution vulnerability via malformed token payloads. Upgrade core packages immediately.`,
-    };
-  });
+  if (!entities.length) return [];
+  const findings = entities.filter((e) => e.entity_type === 'security_finding' || e.entity_type === 'vulnerability');
+  return findings.map((f) => ({
+    id: f.id,
+    cve: str(f.metadata.cve, 'N/A'),
+    service: str(f.metadata.service ?? f.parent_id, 'N/A'),
+    severity: (str(f.metadata.severity, 'medium') as SecurityFinding['severity']),
+    component: str(f.metadata.component, 'N/A'),
+    status: (str(f.metadata.status, 'open') as SecurityFinding['status']),
+    description: str(f.metadata.description, 'N/A'),
+  }));
 }
 
 export interface CostRecord {
@@ -348,20 +315,20 @@ export interface CostRecord {
 }
 
 export function deriveCosts(entities: OpsEntity[]): CostRecord[] {
-  const svcs = entities.filter(e => e.entity_type === 'microservice' || e.entity_type === 'service');
-  return svcs.map(s => {
-    const isCrit = s.health === 'critical';
-    const base = Math.round(Number(s.metrics.throughput ?? 15) * 450 + 2000);
-    return {
-      id: `cost-${s.id}`,
-      service: s.name,
-      monthlyCostUSD: base,
-      computeCostUSD: Math.round(base * 0.45),
-      dbCostUSD: Math.round(base * 0.55),
-      idleWastedUSD: isCrit ? Math.round(base * 0.15) : 0,
-      anomalousIncreaseUSD: isCrit ? 450 : 0,
-    };
-  });
+  if (!entities.length) return [];
+  const costs = entities.filter((e) => e.entity_type === 'cost' || e.entity_type === 'billing');
+  if (costs.length) {
+    return costs.map((c) => ({
+      id: c.id,
+      service: c.name,
+      monthlyCostUSD: num(c.metrics.monthly_cost_usd, 0),
+      computeCostUSD: num(c.metrics.compute_cost_usd, 0),
+      dbCostUSD: num(c.metrics.db_cost_usd, 0),
+      idleWastedUSD: num(c.metrics.idle_wasted_usd, 0),
+      anomalousIncreaseUSD: num(c.metrics.anomalous_increase_usd, 0),
+    }));
+  }
+  return [];
 }
 
 export interface Span {
@@ -386,45 +353,20 @@ export interface Trace {
 }
 
 export function deriveTraces(entities: OpsEntity[]): Trace[] {
-  // Generate traces matching real active microservices dynamically
-  const svcs = entities.filter(e => e.entity_type === 'microservice');
-  if (svcs.length === 0) return [];
-  
-  return svcs.map((s, idx) => {
-    const duration = Number(s.metrics.latency_p95 ?? 150.0);
-    const isCrit = s.health === 'critical';
-    
-    return {
-      id: `tr-${s.id}-${idx}`,
-      rootPath: `POST /api/v1/${s.id}`,
-      service: s.name,
-      durationMs: Math.round(duration),
-      timestamp: 'Just now',
-      status: isCrit ? 'error' : 'ok',
-      spans: [
-        {
-          id: 'sp-root',
-          name: `POST /api/v1/${s.id}`,
-          service: s.name,
-          startMs: 0,
-          durationMs: Math.round(duration),
-          status: isCrit ? 'error' : 'ok',
-          type: 'http',
-          attributes: { 'http.status_code': isCrit ? '500' : '200', 'service.id': s.id } as Record<string, string>,
-        },
-        {
-          id: 'sp-db',
-          name: `SELECT FROM ${s.id}_db`,
-          service: s.name,
-          startMs: Math.round(duration * 0.1),
-          durationMs: Math.round(duration * 0.4),
-          status: 'ok',
-          type: 'db',
-          attributes: { 'db.type': 'postgresql' } as Record<string, string>,
-        }
-      ]
-    };
-  });
+  if (!entities.length) return [];
+  const traces = entities.filter((e) => e.entity_type === 'trace');
+  if (traces.length) {
+    return traces.map((t) => ({
+      id: t.id,
+      rootPath: str(t.metadata.root_path, 'N/A'),
+      service: str(t.metadata.service ?? t.parent_id, 'N/A'),
+      durationMs: Math.round(num(t.metrics.latency_p95, 0)),
+      timestamp: str(t.metadata.timestamp, 'N/A'),
+      status: (str(t.metadata.status, 'ok') as Trace['status']),
+      spans: [],
+    }));
+  }
+  return [];
 }
 
 export interface ComputeHost {
@@ -440,28 +382,35 @@ export interface ComputeHost {
 }
 
 export function deriveComputeHosts(entities: OpsEntity[]): ComputeHost[] {
-  const hosts = entities.filter(e => e.entity_type === 'node' || e.entity_type === 'vm' || e.entity_type === 'host' || e.id.includes('host') || e.id.includes('node') || e.id.includes('vm'));
-  return hosts.map(h => {
-    const cpu = Number(h.metrics.cpu_usage ?? h.metrics.cpu ?? 35.0);
-    const mem = Number(h.metrics.memory_usage ?? h.metrics.memory ?? 52.0);
-    const load = Number(h.metrics.load_avg_5m ?? 0.85);
-
-    let prov: any = 'AWS';
-    if (h.platform?.toLowerCase().includes('azure')) prov = 'Azure';
-    else if (h.platform?.toLowerCase().includes('gcp')) prov = 'GCP';
-    else if (h.platform?.toLowerCase().includes('vmware')) prov = 'VMware';
-    else if (h.platform?.toLowerCase().includes('physical')) prov = 'Physical';
+  if (!entities.length) return [];
+  const hosts = entities.filter(
+    (e) =>
+      ['host', 'vm', 'node'].includes(e.entity_type) ||
+      e.id.includes('host') ||
+      e.id.includes('node') ||
+      e.id.includes('vm')
+  );
+  return hosts.map((h) => {
+    const cpu = num(h.metrics.cpu_usage ?? h.metrics.cpu, 0);
+    const mem = num(h.metrics.memory_usage ?? h.metrics.memory, 0);
+    const load = num(h.metrics.load_avg_5m, 0);
+    let prov: ComputeHost['provider'] = 'Physical';
+    const platform = (h.platform ?? '').toLowerCase();
+    if (platform.includes('aws')) prov = 'AWS';
+    else if (platform.includes('azure')) prov = 'Azure';
+    else if (platform.includes('gcp')) prov = 'GCP';
+    else if (platform.includes('vmware')) prov = 'VMware';
 
     return {
       id: h.id,
       name: h.name,
       provider: prov,
-      type: h.metadata.instance_type as string ?? 'c5.xlarge',
-      ip: h.metadata.ip as string ?? '10.128.2.14',
+      type: str(h.metadata.instance_type, 'N/A'),
+      ip: str(h.metadata.ip, 'N/A'),
       cpuUsagePct: Math.round(cpu),
       memoryUsagePct: Math.round(mem),
-      loadAvg: `${load.toFixed(2)}, ${(load * 1.1).toFixed(2)}, ${(load * 0.9).toFixed(2)}`,
-      health: h.health as any,
+      loadAvg: load > 0 ? `${load.toFixed(2)}` : 'N/A',
+      health: h.health as ComputeHost['health'],
     };
   });
 }
@@ -478,21 +427,18 @@ export interface K8sPod {
 }
 
 export function deriveK8sPods(entities: OpsEntity[]): K8sPod[] {
-  const pods = entities.filter(e => e.entity_type === 'pod');
-  return pods.map(p => {
-    const mem = Number(p.metrics.memory_usage_pct ?? 45.0);
-    const rst = Number(p.metrics.restarts ?? 0);
-    return {
-      id: p.id,
-      name: p.name,
-      namespace: p.metadata.namespace as string ?? 'default',
-      node: p.metadata.node as string ?? 'node-us-east-2a',
-      status: p.metadata.status as string ?? 'Running',
-      memLimitUsage: Math.round(mem),
-      restarts: rst,
-      health: p.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const pods = entities.filter((e) => e.entity_type === 'pod');
+  return pods.map((p) => ({
+    id: p.id,
+    name: p.name,
+    namespace: str(p.metadata.namespace, 'N/A'),
+    node: str(p.metadata.node, 'N/A'),
+    status: str(p.metadata.status, 'N/A'),
+    memLimitUsage: Math.round(num(p.metrics.memory_usage_pct, 0)),
+    restarts: num(p.metrics.restarts, 0),
+    health: p.health as K8sPod['health'],
+  }));
 }
 
 export interface CloudAccount {
@@ -505,31 +451,16 @@ export interface CloudAccount {
 }
 
 export function deriveCloudAccounts(entities: OpsEntity[]): CloudAccount[] {
-  // Synthesize accounts based on providers present in nodes
-  const providers = new Set<string>();
-  entities.forEach(e => {
-    if (e.platform) providers.add(e.platform.toUpperCase());
-  });
-  if (providers.size === 0) {
-    providers.add('AWS');
-    providers.add('GCP');
-  }
-
-  return Array.from(providers).map((p, idx) => {
-    const nameMap: Record<string, string> = {
-      AWS: 'Production-AWS-Account',
-      GCP: 'DataEng-GCP-Project',
-      AZURE: 'Enterprise-Azure-Tenant',
-    };
-    return {
-      id: `acc-00${idx + 1}`,
-      accountName: nameMap[p] || `${p}-Account`,
-      provider: (p === 'AWS' || p === 'GCP' || p === 'AZURE' ? p : 'AWS') as any,
-      status: 'active',
-      regionsActive: p === 'AWS' ? 4 : 2,
-      monthlySpendUSD: p === 'AWS' ? 45200 : 12800,
-    };
-  });
+  if (!entities.length) return [];
+  const accounts = entities.filter((e) => e.entity_type === 'cloud_account');
+  return accounts.map((a) => ({
+    id: a.id,
+    accountName: a.name,
+    provider: (str(a.platform, 'AWS') as CloudAccount['provider']),
+    status: (str(a.metadata.status, 'active') as CloudAccount['status']),
+    regionsActive: num(a.metrics.regions_active, 0),
+    monthlySpendUSD: num(a.metrics.monthly_spend_usd, 0),
+  }));
 }
 
 export interface VirtHost {
@@ -544,30 +475,17 @@ export interface VirtHost {
 }
 
 export function deriveVirtHosts(entities: OpsEntity[]): VirtHost[] {
-  const hosts = entities.filter(e => e.entity_type === 'vm' || e.platform === 'on-prem-vmware');
-  if (hosts.length === 0) {
-    return [
-      {
-        id: 'esxi-node-01',
-        name: 'esxi-prod-cluster-01',
-        hypervisor: 'VMware ESXi 8.0',
-        vmsCount: 14,
-        cpuOvercommit: 1.8,
-        memOvercommit: 1.2,
-        diskPoolUsagePct: 72,
-        status: 'healthy',
-      }
-    ];
-  }
-  return hosts.map((h, idx) => ({
-    id: `virt-${h.id}`,
-    name: `${h.name}-vm-host`,
-    hypervisor: 'VMware ESXi 8.0',
-    vmsCount: 8 + idx,
-    cpuOvercommit: 1.5,
-    memOvercommit: 1.1,
-    diskPoolUsagePct: h.health === 'critical' ? 94 : 65,
-    status: h.health as any,
+  if (!entities.length) return [];
+  const hosts = entities.filter((e) => e.entity_type === 'vm' || e.platform === 'on-prem-vmware');
+  return hosts.map((h) => ({
+    id: h.id,
+    name: h.name,
+    hypervisor: str(h.metadata.hypervisor, 'N/A'),
+    vmsCount: num(h.metrics.vms_count, 0),
+    cpuOvercommit: num(h.metrics.cpu_overcommit, 0),
+    memOvercommit: num(h.metrics.mem_overcommit, 0),
+    diskPoolUsagePct: num(h.metrics.disk_pool_usage_pct, 0),
+    status: h.health as VirtHost['status'],
   }));
 }
 
@@ -583,35 +501,20 @@ export interface StorageVolume {
 }
 
 export function deriveStorageVolumes(entities: OpsEntity[]): StorageVolume[] {
-  const vls = entities.filter(e => e.entity_type === 'storage' || e.id.includes('disk') || e.id.includes('volume') || e.id.includes('storage'));
-  if (vls.length === 0) {
-    // Dynamic fallback based on databases
-    const dbs = entities.filter(e => e.entity_type === 'database');
-    return dbs.map((db) => ({
-      id: `vol-${db.id}`,
-      name: `ebs-${db.name}-volume`,
-      type: 'AWS gp3 (SSD)',
-      capacityTotalGB: 500,
-      capacityUsedPct: db.health === 'critical' ? 89 : 45,
-      readIOPS: 2400,
-      writeIOPS: 1200,
-      health: db.health as any,
-    }));
-  }
-  return vls.map(v => {
-    const size = Number(v.metrics.size_gb ?? 250);
-    const usage = Number(v.metrics.usage_pct ?? 48.0);
-    return {
-      id: v.id,
-      name: v.name,
-      type: v.metadata.volume_type as string ?? 'gp3',
-      capacityTotalGB: Math.round(size),
-      capacityUsedPct: Math.round(usage),
-      readIOPS: Math.round(Math.random() * 2000 + 500),
-      writeIOPS: Math.round(Math.random() * 1000 + 200),
-      health: v.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const vls = entities.filter(
+    (e) => e.entity_type === 'storage' || e.id.includes('disk') || e.id.includes('volume') || e.id.includes('storage')
+  );
+  return vls.map((v) => ({
+    id: v.id,
+    name: v.name,
+    type: str(v.metadata.volume_type, 'N/A'),
+    capacityTotalGB: Math.round(num(v.metrics.size_gb, 0)),
+    capacityUsedPct: Math.round(num(v.metrics.usage_pct, 0)),
+    readIOPS: num(v.metrics.read_iops, 0),
+    writeIOPS: num(v.metrics.write_iops, 0),
+    health: v.health as StorageVolume['health'],
+  }));
 }
 
 export interface DatabaseAsset {
@@ -627,25 +530,19 @@ export interface DatabaseAsset {
 }
 
 export function deriveDatabases(entities: OpsEntity[]): DatabaseAsset[] {
-  const dbs = entities.filter(e => e.entity_type === 'database');
-  return dbs.map(d => {
-    const conns = Number(d.metrics.connections ?? 24);
-    const deadlocks = Number(d.metrics.deadlocks ?? 0);
-    const lat = Number(d.metrics.query_latency_ms ?? d.metrics.latency_p95 ?? 4.2);
-    const slow = Number(d.metrics.slow_queries ?? (d.health === 'critical' ? 14 : 0));
-
-    return {
-      id: d.id,
-      name: d.name,
-      engine: d.metadata.engine as string ?? 'PostgreSQL',
-      connectionsActive: conns,
-      locksCount: d.health === 'critical' ? 42 : 5,
-      deadlocksCount: deadlocks,
-      avgQueryTimeMs: Number(lat.toFixed(1)),
-      slowQueriesCount: slow,
-      health: d.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const dbs = entities.filter((e) => e.entity_type === 'database');
+  return dbs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    engine: str(d.metadata.engine, 'N/A'),
+    connectionsActive: num(d.metrics.connections, 0),
+    locksCount: num(d.metrics.locks, 0),
+    deadlocksCount: num(d.metrics.deadlocks, 0),
+    avgQueryTimeMs: num(d.metrics.query_latency_ms ?? d.metrics.latency_p95, 0),
+    slowQueriesCount: num(d.metrics.slow_queries, 0),
+    health: d.health as DatabaseAsset['health'],
+  }));
 }
 
 export interface MessagingAsset {
@@ -661,23 +558,19 @@ export interface MessagingAsset {
 }
 
 export function deriveMessaging(entities: OpsEntity[]): MessagingAsset[] {
-  const msgs = entities.filter(e => e.entity_type === 'queue');
-  return msgs.map(m => {
-    const lag = Number(m.metrics.consumer_lag ?? m.metrics.queue_depth ?? 0);
-    const tput = Number(m.metrics.throughput_msg_s ?? 85);
-
-    return {
-      id: m.id,
-      name: m.name,
-      type: m.metadata.broker_type as string ?? 'RabbitMQ',
-      topicsCount: m.metadata.queues_count as number ?? 4,
-      msgRateIn: Math.round(tput),
-      msgRateOut: Math.round(tput * 0.98),
-      consumerLag: Math.round(lag),
-      dlqDepth: Number(m.metrics.dlq_depth ?? (m.health === 'critical' ? 245 : 0)),
-      health: m.health as any,
-    };
-  });
+  if (!entities.length) return [];
+  const msgs = entities.filter((e) => e.entity_type === 'queue');
+  return msgs.map((m) => ({
+    id: m.id,
+    name: m.name,
+    type: str(m.metadata.broker_type, 'N/A'),
+    topicsCount: num(m.metadata.queues_count, 0),
+    msgRateIn: num(m.metrics.throughput_msg_s, 0),
+    msgRateOut: num(m.metrics.throughput_msg_s, 0),
+    consumerLag: num(m.metrics.consumer_lag ?? m.metrics.queue_depth, 0),
+    dlqDepth: num(m.metrics.dlq_depth, 0),
+    health: m.health as MessagingAsset['health'],
+  }));
 }
 
 export interface CapacityForecast {
@@ -691,25 +584,24 @@ export interface CapacityForecast {
 }
 
 export function deriveCapacityForecasts(entities: OpsEntity[]): CapacityForecast[] {
-  const nodes = entities.filter(e => e.entity_type === 'node' || e.entity_type === 'database');
-  return nodes.map((n) => {
-    const usage = Number(n.metrics.cpu_usage ?? n.metrics.memory_usage_pct ?? 65.0);
-    const isCrit = n.health === 'critical';
-    return {
-      id: `cap-${n.id}`,
-      resourceName: n.name,
-      resourceType: n.entity_type === 'database' ? 'Database Pool' : 'Compute Cluster',
-      currentUsagePct: Math.round(usage),
-      growthRatePctPerWeek: isCrit ? 8.4 : 1.2,
-      daysToExhaustion: isCrit ? 4 : 45,
-      recommendation: isCrit 
-        ? 'CRITICAL: Provision additional compute resources or prune deadlock threads.' 
-        : 'Sufficient headroom. Monitor growth rate weekly.',
-    };
-  });
+  if (!entities.length) return [];
+  const forecasts = entities.filter((e) => e.entity_type === 'capacity_forecast');
+  if (forecasts.length) {
+    return forecasts.map((f) => ({
+      id: f.id,
+      resourceName: f.name,
+      resourceType: str(f.metadata.resource_type, 'N/A'),
+      currentUsagePct: num(f.metrics.current_usage_pct, 0),
+      growthRatePctPerWeek: num(f.metrics.growth_rate_pct, 0),
+      daysToExhaustion: num(f.metrics.days_to_exhaustion, 0),
+      recommendation: str(f.metadata.recommendation, 'N/A'),
+    }));
+  }
+  return [];
 }
 
 export function deriveInventory(entities: OpsEntity[]) {
+  if (!entities.length) return [];
   return entities
     .filter((e) =>
       ['host', 'vm', 'node', 'pod', 'container', 'database', 'queue', 'storage', 'load_balancer'].includes(e.entity_type)
@@ -718,43 +610,36 @@ export function deriveInventory(entities: OpsEntity[]) {
       id: e.id,
       name: e.name,
       type: e.entity_type,
-      platform: e.platform ?? 'On-Prem',
-      region: e.region ?? 'us-east-1',
+      platform: e.platform ?? 'N/A',
+      region: e.region ?? 'N/A',
       health: e.health,
     }));
 }
 
 export function deriveNetworking(entities: OpsEntity[]) {
+  if (!entities.length) return [];
   const nets = entities.filter(
     (e) => e.entity_type === 'network' || e.entity_type === 'load_balancer' || e.entity_type === 'gateway'
   );
-  if (nets.length === 0) {
-    return [
-      { id: 'dns-primary', name: 'Internal DNS', type: 'DNS', latencyMs: 2, status: 'healthy' as const },
-      { id: 'lb-main', name: 'Main Ingress LB', type: 'Load Balancer', latencyMs: 8, status: 'healthy' as const },
-      { id: 'api-gw', name: 'API Gateway', type: 'API Gateway', latencyMs: 12, status: 'warning' as const },
-    ];
-  }
   return nets.map((n) => ({
     id: n.id,
     name: n.name,
     type: n.entity_type,
-    latencyMs: Math.round(Number(n.metrics.latency_p95 ?? 10)),
+    latencyMs: Math.round(num(n.metrics.latency_p95, 0)),
     status: n.health,
   }));
 }
 
 export function deriveRuntime(entities: OpsEntity[]) {
+  if (!entities.length) return [];
   const runtimes = entities.filter((e) => e.entity_type === 'runtime');
-  const jvms = entities.filter((e) => e.id.toLowerCase().includes('tomcat') || e.id.toLowerCase().includes('jvm'));
-  const sources = runtimes.length ? runtimes : jvms;
-  return sources.map((r) => ({
+  return runtimes.map((r) => ({
     id: r.id,
     name: r.name,
-    runtime: 'JVM',
-    heapPct: Math.round(Number(r.metrics.memory_usage_pct ?? r.metrics.memory ?? 62)),
-    threads: Math.round(Number(r.metrics.thread_count ?? 128)),
-    gcPauseMs: Math.round(Number(r.metrics.gc_pause_ms ?? 45)),
+    runtime: str(r.metadata.runtime, 'N/A'),
+    heapPct: Math.round(num(r.metrics.memory_usage_pct ?? r.metrics.memory, 0)),
+    threads: Math.round(num(r.metrics.thread_count, 0)),
+    gcPauseMs: Math.round(num(r.metrics.gc_pause_ms, 0)),
     health: r.health,
   }));
 }
@@ -762,33 +647,20 @@ export function deriveRuntime(entities: OpsEntity[]) {
 export function deriveDataPlatforms(entities: OpsEntity[]) {
   return deriveDataPipelines(entities).map((p) => ({
     ...p,
-    platform: p.type === 'Streaming' ? 'Kafka Streams' : 'Apache Airflow',
+    platform: str(p.type, 'N/A'),
   }));
 }
 
 export function deriveServerless(entities: OpsEntity[]) {
+  if (!entities.length) return [];
   const fns = entities.filter((e) => e.entity_type === 'function');
-  if (fns.length === 0) {
-    return entities
-      .filter((e) => e.entity_type === 'microservice')
-      .slice(0, 2)
-      .map((s) => ({
-        id: `fn-${s.id}`,
-        name: `${s.name}-handler`,
-        provider: 'AWS Lambda',
-        invocations: Math.round(Number(s.metrics.throughput ?? 10) * 3600),
-        avgDurationMs: Math.round(Number(s.metrics.latency_p95 ?? 120)),
-        errors: s.health === 'critical' ? 12 : 0,
-        health: s.health,
-      }));
-  }
   return fns.map((f) => ({
     id: f.id,
     name: f.name,
-    provider: f.platform ?? 'AWS Lambda',
-    invocations: Math.round(Number(f.metrics.throughput ?? 1000)),
-    avgDurationMs: Math.round(Number(f.metrics.latency_p95 ?? 85)),
-    errors: f.health === 'critical' ? 5 : 0,
+    provider: str(f.platform, 'N/A'),
+    invocations: num(f.metrics.throughput, 0),
+    avgDurationMs: Math.round(num(f.metrics.latency_p95, 0)),
+    errors: num(f.metrics.errors, 0),
     health: f.health,
   }));
 }
@@ -807,18 +679,18 @@ export function derivePlatformCost(entities: OpsEntity[]) {
     return clouds.map((c) => ({
       id: c.id,
       account: c.name,
-      provider: c.platform ?? 'AWS',
-      monthlySpendUSD: Number(c.metrics.monthly_spend_usd ?? 45000),
-      forecastUSD: Number(c.metrics.monthly_spend_usd ?? 45000) * 1.08,
-      anomalyUSD: c.health === 'warning' ? 2400 : 0,
+      provider: c.platform ?? 'N/A',
+      monthlySpendUSD: num(c.metrics.monthly_spend_usd, 0),
+      forecastUSD: num(c.metrics.monthly_spend_usd, 0),
+      anomalyUSD: 0,
     }));
   }
   return deriveCosts(entities).map((c) => ({
     id: c.id,
     account: c.service,
-    provider: 'Multi-Cloud',
+    provider: 'N/A',
     monthlySpendUSD: c.monthlyCostUSD,
-    forecastUSD: Math.round(c.monthlyCostUSD * 1.05),
+    forecastUSD: 0,
     anomalyUSD: c.anomalousIncreaseUSD,
   }));
 }
@@ -843,79 +715,27 @@ export function filterTracesForEntity(entities: OpsEntity[], entity: OpsEntity) 
   return deriveTraces(entities).filter((t) => entityMatches(entity, t.service));
 }
 
-export function deriveEntityEvents(entity: OpsEntity) {
-  const isCrit = entity.health === 'critical';
-  const isWarn = entity.health === 'warning';
-  const base = [
-    { id: 'ev-1', time: '2m ago', type: 'Health Check', message: `${entity.name} health evaluated as ${entity.health}` },
-    { id: 'ev-2', time: '8m ago', type: 'Metric Poll', message: 'Telemetry collector synced metrics from integrated sources' },
-  ];
-  if (isCrit || isWarn) {
-    base.unshift({
-      id: 'ev-0',
-      time: 'Just now',
-      type: isCrit ? 'Alert' : 'Warning',
-      message: isCrit
-        ? `Elevated error rate and resource saturation detected on ${entity.name}`
-        : `Performance degradation detected on ${entity.name}`,
-    });
-  }
-  return base;
+export interface EntityEvent {
+  id: string;
+  time: string;
+  type: string;
+  message: string;
 }
 
-export function deriveEntityRunbook(entity: OpsEntity) {
-  const steps = [
-    { id: 'rb-1', title: 'Validate golden signals', detail: `Check latency, traffic, errors, and saturation for ${entity.name}.` },
-    { id: 'rb-2', title: 'Review recent changes', detail: 'Inspect deployments and configuration changes in the last 2 hours.' },
-    { id: 'rb-3', title: 'Inspect logs and traces', detail: 'Filter error logs and slow traces scoped to this entity.' },
-  ];
-  if (entity.entity_type === 'runtime' || entity.name.toLowerCase().includes('tomcat')) {
-    steps.push({
-      id: 'rb-4',
-      title: 'Check JVM / GC pressure',
-      detail: 'Review GC pause times and heap usage; restart if Full GC loops persist.',
-    });
-  }
-  if (entity.health === 'critical') {
-    steps.push({
-      id: 'rb-5',
-      title: 'Execute mitigation',
-      detail: 'Scale out, restart unhealthy instances, or roll back the last deployment.',
-    });
-  }
-  return steps;
+export interface EntityRunbookStep {
+  id: string;
+  title: string;
+  detail: string;
 }
 
-export function deriveFallbackLogs(entity: OpsEntity) {
-  const host = entity.name;
-  const isCrit = entity.health === 'critical';
-  const gcPause = Number(entity.metrics.gc_pause_ms ?? 45);
-  return [
-    {
-      timestamp: new Date().toISOString(),
-      host,
-      log_name: 'catalina.out',
-      message: isCrit
-        ? `ERROR [${host}] java.lang.OutOfMemoryError: GC overhead limit exceeded`
-        : `INFO [${host}] Server startup completed in 4821 ms`,
-      severity: isCrit ? ('error' as const) : ('info' as const),
-    },
-    {
-      timestamp: new Date(Date.now() - 120_000).toISOString(),
-      host,
-      log_name: 'gc.log',
-      message: isCrit
-        ? `WARN [${host}] Full GC (Allocation Failure) ${gcPause}ms`
-        : `INFO [${host}] Young GC pause 12ms`,
-      severity: isCrit ? ('error' as const) : ('info' as const),
-    },
-    {
-      timestamp: new Date(Date.now() - 300_000).toISOString(),
-      host,
-      log_name: 'access.log',
-      message: `POST /api/v1/process 200 184ms - worker thread pool active`,
-      severity: 'info' as const,
-    },
-  ];
+export function deriveEntityEvents(_entity: OpsEntity): EntityEvent[] {
+  return [];
 }
 
+export function deriveEntityRunbook(_entity: OpsEntity): EntityRunbookStep[] {
+  return [];
+}
+
+export function deriveFallbackLogs(_entity: OpsEntity) {
+  return [];
+}

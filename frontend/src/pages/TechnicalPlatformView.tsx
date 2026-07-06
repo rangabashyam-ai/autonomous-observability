@@ -6,7 +6,6 @@ import { MetricCard } from '../components/ui/metric-card';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { HealthBadge } from '../components/ui/badge';
 import { DataTable } from '../components/ui/data-table';
-import { generateTrend, MiniAreaChart, MiniLineChart } from '../components/charts/charts';
 import { UtilizationBar } from '../components/dashboard/visualizations';
 import { DrilldownHeatmap } from '../components/dashboard/drilldown-heatmap';
 import DrilldownDrawer from '../components/drilldown/DrilldownDrawer';
@@ -16,9 +15,12 @@ import OpsSubNav from '../components/ops/OpsSubNav';
 import OpsSectionContent from '../components/ops/OpsSectionContent';
 import OpsEntityDrawer from '../components/ops/OpsEntityDrawer';
 import type { OpsEntity } from '../types/ops';
+import DatasetUploadBanner from '../components/DatasetUploadBanner';
+import { NO_DATA_MESSAGE } from '../utils/emptyState';
 
 export default function TechnicalPlatformView() {
   const [data, setData] = useState<MonitoringDashboard | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
   const [drawer, setDrawer] = useState<
     | { kind: 'summary'; id: 'k8s' | 'pods' | 'cpu' | 'memory' | 'metric-k8s' | 'metric-apis' | 'metric-databases' | 'metric-queues' }
     | { kind: 'pod'; data: { id: string; status: string; cpu: number; memory: number } }
@@ -38,7 +40,11 @@ export default function TechnicalPlatformView() {
   } = useOpsDashboard('platform-ops');
 
   useEffect(() => {
-    getMonitoringDashboard().then(setData).catch(console.error);
+    setPageLoading(true);
+    getMonitoringDashboard()
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setPageLoading(false));
   }, []);
 
   const tech = data?.technical;
@@ -193,9 +199,11 @@ export default function TechnicalPlatformView() {
     return summaryAI[drawer.id] ?? null;
   }, [drawer, tech, infra, k8sHealth, avgCpu, avgMem]);
 
-  if (!data) {
+  if (pageLoading || !data) {
     return <p className="text-text-secondary text-sm">Loading platform ops...</p>;
   }
+
+  const noData = data.dataset_available === false;
 
   return (
     <div>
@@ -204,15 +212,20 @@ export default function TechnicalPlatformView() {
         description="Compute, cloud, networking, storage, databases, messaging, and platform health — the full technology stack."
       />
 
+      {noData && <DatasetUploadBanner />}
+
       <div className="flex gap-6 items-start">
         <OpsSubNav items={platformNav} activeId={activeSection} onChange={setActiveSection} perspective="platform" />
 
         <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card/30 p-4 sm:p-5 shadow-sm">
       {activeSection !== 'overview' && currentSection && (
         <OpsSectionContent
+          dashboardId="platform-ops"
           section={currentSection}
           entities={opsEntities}
+          perspective="platform"
           onEntityClick={setOpsEntity}
+          noData={noData}
         />
       )}
 
@@ -222,38 +235,43 @@ export default function TechnicalPlatformView() {
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
             label="Compute Hosts"
-            value={opsEntities.filter((e) => ['host', 'vm', 'node'].includes(e.entity_type)).length || infra!.servers.length}
+            value={noData ? 'N/A' : opsEntities.filter((e) => ['host', 'vm', 'node'].includes(e.entity_type)).length || infra!.servers.length}
             sub="Physical, VM, cloud instances"
-            onClick={() => { setActiveSection('compute'); }}
+            onClick={noData ? undefined : () => { setActiveSection('compute'); }}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
             label="Containers"
-            value={opsEntities.filter((e) => ['pod', 'container'].includes(e.entity_type)).length || tech!.containers.length}
-            sub={`${tech!.containers.filter((c) => c.status !== 'healthy').length} degraded`}
-            onClick={() => { setActiveSection('containers'); }}
+            value={noData ? 'N/A' : opsEntities.filter((e) => ['pod', 'container'].includes(e.entity_type)).length || tech!.containers.length}
+            sub={noData ? '—' : `${tech!.containers.filter((c) => c.status !== 'healthy').length} degraded`}
+            onClick={noData ? undefined : () => { setActiveSection('containers'); }}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
             label="Avg CPU"
-            value={`${avgCpu.toFixed(1)}%`}
-            variant={avgCpu > 75 ? 'warning' : 'default'}
-            onClick={() => openSummaryDrawer('cpu')}
+            value={noData ? 'N/A' : `${avgCpu.toFixed(1)}%`}
+            variant={noData ? 'default' : avgCpu > 75 ? 'warning' : 'default'}
+            onClick={noData ? undefined : () => openSummaryDrawer('cpu')}
           />
         </div>
         <div className="col-span-12 sm:col-span-6 md:col-span-3">
           <MetricCard
             label="Avg Memory"
-            value={`${avgMem.toFixed(1)}%`}
-            variant={avgMem > 80 ? 'critical' : 'default'}
-            onClick={() => openSummaryDrawer('memory')}
+            value={noData ? 'N/A' : `${avgMem.toFixed(1)}%`}
+            variant={noData ? 'default' : avgMem > 80 ? 'critical' : 'default'}
+            onClick={noData ? undefined : () => openSummaryDrawer('memory')}
           />
         </div>
       </Grid12>
 
       <CollapsibleSection title="Resource Heatmaps" description="Interactive drill-down: click nodes to see pods, click pods for detailed metrics">
+        {noData ? (
+          <Card>
+            <p className="text-sm text-text-secondary py-12 text-center">{NO_DATA_MESSAGE}</p>
+          </Card>
+        ) : (
         <Grid12>
           <div className="col-span-12">
             <DrilldownHeatmap
@@ -283,14 +301,19 @@ export default function TechnicalPlatformView() {
             />
           </div>
         </Grid12>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title="Platform Metrics" className="mt-6" defaultOpen>
+        {noData ? (
+          <Card>
+            <p className="text-sm text-text-secondary py-12 text-center">{NO_DATA_MESSAGE}</p>
+          </Card>
+        ) : (
         <Grid12>
           <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('k8s')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>K8s Cluster Status</CardTitle></CardHeader>
-              <MiniAreaChart data={generateTrend(k8sHealth, 12)} height={80} color="#10B981" />
               <div className="mt-3 space-y-2 px-5 pb-5">
                 <div className="flex justify-between text-xs">
                   <span className="text-text-secondary">Running</span>
@@ -310,11 +333,6 @@ export default function TechnicalPlatformView() {
           <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('apis')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>API Performance</CardTitle></CardHeader>
-              <MiniLineChart
-                data={generateTrend(tech!.apis.reduce((a, x) => a + x.latency_ms, 0) / tech!.apis.length, 12)}
-                height={80}
-                color="#3B82F6"
-              />
               <div className="mt-3 space-y-2 px-5 pb-5">
                 {tech!.apis.slice(0, 3).map((a) => (
                   <UtilizationBar key={a.name} label={a.name} value={a.latency_ms} max={300} />
@@ -325,14 +343,6 @@ export default function TechnicalPlatformView() {
           <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('databases')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Database Load</CardTitle></CardHeader>
-              <MiniAreaChart
-                data={generateTrend(
-                  tech!.databases.reduce((a, d) => a + d.connections, 0) / tech!.databases.length,
-                  12
-                )}
-                height={80}
-                color="#F59E0B"
-              />
               <div className="mt-3 space-y-2 px-5 pb-5">
                 {tech!.databases.slice(0, 3).map((db) => (
                   <div key={db.id} className="flex justify-between text-xs">
@@ -346,11 +356,6 @@ export default function TechnicalPlatformView() {
           <div className="col-span-12 lg:col-span-3 cursor-pointer" onClick={() => openMetricDrawer('queues')}>
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader><CardTitle>Queue Metrics</CardTitle></CardHeader>
-              <MiniLineChart
-                data={generateTrend(tech!.queues.reduce((a, q) => a + q.depth, 0) / tech!.queues.length, 12, 0.2)}
-                height={80}
-                color="#EF4444"
-              />
               <div className="mt-3 space-y-2 px-5 pb-5">
                 {tech!.queues.slice(0, 3).map((q) => (
                   <div key={q.id} className="flex justify-between text-xs">
@@ -362,9 +367,15 @@ export default function TechnicalPlatformView() {
             </Card>
           </div>
         </Grid12>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title="Infrastructure Details" className="mt-6" defaultOpen>
+        {noData ? (
+          <Card>
+            <p className="text-sm text-text-secondary py-12 text-center">{NO_DATA_MESSAGE}</p>
+          </Card>
+        ) : (
         <Grid12>
           <div className="col-span-12 lg:col-span-6">
             <Card padding={false}>
@@ -403,6 +414,7 @@ export default function TechnicalPlatformView() {
             </Card>
           </div>
         </Grid12>
+        )}
       </CollapsibleSection>
 
       <DrilldownDrawer

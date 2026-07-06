@@ -56,3 +56,41 @@ def ops_entity_telemetry(entity_id: str):
     if not entity:
         raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
     return query_entity_telemetry(entity.id, entity.name)
+
+
+@router.get("/sections/{dashboard_id}/{derive_key}")
+def ops_section_data(
+    dashboard_id: str,
+    derive_key: str,
+    perspective: Optional[str] = Query(None, pattern="^(service|platform)$"),
+):
+    """Return pre-shaped table rows for an ops dashboard section.
+
+    VM can push rows via POST /api/vm/ingest/ops/sections.
+    Otherwise returns empty rows when no dataset is connected.
+    """
+    from app import parquet_store, vm_data_store
+
+    store_key = f"ops/sections/{dashboard_id}/{derive_key}"
+    pushed = vm_data_store.get(store_key)
+    if pushed:
+        return {**pushed, "source": "vm_push", "dataset_available": True}
+
+    if not parquet_store.is_dataset_available():
+        return {
+            "dashboard_id": dashboard_id,
+            "derive_key": derive_key,
+            "rows": [],
+            "source": "none",
+            "dataset_available": False,
+        }
+
+    # Parquet-backed: return raw entities for the section; VM should push shaped rows.
+    entities = get_entities(perspective=perspective)
+    return {
+        "dashboard_id": dashboard_id,
+        "derive_key": derive_key,
+        "rows": [e.model_dump() for e in entities],
+        "source": "entities",
+        "dataset_available": True,
+    }
